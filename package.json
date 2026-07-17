@@ -1,7 +1,26 @@
 {
   "name": "courtdesk",
   "version": "0.1.0",
-  "description": "CRM-оркестратор поиска и мониторинга судебных дел РФ",
+  "description": "CRM-оркестратор поиска и мониторинга судебных дел РФ. Объединяет CourtSniffer (поиск) и CourtFlow (мониторинг) в единый рабочий стол юриста с подсказками сценариев и хранением состояния.",
+  "keywords": [
+    "court",
+    "sudrf",
+    "msudrf",
+    "legal",
+    "monitoring",
+    "crm",
+    "russian-courts"
+  ],
+  "homepage": "https://github.com/AlexanderKuzikov/CourtDesk#readme",
+  "bugs": {
+    "url": "https://github.com/AlexanderKuzikov/CourtDesk/issues"
+  },
+  "license": "Apache-2.0",
+  "author": "Alexander Kuzikov (https://github.com/AlexanderKuzikov)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AlexanderKuzikov/CourtDesk.git"
+  },
   "type": "module",
   "scripts": {
     "start": "npx tsx packages/api/server.ts",
