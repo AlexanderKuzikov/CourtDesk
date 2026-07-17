@@ -46,10 +46,4 @@ Thumbs.db
 # Data
 data/
 
-# Storage
-*.db
-*.db-journal
-*.db-wal
-*.db-shm
-
 /.goose
