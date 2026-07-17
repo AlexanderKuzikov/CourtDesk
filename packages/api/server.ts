@@ -1,23 +1,28 @@
 import express from 'express';
 import { loadConfig } from '../core/config.js';
+import { classify } from '../intake/index.js';
 
 const app = express();
 const config = loadConfig();
 
 app.use(express.json());
 
-// Health
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', version: '0.1.0' });
 });
 
-// Config (safe)
 app.get('/api/config', (_req, res) => {
-  res.json({
-    snifferUrl: config.snifferUrl,
-    flowUrl: config.flowUrl,
-    port: config.port,
-  });
+  res.json({ snifferUrl: config.snifferUrl, flowUrl: config.flowUrl, port: config.port });
+});
+
+// Intake — классификация запроса
+app.post('/api/intake', (req, res) => {
+  const { input, courtId, courtType } = req.body;
+  if (!input || typeof input !== 'string') {
+    return res.status(400).json({ error: 'input обязателен' });
+  }
+  const result = classify(input);
+  res.json({ input, classification: result, suggested: suggestAfter(result) });
 });
 
 // Search — прокси к CourtSniffer
@@ -27,10 +32,13 @@ app.post('/api/search', async (req, res) => {
     return res.status(400).json({ error: 'courtId + caseNumber или defendant/plaintiff обязательны' });
   }
   try {
+    const body = caseNumber
+      ? { courtId, courtType, caseNumber }
+      : { courtId, courtType, defendant, plaintiff };
     const snifferRes = await fetch(`${config.snifferUrl}/api/search/case-number`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ courtId, courtType, caseNumber }),
+      body: JSON.stringify(body),
       signal: AbortSignal.timeout(60000),
     });
     if (!snifferRes.ok) {
@@ -45,7 +53,7 @@ app.post('/api/search', async (req, res) => {
 
 // Monitor — добавить дело в CourtFlow
 app.post('/api/monitor', async (req, res) => {
-  const { url, courtId, courtType, caseNumber } = req.body;
+  const { url, courtId, courtType } = req.body;
   if (!url || !courtId || !courtType) {
     return res.status(400).json({ error: 'url, courtId, courtType обязательны' });
   }
@@ -66,7 +74,12 @@ app.post('/api/monitor', async (req, res) => {
   }
 });
 
-// Start
 app.listen(config.port, () => {
   console.log(`[courtdesk] Server: http://127.0.0.1:${config.port}`);
 });
+
+function suggestAfter(result: import('../intake/index.js').Classification): string[] {
+  if (result.type === 'case_card') return ['monitor', 'notify_on_change'];
+  if (result.type === 'search') return ['select_court', 'run_search'];
+  return ['check_input'];
+}
