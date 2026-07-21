@@ -1,16 +1,24 @@
-import { Router } from 'express';
+import { Router, type Request, type Response } from 'express';
 import { getCase, listCases, addCase, updateCase, deleteCase, getStats } from '../../store/index.js';
 import { addEvent as addHistoryEvent } from '../../store/events.js';
 import type { WatchedCase } from '../../core/types.js';
 
 const router = Router();
 
-function ok(res: any, data: unknown) { res.json({ success: true, data }); }
-function fail(res: any, code: string, msg: string, status = 400) { res.status(status).json({ success: false, error: msg, code }); }
+function ok(res: Response, data: unknown) { res.json({ success: true, data }); }
+function fail(res: Response, code: string, msg: string, status = 400) {
+  res.status(status).json({ success: false, error: msg, code });
+}
 function errMsg(e: unknown) { return e instanceof Error ? e.message : 'Внутренняя ошибка'; }
 
+// Поля, которые пользователь может менять через PATCH.
+// uid, createdAt, courtId, courtType — неизменяемы.
+const PATCH_ALLOWED = new Set<keyof WatchedCase>([
+  'status', 'result', 'legalForceDate', 'legalForceNotified', 'userId', 'url',
+]);
+
 // Список дел
-router.get('/api/cases', (req, res) => {
+router.get('/api/cases', (req: Request, res: Response) => {
   try {
     const { status, userId, courtId, q } = req.query;
     const cases = listCases({
@@ -24,13 +32,13 @@ router.get('/api/cases', (req, res) => {
 });
 
 // Статистика
-router.get('/api/cases/stats', (_req, res) => {
+router.get('/api/cases/stats', (_req: Request, res: Response) => {
   try { ok(res, getStats()); }
   catch (e) { fail(res, 'STORE_ERROR', errMsg(e), 500); }
 });
 
 // Одно дело
-router.get('/api/cases/:uid', (req, res) => {
+router.get('/api/cases/:uid', (req: Request, res: Response) => {
   try {
     const c = getCase(req.params.uid);
     if (!c) return fail(res, 'NOT_FOUND', 'Дело не найдено', 404);
@@ -39,7 +47,7 @@ router.get('/api/cases/:uid', (req, res) => {
 });
 
 // Добавить дело в мониторинг
-router.post('/api/cases', (req, res) => {
+router.post('/api/cases', (req: Request, res: Response) => {
   try {
     const { url, courtId, courtCode, courtType, caseNumber, userId } = req.body ?? {};
     if (!url || !courtId || !courtType || !caseNumber) {
@@ -63,7 +71,7 @@ router.post('/api/cases', (req, res) => {
 });
 
 // Отслеживать появление
-router.post('/api/cases/wait', (req, res) => {
+router.post('/api/cases/wait', (req: Request, res: Response) => {
   try {
     const { courtId, courtCode, courtType, party, filingDate, userId } = req.body ?? {};
     if (!courtId || !courtType || !party) {
@@ -87,20 +95,24 @@ router.post('/api/cases/wait', (req, res) => {
   } catch (e) { fail(res, 'STORE_ERROR', errMsg(e), 500); }
 });
 
-// Обновить дело
-router.patch('/api/cases/:uid', (req, res) => {
+// Обновить дело — только разрешённые поля
+router.patch('/api/cases/:uid', (req: Request, res: Response) => {
   try {
-    const updated = updateCase(req.params.uid, req.body ?? {});
+    const body = req.body ?? {};
+    const safeUpdates = Object.fromEntries(
+      Object.entries(body).filter(([k]) => PATCH_ALLOWED.has(k as keyof WatchedCase)),
+    ) as Partial<WatchedCase>;
+    const updated = updateCase(req.params.uid, safeUpdates);
     if (!updated) return fail(res, 'NOT_FOUND', 'Дело не найдено', 404);
     ok(res, updated);
   } catch (e) { fail(res, 'STORE_ERROR', errMsg(e), 500); }
 });
 
 // Удалить дело
-router.delete('/api/cases/:uid', (req, res) => {
+router.delete('/api/cases/:uid', (req: Request, res: Response) => {
   try {
-    const ok2 = deleteCase(req.params.uid);
-    if (!ok2) return fail(res, 'NOT_FOUND', 'Дело не найдено', 404);
+    const deleted = deleteCase(req.params.uid);
+    if (!deleted) return fail(res, 'NOT_FOUND', 'Дело не найдено', 404);
     ok(res, null);
   } catch (e) { fail(res, 'STORE_ERROR', errMsg(e), 500); }
 });
