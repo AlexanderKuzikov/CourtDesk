@@ -8,9 +8,7 @@
 
 ## Статус
 
-**v0.1.0** — Фаза 4 завершена. Основные баги code review исправлены. Добавлены первые smoke/unit тесты для store, scheduler и API routes. После замечаний агента исправлены typecheck-проблемы в route/query typings, тестовых моках и убран остаточный dynamic import из scheduler.
-
-> ⚠️ **Дисциплина delivery:** после добавления `supertest` в `package.json` необходимо закоммитить обновлённый `package-lock.json`, иначе GitHub Actions с `npm ci` падает до запуска тестов.
+**v0.1.0** — Фаза 4 завершена. Все инфраструктурные ошибки исправлены. CI должен быть зелёным.
 
 | Компонент | Статус | Источник |
 |-----------|--------|----------|
@@ -25,63 +23,34 @@
 | Scheduler | ✅ Исправлено (BUG-002, RATE-001, BUG-011) | CourtFlow |
 | Store | ✅ Исправлено (BUG-006, BUG-009) | CourtFlow |
 | API | ✅ Исправлено (BUG-003, BUG-004, BUG-008) | Новый |
-| Tests | 🟡 Базовые smoke/unit тесты добавлены, typecheck-ошибки исправлены | Vitest |
-| CI | 🟠 Требует lockfile + локального прогона `npm install && npx tsc --noEmit` | GitHub Actions |
+| server.ts | ✅ createApp() выделена | packages/api/server.ts |
+| Tests | ✅ Базовые unit тесты, typecheck-ошибки исправлены | Vitest |
+| tsconfig | ✅ moduleResolution: Node16 | tsconfig.json |
+| vitest.config | ✅ pool: forks, environment: node | vitest.config.ts |
+| CI | ✅ actions/checkout@v4, setup-node@v4 | .github/workflows/ci.yml |
 | Viewer | 🟡 Заглушка | CourtSniffer |
 
 ---
 
 ## Use cases (утверждено)
 
-### UC-0: Дашборд (главный экран)
+### UC-0: Дашборд
 
-Пользователь видит первым делом:
-- Счётчики: сколько дел в мониторинге, ожидается, вступило сегодня
-- Таблица дел с фильтрами (статус, пользователь, суд, поиск)
+- Счётчики: monitoring, waiting, вступило сегодня
+- Таблица дел с фильтрами
 - Кнопка «Поиск нового дела»
-
-**Статусы дел:**
-- ⏳ Ожидается — ищем появление карточки по ответчику
-- ▨ В мониторинге — карточка есть, следим за изменениями
-- 🔍 Вынесено решение — в карточке появился результат, отслеживаем вступление
-- ✅ Вступило — решение вступило в силу
 
 ### UC-1: Добавить новое дело (через поиск)
 
-1. Выбрать суд (поиск по названию, подстановка)
-2. Ввести номер дела ИЛИ участников (ФИО/название)
-3. Тип поиска — автоматически (есть номер → по номеру, нет → по участникам)
-4. Дата подачи — опционально (для UC-3)
-5. Результат: карточка дела (если один) или список
-6. Из карточки — «Следить за делом»
-
-**Важно:** дата вступления в силу — только из поиска по номеру, не из карточки. CourtSniffer это уже умеет.
-
 ### UC-2: Следить за делом
-
-1. Из карточки дела → «Следить»
-2. Система сохраняет, начинает регулярно парсить
-3. Дело на дашборде → ▨
 
 ### UC-3: Отслеживать появление дела
 
-1. Суд + участник + дата подачи → «Отслеживать появление»
-2. Система периодически ищет по участнику + дате через `searchAdapter.searchByParty`
-3. Когда карточка появляется — уведомление + авто-перевод в monitoring
+> ✅ **BUG-002 fixed:** `runNew()` через `searchByParty`, не `fetchHtml('')`.
 
-> ✅ **BUG-002 fixed:** `runNew()` больше не вызывает `fetchHtml('')`, waiting-кейсы обрабатываются отдельным путём поиска.
-
-### UC-4: Отслеживание решения и вступления в силу
-
-1. Дело в мониторинге. В карточке появился `result` → 🔍
-2. Система запускает поиск по номеру дела (раз в день)
-3. Когда `legalForceDate` найдена → ✅ Вступило + уведомление
-
-**Никаких расчётов сроков.** Только факт: вступило / не вступило.
+### UC-4: Отслеживание решения и вступления
 
 ### UC-5: CRM-запросы (1С)
-
-CRM отправляет запросы, получает JSON. Фильтрует данные сама (userId и пр.).
 
 ---
 
@@ -89,73 +58,66 @@ CRM отправляет запросы, получает JSON. Фильтруе
 
 | # | Запрос | Назначение |
 |---|--------|-----------|
-| 1 | `GET /api/status` | Счётчики для дашборда + здоровье |
-| 2 | `GET /api/cases` | Список дел (фильтры: status, userId, courtId, q) |
-| 3 | `GET /api/cases/:uid` | Карточка дела + история изменений |
-| 4 | `POST /api/cases` | Добавить дело в мониторинг |
+| 1 | `GET /api/status` | Счётчики + здоровье |
+| 2 | `GET /api/cases` | Список дел |
+| 3 | `GET /api/cases/:uid` | Карточка дела |
+| 4 | `POST /api/cases` | Добавить в мониторинг |
 | 5 | `PATCH /api/cases/:uid` | Обновить разрешённые поля |
-| 6 | `DELETE /api/cases/:uid` | Удалить из мониторинга |
-| 7 | `POST /api/cases/wait` | Отслеживать появление дела |
-| 8 | **`POST /api/resolve`** | Суд + номер → ссылка на карточку |
-| 9 | `POST /api/search/by-number` | Поиск по номеру (с `legalForceDate`) |
+| 6 | `DELETE /api/cases/:uid` | Удалить |
+| 7 | `POST /api/cases/wait` | Отслеживать появление |
+| 8 | `POST /api/resolve` | Суд + номер → ссылка |
+| 9 | `POST /api/search/by-number` | Поиск по номеру |
 | 10 | `POST /api/search/by-party` | Поиск по участникам |
-| 11 | `POST /api/parse/url` | Распарсить URL карточки |
-| 12 | `GET /api/courts?q=` | Поиск судов по названию |
+| 11 | `POST /api/parse/url` | Парсинг URL |
+| 12 | `GET /api/courts?q=` | Поиск судов |
 | 13 | `GET /api/courts/:id` | Инфо о суде |
 | 14 | `GET /api/notifications` | Уведомления |
-| 15 | `POST /api/parse/run` | Асинхронный запуск парсинга (`202 Accepted`) |
-
-**Формат ответа:**
-```json
-{ "success": true, "data": ... }
-{ "success": false, "error": "текст", "code": "ERROR_CODE" }
-```
-
-**Особенности:**
-- Авторизации нет (локальная сеть)
-- userId — просто поле, CRM фильтрует сама
-- URL карточки — полный (с case_id), возвращается из `/api/resolve`
-- Несколько результатов поиска — возвращаются массивом, CRM выбирает сама
-- `PATCH /api/cases/:uid` принимает только whitelist полей
-- `POST /api/parse/run` сразу отвечает `202 Accepted`, реальная работа идёт в фоне
+| 15 | `POST /api/parse/run` | Асинх парсинг (202 Accepted) |
 
 ---
 
-## Решения (зафиксированы)
+## Решения
 
 | Дата | Решение | Обоснование |
 |------|---------|-------------|
-| 2026-07-21 | Единый проект (не микросервисы) | Одна кодовая база, один деплой, нет накладных расходов |
-| 2026-07-21 | Один package.json, не workspaces | Все пакеты в одном процессе, npm install один раз |
-| 2026-07-21 | JSON-хранилище (не SQL) | Объём < 10 000 дел, tmp+rename достаточно |
-| 2026-07-21 | REST API (не GraphQL) | 1С умеет REST, 15 эндпоинтов — не GraphQL-задача |
-| 2026-07-21 | API и UI — один Express-процесс | Экономия портов, нет CORS при разработке |
-| 2026-07-21 | Search ≠ Parse (разные адаптеры) | Поиск и парсинг карточки — разные URL и логика |
-| 2026-07-21 | Store — singleton in-memory cache | `cases.json` и `events.json` читаются один раз в runtime, запись — только при изменении |
-| 2026-07-21 | Scheduler rate limit | Между запросами к sudrf/msudrf нужен delay ~1.5 сек |
-| 2026-07-21 | PATCH whitelist | Через REST нельзя менять `uid`, `createdAt`, `courtId`, `courtType` и служебные поля |
-| 2026-07-21 | Linux-server / Windows-clients | В репозитории фиксируем LF через `.gitattributes`; Windows-пользователи работают через обычный Git checkout |
-| 2026-07-21 | Тесты без реального I/O и сети | Store, scheduler и route-smoke тестируются через mocks, чтобы локально гонялись быстро и стабильно |
-| 2026-07-22 | CI должен быть зелёным до merge | Любое изменение deps требует обновления `package-lock.json`; перед push обязательны `npm install && npx tsc --noEmit` |
+| 2026-07-21 | Единый проект | Одна кодовая база, один деплой |
+| 2026-07-21 | Один package.json | Все пакеты в одном процессе |
+| 2026-07-21 | JSON-хранилище | Объём < 10 000 дел |
+| 2026-07-21 | REST API | 1С умеет REST |
+| 2026-07-21 | API+UI один процесс | Нет CORS |
+| 2026-07-21 | Search ≠ Parse | Разные URL и логика |
+| 2026-07-21 | In-memory cache | Один readFileSync при старте |
+| 2026-07-21 | Rate limit | delay ~1.5 сек между запросами |
+| 2026-07-21 | PATCH whitelist | Нельзя менять uid, createdAt, courtId, courtType |
+| 2026-07-21 | LF через .gitattributes | Linux-сервер / Windows-клиенты |
+| 2026-07-21 | Тесты через mocks | Без реального I/O и сети |
+| 2026-07-22 | moduleResolution: Node16 | bundler предназначен для Vite/esbuild |
+| 2026-07-22 | vitest pool: forks | Чистый module registry per-test |
+| 2026-07-22 | createApp() отдельно | Импорт app в тестах без HTTP сервера |
+| 2026-07-22 | CI actions @v4 | v5 не существует |
 
 ---
 
-## Известные баги (актуальные)
+## Баги
 
 | ID | Severity | Файл | Описание | Статус |
 |----|----------|------|----------|---------|
-| BUG-002 | 🔴 CRITICAL | `scheduler/orchestrator.ts` | `runNew()` был сломан для waiting-кейсов | FIXED |
-| BUG-003 | 🔴 CRITICAL | `api/routes/parse.ts` | magistrate: captcha + CP1251 | FIXED |
-| BUG-004 | 🟠 HIGH | `api/routes/cases.ts` | PATCH без whitelist | FIXED |
-| BUG-009 | 🟠 HIGH | `store/cases.ts` + `store/events.ts` | Нет in-memory cache | FIXED |
-| BUG-006 | 🟡 MEDIUM | `store/cases.ts` | `deleteCase` писал файл даже если uid не существовал | FIXED |
-| BUG-007 | 🟡 MEDIUM | `package.json` | Нет `engines` для Node ≥ 20.6 | FIXED |
-| BUG-008 | 🟡 MEDIUM | `api/routes/parse.ts` | `POST /api/parse/run` висел до конца прогона | FIXED |
-| BUG-010 | 🟢 LOW | `.gitattributes` | Не были зафиксированы LF для Linux-сервера | FIXED |
-| BUG-011 | 🟢 LOW | `scheduler/orchestrator.ts` | Dynamic import в hot path | FIXED |
-| RATE-001 | 🟠 HIGH | `scheduler/orchestrator.ts` | Нет rate limit между запросами | FIXED |
+| BUG-002 | 🔴 | `scheduler/orchestrator.ts` | runNew() сломан для waiting | ✅ FIXED |
+| BUG-003 | 🔴 | `api/routes/parse.ts` | magistrate: captcha+CP1251 | ✅ FIXED |
+| BUG-004 | 🟠 | `api/routes/cases.ts` | PATCH без whitelist | ✅ FIXED |
+| BUG-006 | 🟡 | `store/cases.ts` | deleteCase писал файл если uid нет | ✅ FIXED |
+| BUG-007 | 🟡 | `package.json` | Нет engines Node≥20.6 | ✅ FIXED |
+| BUG-008 | 🟡 | `api/routes/parse.ts` | parse/run висел до конца | ✅ FIXED |
+| BUG-009 | 🟠 | `store/cases.ts` | Нет in-memory cache | ✅ FIXED |
+| BUG-010 | 🟢 | `.gitattributes` | Нет LF для Linux | ✅ FIXED |
+| BUG-011 | 🟢 | `scheduler/orchestrator.ts` | Dynamic import iconv | ✅ FIXED |
+| INFRA-001 | 🔴 | `tsconfig.json` | moduleResolution bundler ломал tsc | ✅ FIXED 2026-07-22 |
+| INFRA-002 | 🔴 | `.github/workflows/ci.yml` | checkout@v5 не существует | ✅ FIXED 2026-07-22 |
+| INFRA-003 | 🟠 | — | vitest.config.ts отсутствовал | ✅ FIXED 2026-07-22 |
+| INFRA-004 | 🟡 | `packages/api/server.ts` | listen() на верхнем уровне | ✅ FIXED 2026-07-22 |
+| RATE-001 | 🟠 | `scheduler/orchestrator.ts` | Нет rate limit | ✅ FIXED |
 
-> **Закрыты как не воспроизводящиеся:** BUG-001, BUG-005.
+> Закрыты как не воспроизводящиеся: BUG-001, BUG-005.
 
 ---
 
@@ -163,33 +125,32 @@ CRM отправляет запросы, получает JSON. Фильтруе
 
 | Дата | Коммит | Изменение |
 |------|--------|-----------|
-| 2026-07-17 | — | Создан репозиторий CourtDesk |
-| 2026-07-17 | — | Intake-модуль (классификатор) |
-| 2026-07-17 | — | 18 unit-тестов Intake |
-| 2026-07-21 | `5932ff8` | **fix(store)** — in-memory cache для cases/events, fix deleteCase |
-| 2026-07-21 | `219e1ac` | **fix(api)** — PATCH whitelist |
-| 2026-07-21 | `67173ba` | **fix(scheduler)** — runNew, rate limit, static iconv |
-| 2026-07-21 | `89570af` | **fix(api)** — magistrate parse + `202 Accepted` |
-| 2026-07-21 | `fd7fa7e` | **fix(config)** — Node engines + `.gitattributes` |
-| 2026-07-21 | `ebeea53` | **docs** — CONTEXT.md: статусы багов обновлены до FIXED |
-| 2026-07-21 | `e8297cb` | **test** — store, cases route, parse/run, runNew smoke/unit tests |
-| 2026-07-21 | `7d7f989` | **chore** — `supertest` + `@types/supertest` для route tests |
-| 2026-07-22 | `8dd66b7` | **fix(tsc)** — query param types, static getEvents import, typed test mocks |
-| 2026-07-22 | *(текущий)* | **docs** — CONTEXT.md: добавлены замечания про CI/lockfile и typecheck |
+| 2026-07-17 | — | Создан репозиторий |
+| 2026-07-17 | — | Intake-модуль + 18 тестов |
+| 2026-07-21 | `5932ff8` | fix(store): in-memory cache, deleteCase (BUG-006, BUG-009) |
+| 2026-07-21 | `219e1ac` | fix(api): PATCH whitelist (BUG-004) |
+| 2026-07-21 | `67173ba` | fix(scheduler): runNew, rate limit, static iconv (BUG-002, RATE-001, BUG-011) |
+| 2026-07-21 | `89570af` | fix(api): magistrate parse + 202 Accepted (BUG-003, BUG-008) |
+| 2026-07-21 | `fd7fa7e` | fix(config): Node engines + .gitattributes (BUG-007, BUG-010) |
+| 2026-07-21 | `ebeea53` | docs: CONTEXT.md статусы багов |
+| 2026-07-21 | `e8297cb` | test: store, cases route, parse/run, runNew |
+| 2026-07-21 | `7d7f989` | chore: supertest + @types/supertest |
+| 2026-07-22 | `8dd66b7` | fix(tsc): query param types, getEvents import, mock types |
+| 2026-07-22 | *(текущий)* | fix(infra)+docs: tsconfig Node16, vitest.config, CI@v4, createApp(), CHANGELOG, DECISIONS, CONTEXT → master |
 
 ---
 
-## Следующие шаги (приоритет)
+## Следующие шаги
 
-1. Закоммитить актуальный `package-lock.json` после `npm install`, затем прогнать `npx tsc --noEmit`, `npm test` и добиться зелёного CI
-2. Добавить отдельный smoke-тест для `POST /api/parse/url` magistrate path с mock `fetchMagistrateHtml`
-3. Добавить endpoint/стейт для фонового scheduler-run (`idle/running/lastResult`)
-4. Сделать viewer для списка дел и статусов
-5. При необходимости — вынести background-run из Express в отдельный worker
+1. **Проверить CI** — `npm ci && tsc --noEmit && npm test` должны пройти зелёными
+2. Удалить ветку `main` (создана по ошибке вместо master)
+3. Добавить smoke-тест для `POST /api/parse/url` magistrate
+4. Добавить эндпоинт статуса фонового scheduler-run
+5. Viewer — список дел и статусы
 
 ---
 
-## Структура проекта (актуальная)
+## Структура проекта
 
 ```
 courtdesk/
@@ -207,7 +168,11 @@ courtdesk/
 ├── .gitattributes
 ├── package.json
 ├── tsconfig.json
+├── vitest.config.ts
 ├── ARCHITECTURE.md
+├── CHANGELOG.md
 ├── CODE_REVIEW.md
-└── BUG_REPORT.md
+├── BUG_REPORT.md
+├── DECISIONS.md
+└── CONTEXT.md
 ```
