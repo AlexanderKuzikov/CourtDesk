@@ -8,7 +8,7 @@
 
 ## Статус
 
-**v0.1.0** — Фаза 4 завершена. Проведён Code Review, выявлены критические баги. Начат этап фиксов.
+**v0.1.0** — Фаза 4 завершена. Code Review проведён, отзыв владельца получен. Баги уточнены. Начат этап фиксов.
 
 | Компонент | Статус | Источник |
 |-----------|--------|----------|
@@ -21,8 +21,8 @@
 | Parse | ✅ Готово | CourtFlow |
 | Intake | ✅ Готово | CourtDesk |
 | Scheduler | ⚠️ Баги (BUG-002, BUG-008) | CourtFlow |
-| Store | ⚠️ Баги (BUG-001, BUG-006, BUG-009) | CourtFlow |
-| API | ⚠️ Баги (BUG-003, BUG-004, BUG-005) | Новый |
+| Store | ⚠️ Баги (BUG-006, BUG-009) | CourtFlow |
+| API | ⚠️ Баги (BUG-003, BUG-004) | Новый |
 | Viewer | 🟡 Заглушка | CourtSniffer |
 
 ---
@@ -65,7 +65,7 @@
 2. Система периодически ищет по участнику + дате
 3. Когда карточка появляется — уведомление + авто-добавление в мониторинг
 
-> ⚠️ **BUG-002:** текущая реализация `runNew()` не работает — вызывает `fetchHtml('')` вместо поиска по участнику.
+> ⚠️ **BUG-002:** `runNew()` вызывает `fetchHtml('')` — waiting-кейс необрабатывается. Требует переработки через `searchAdapter.searchByParty`.
 
 ### UC-4: Отслеживание решения и вступления в силу
 
@@ -128,31 +128,36 @@ CRM отправляет запросы, получает JSON. Фильтруе
 | 2026-07-21 | Core — единый источник типов | CourtType, SearchResult, CaseCard — в одном месте |
 | 2026-07-21 | Intake — один `classify` | Весь разбор внутри, остальные модули не занимаются классификацией |
 | 2026-07-21 | Дата вступления — только из поиска | В карточке дела этой даты нет. CourtSniffer уже умеет |
-| 2026-07-21 | Нет расчёта сроков | Слишком много нюансов (мотивировка, обжалование почтой). Только факт вступления |
+| 2026-07-21 | Нет расчёта сроков | Слишком много нюансов. Только факт вступления |
 | 2026-07-21 | userId — просто поле | CRM фильтрует сама, объёмы мизерные |
 | 2026-07-21 | Нет авторизации | Локальная сеть |
 | 2026-07-21 | CourtSniffer, CourtFlow — заморозить | Функционал мигрирует в CourtDesk |
-| 2026-07-21 | Store — singleton in-memory Map | Принято после CODE_REVIEW: N×disk reads неприемлемы, обещано в ARCHITECTURE.md |
-| 2026-07-21 | store write-lock | Принято после CODE_REVIEW: race condition BUG-001 требует promise-mutex перед load→save |
-| 2026-07-21 | PATCH whitelist | Принято после CODE_REVIEW: BUG-004, без whitelist — data tamper |
+| 2026-07-21 | BUG-001 (рейс-кондишн) — не воспроизводится | Все store-операции sync (readFileSync/writeFileSync). Node.js однопоточный — между load() и save() нет await, значит callback не вклинится. Проблема появится только если добавить async между load и save. |
+| 2026-07-21 | BUG-005 (magistrate caseUrl) — не воспроизводится | Magistrate использует magistrate.ts-адаптер со своей логикой сборки URL. District-адаптер не вызывается для magistrate-судов при правильной диспетчеризации. |
+| 2026-07-21 | BUG-008 (блокировка event loop) — UX, не reliability | runFull висит в HTTP-ответе. Фикс: 202 Accepted + background. Было заложено с самого начала. |
+| 2026-07-21 | BUG-010 (CRLF) — отложено | Windows-среда разработки. Добавить .gitattributes при переходе на Linux/CI. |
+| 2026-07-21 | Rate limit для scheduler | Из отзыва владельца: scheduler гоняет runFull без интервалов — риск блокировки IP судрф. Требует delay 1–2 сек между запросами. |
+| 2026-07-21 | store/events.ts — in-memory cache | Аналогично BUG-009: addEvent читает полный events.json на каждый вызов. Фиксить вместе с BUG-009. |
+| 2026-07-21 | PATCH whitelist | BUG-004: без whitelist — data tamper возможен |
 
 ---
 
-## Известные баги (из BUG_REPORT.md)
+## Известные баги (актуальные)
 
 | ID | Severity | Файл | Описание | Статус |
 |----|----------|------|----------|---------|
-| BUG-001 | 🔴 CRITICAL | `store/cases.ts` | Race condition: потеря данных при concurrent load→save | OPEN |
-| BUG-002 | 🔴 CRITICAL | `scheduler/orchestrator.ts` | `runNew()` вызывает `fetchHtml('')`, waiting-кейс никогда не обрабатывается | OPEN |
-| BUG-003 | 🟠 HIGH | `api/routes/parse.ts` | magistrate: нет captcha + CP1251 не декодируется | OPEN |
+| BUG-002 | 🔴 CRITICAL | `scheduler/orchestrator.ts` | `runNew()` вызывает `fetchHtml('')` — waiting-кейс никогда не обрабатывается | OPEN |
+| BUG-003 | 🔴 CRITICAL | `api/routes/parse.ts` | magistrate: нет captcha + CP1251 не декодируется — 7751 судов не работает | OPEN |
 | BUG-004 | 🟠 HIGH | `api/routes/cases.ts` | PATCH без whitelist — можно перезаписать uid/createdAt/status | OPEN |
-| BUG-005 | 🟠 HIGH | `search/adapters/district.ts` | magistrate caseUrl строится с `.sudrf.ru` вместо `.msudrf.ru` | OPEN |
+| BUG-009 | 🟠 HIGH | `store/cases.ts` + `store/events.ts` | Нет in-memory cache — N×readFileSync на каждый запрос; events.json — аналогично | OPEN |
 | BUG-006 | 🟡 MEDIUM | `store/cases.ts` | `deleteCase` пишет файл даже если uid не существовал | OPEN |
 | BUG-007 | 🟡 MEDIUM | `core/config.ts` | `process.loadEnvFile` требует Node ≥ 20.6, нет `engines` в package.json | OPEN |
-| BUG-008 | 🟡 MEDIUM | `scheduler/orchestrator.ts` | `runFull` блокирует event loop на всё время прогона | OPEN |
-| BUG-009 | 🟡 MEDIUM | `store/cases.ts` | Нет in-memory cache — N×readFileSync на каждый запрос | OPEN |
+| BUG-008 | 🟡 MEDIUM | `scheduler/orchestrator.ts` | `POST /api/parse/run` висит до окончания прогона — UX проблема, фикс: 202 Accepted | OPEN |
 | BUG-010 | 🟢 LOW | `captcha/rucaptcha.ts` | CRLF endings, нет `.gitattributes` | OPEN |
 | BUG-011 | 🟢 LOW | `scheduler/orchestrator.ts` | Dynamic import `iconv-lite` в hot path | OPEN |
+| RATE-001 | 🟠 HIGH | `scheduler/orchestrator.ts` | Нет rate limit между запросами — риск блокировки IP судрф | OPEN |
+
+> **Закрыты ревьюером как не воспроизводящиеся:** BUG-001 (race condition — store sync, Node single-thread), BUG-005 (magistrate.ts своя URL-логика).
 
 ---
 
@@ -166,25 +171,27 @@ CRM отправляет запросы, получает JSON. Фильтруе
 | 2026-07-21 | — | Архитектура пересмотрена: CourtDesk — единый сервис, вбирает Sniffer + Flow |
 | 2026-07-21 | — | Утверждены use cases, API-контракты |
 | 2026-07-21 | — | Старые проекты (Sniffer, Flow) — архив |
-| 2026-07-21 | `9cc099c` | **Фаза 1: core + captcha** — типы, справочник, encoding, config, errors, captcha (Puppeteer) |
+| 2026-07-21 | `9cc099c` | **Фаза 1: core + captcha** |
 | 2026-07-21 | `447d560` | **Фаза 2: search + parse + intake** |
 | 2026-07-21 | `746b46d` | **Фаза 3: store + scheduler** |
-| 2026-07-21 | *(a2f1829)* | **Фаза 4: API + Viewer** — 15 эндпоинтов, Express, Web UI |
-| 2026-07-21 | `eceddc8` | **CODE_REVIEW.md** — полный разбор всех пакетов, 9 секций, приоритеты 🔴/🟠/🟡 |
-| 2026-07-21 | `8062dbe` | **BUG_REPORT.md** — 11 багов: 2 CRITICAL, 3 HIGH, 4 MEDIUM, 2 LOW |
-| 2026-07-21 | *(текущий)* | **CONTEXT.md** — обновлён: статусы компонентов, таблица багов, новые решения |
+| 2026-07-21 | `a2f1829` | **Фаза 4: API + Viewer** — 15 эндпоинтов, Express, Web UI |
+| 2026-07-21 | `eceddc8` | **CODE_REVIEW.md** — полный разбор всех пакетов |
+| 2026-07-21 | `8062dbe` | **BUG_REPORT.md** — 11 багов |
+| 2026-07-21 | `ec8e50b` | **CONTEXT.md** — обновлён: статусы, баги, решения |
+| 2026-07-21 | *(текущий)* | **CONTEXT.md** — отзыв владельца зафиксирован: пересмотр багов, новые замечания (RATE-001, events cache) |
 
 ---
 
 ## Следующие шаги (приоритет)
 
-1. **BUG-001** — store: добавить singleton in-memory Map + promise-mutex
-2. **BUG-002** — orchestrator: переработать `runNew()` под поиск по участнику
-3. **BUG-003** — parse route: детект magistrate → `fetchMagistrateHtml` + iconv
-4. **BUG-004** — cases route: PATCH whitelist
-5. **BUG-005** — district adapter: домен из `courtType`
-6. **BUG-007** — добавить `engines` в `package.json`
-7. Viewer: наполнить `packages/viewer/public/`
+1. **BUG-002** — `runNew()`: заменить `fetchHtml` на `searchAdapter.searchByParty` с данными из `WatchedCase`
+2. **BUG-003** — `parse/url`: детекция magistrate → `fetchMagistrateHtml` + iconv
+3. **BUG-004** — `PATCH`: whitelist полей
+4. **BUG-009** — store/cases + store/events: singleton in-memory Map + инвалидация при save
+5. **RATE-001** — scheduler: delay 1–2 сек между `processOne`
+6. **BUG-008** — `POST /api/parse/run`: 202 Accepted + background
+7. **BUG-007** — `engines` в `package.json`
+8. Viewer: наполнить `packages/viewer/public/`
 
 ---
 
@@ -206,8 +213,8 @@ courtdesk/
 ├── package.json
 ├── tsconfig.json
 ├── ARCHITECTURE.md
-├── CODE_REVIEW.md   ← добавлен 2026-07-21
-└── BUG_REPORT.md    ← добавлен 2026-07-21
+├── CODE_REVIEW.md
+└── BUG_REPORT.md
 ```
 
 ---
