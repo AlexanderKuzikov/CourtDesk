@@ -82,6 +82,7 @@ const entries = raw.courts;
 
 const bySubdomain = new Map<string, CourtInfo>();
 const byCode = new Map<string, CourtInfo>();
+
 for (const e of entries) {
   const info = toCourtInfo(e);
   if (info.subdomain) bySubdomain.set(info.subdomain, info);
@@ -100,13 +101,14 @@ export function findCourtByCodeOrSubdomain(id: string): CourtInfo | null {
   return findCourtByCode(id) ?? findCourtBySubdomain(id);
 }
 
+// NEW-008 FIXED: slice перед map — не аллоцируем объекты для отброшенных записей
 export function findCourtsByName(query: string): CourtInfo[] {
   const words = query.toLowerCase().split(/\s+/).filter(w => w.length >= 2);
   if (words.length === 0) return [];
   return entries
     .filter(e => words.every(w => e.name.toLowerCase().includes(w)))
-    .map(toCourtInfo)
-    .slice(0, 50);
+    .slice(0, 50)
+    .map(toCourtInfo);
 }
 
 export function findCourtsByRegion(region: string): CourtInfo[] {
@@ -117,6 +119,7 @@ export function getTotalCourts(): number {
   return entries.length;
 }
 
+// getAllCourts возвращает кэшированный byCode, а не пересоздаёт 10287 объектов
 export function getAllCourts(): CourtInfo[] {
-  return entries.map(toCourtInfo);
+  return Array.from(byCode.values());
 }

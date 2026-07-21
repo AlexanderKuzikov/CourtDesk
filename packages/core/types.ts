@@ -2,13 +2,19 @@
 // Собраны из CourtSniffer (поиск), CourtFlow (парсинг/мониторинг), CourtDesk (оркестратор)
 
 // ---- Общие ----
-
 export type CourtType = 'district' | 'appeal' | 'cassation' | 'magistrate';
 
-export type CaseStatus = 'waiting' | 'monitoring' | 'decision' | 'enforced' | 'error';
+// NEW-007 FIXED: добавлен 'archived', синхронизировано с ARCHITECTURE.md §5.4
+// Реальный lifecycle: waiting → monitoring → decision → enforced → archived
+export type CaseStatus =
+  | 'waiting'    // ожидается появление дела
+  | 'monitoring' // дело найдено, периодически парсим
+  | 'decision'   // решение вынесено, ждём вступления в силу
+  | 'enforced'   // решение вступило в законную силу
+  | 'archived'   // дело завершено/заархивировано пользователем
+  | 'error';     // последний прогон завершился ошибкой
 
 // ---- Справочник судов ----
-
 export interface CourtInfo {
   code: string;
   name: string;
@@ -23,7 +29,6 @@ export interface CourtInfo {
 }
 
 // ---- Поиск (из CourtSniffer) ----
-
 export interface SearchRequest {
   courtId: string;
   courtCode?: string;
@@ -52,23 +57,22 @@ export interface SearchResult {
 }
 
 // ---- Парсинг карточки (из CourtFlow) ----
-
 export interface CaseCard {
   $schema: string;
   uid: string;
   type: string;
   number: string;
-  court: string;        // subdomain без суффикса .sudrf.ru / .msudrf.ru
+  court: string; // subdomain без суффикса .sudrf.ru / .msudrf.ru
   courtType: CourtType;
   identifiers: {
     delo_id: string | null;
     case_uid: string | null;
     case_type: string | null;
   };
-  publishedAt: string | null;  // ISO
+  publishedAt: string | null; // ISO
   modifiedAt: string | null;
   card: {
-    filingDate: string | null;  // YYYY-MM-DD
+    filingDate: string | null;    // YYYY-MM-DD
     category: string[];
     judge: string | null;
     hearingDate: string | null;
@@ -81,7 +85,7 @@ export interface CaseCard {
 
 export interface CaseEvent {
   eventName: string | null;
-  eventDate: string | null;   // YYYY-MM-DD
+  eventDate: string | null;  // YYYY-MM-DD
   eventTime: string | null;
   location: string | null;
   result: string | null;
@@ -101,11 +105,10 @@ export interface CaseParty {
 }
 
 // ---- Хранилище / Дашборд ----
-
 export interface WatchedCase {
   uid: string;
   url: string;
-  courtId: string;       // subdomain
+  courtId: string;           // subdomain
   courtCode: string;
   courtType: CourtType;
   number: string;
@@ -114,22 +117,21 @@ export interface WatchedCase {
   legalForceDate: string | null;
   legalForceNotified: boolean;
   userId: string | null;
-  lastChecked: string | null;   // ISO
-  createdAt: string;            // ISO
-  updatedAt: string;            // ISO
+  lastChecked: string | null; // ISO
+  createdAt: string;          // ISO
+  updatedAt: string;          // ISO
 }
 
 export interface CaseHistoryEvent {
   uid: string;
   caseUid: string;
-  type: string;          // 'added' | 'checked' | 'changed' | 'decision' | 'enforced'
+  type: string; // 'added' | 'checked' | 'changed' | 'decision' | 'enforced' | 'found'
   message: string;
   data: Record<string, unknown>;
-  createdAt: string;     // ISO
+  createdAt: string; // ISO
 }
 
 // ---- Уведомления ----
-
 export interface Notification {
   uid: string;
   caseUid: string;
@@ -140,7 +142,6 @@ export interface Notification {
 }
 
 // ---- Intake ----
-
 export type IntentionType = 'case_card' | 'search' | 'malformed';
 
 export interface Intention {
@@ -160,7 +161,6 @@ export interface IntakeRequest {
 }
 
 // ---- API ----
-
 export interface ApiResponse<T> {
   success: true;
   data: T;
@@ -173,7 +173,6 @@ export interface ApiError {
 }
 
 // ---- Запросы к API ----
-
 export interface AddMonitorRequest {
   courtId?: string;
   courtCode?: string;
@@ -212,12 +211,12 @@ export interface SearchPartyRequest {
   to?: string;
 }
 
+// NEW-006 FIXED: mode синхронизирован с реальным switch в parse.ts
 export interface ParseRunRequest {
-  mode: 'full' | 'new' | 'errors';
+  mode: 'full' | 'retry' | 'new';
 }
 
 // ---- Статус дашборда ----
-
 export interface DashboardStatus {
   monitoring: number;
   waiting: number;
@@ -227,7 +226,6 @@ export interface DashboardStatus {
 }
 
 // ---- Совместимость с CourtFlow (parse-адаптеры) ----
-
 /** Алиас для обратной совместимости с кодом из CourtFlow */
 export type Case = CaseCard;
 

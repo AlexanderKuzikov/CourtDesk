@@ -1,15 +1,15 @@
 # CourtDesk — Архитектура
-
 > CRM-оркестратор поиска и мониторинга судебных дел РФ.
 > Единый API-сервис для интеграции с CRM (1С) и параллельного Web UI.
 > Собирается из CourtSniffer (поиск), CourtFlow (мониторинг) и существующего скелета CourtDesk (intake).
+
+> **Обновлено 2026-07-22** по результатам Code Review (NEW-001..011).
 
 ---
 
 ## 1. Роль и границы
 
 CourtDesk — **не набор микросервисов**. Это один процесс, который:
-
 - Принимает REST-запросы от CRM (1С)
 - Предоставляет Web UI для пользователей без CRM
 - Ищет дела на sudrf.ru / msudrf.ru (поиск)
@@ -36,8 +36,8 @@ CourtDesk — **не набор микросервисов**. Это один п
 ### 2.2 Мониторинг
 - Периодический парсинг карточки дела по URL
 - Фиксация изменений (новые события, изменение статуса, состава участников)
-- Retry-прогон для «устаревших» дел
-- Хранение истории изменений
+- Retry-прогон для «устаревших» и error-дел
+- Хранение истории изменений с корректным `caseUid`
 
 ### 2.3 Отслеживание вступления в силу
 - Извлечение `legalForceDate` из карточки (уже есть в поиске)
@@ -46,14 +46,14 @@ CourtDesk — **не набор микросервисов**. Это один п
 
 ### 2.4 Классификация запросов (Intake)
 - URL карточки дела → type: case_card
-- Номер дела / ФИО → type: search
+- Номер дела / ФИО (только кириллица) → type: search
 - Мусор → type: malformed
 - Извлечение courtId, courtType, caseId из URL
 
 ### 2.5 Справочник судов
 - 10 287 записей (unified-courts.json, OKTMO + телефоны)
 - O(1)-lookup по code и subdomain
-- AND-поиск по названию
+- AND-поиск по названию (`filter → slice → map`, не `filter → map → slice`)
 
 ---
 
@@ -62,61 +62,49 @@ CourtDesk — **не набор микросервисов**. Это один п
 ```
 courtdesk/
 ├── packages/
-│   ├── core/                   # Фундамент: типы, справочник, encoding, config
-│   │   ├── types.ts            #   Единые типы (CourtType, Case, SearchResult…)
-│   │   ├── courts.ts           #   Справочник судов (unified-courts.json)
-│   │   ├── encoding.ts         #   CP1251 percent-encoder
-│   │   └── config.ts           #   .env + config.json
+│   ├── core/              # Фундамент: типы, справочник, encoding, config
+│   │   ├── types.ts       # Единые типы (CourtType, CaseStatus, CaseHistoryEvent…)
+│   │   ├── courts.ts      # Справочник судов (unified-courts.json)
+│   │   ├── encoding.ts    # CP1251 percent-encoder
+│   │   └── config.ts      # .env + config.json
 │   │
-│   ├── captcha/                # Puppeteer + RuCaptcha (один экземпляр)
-│   │   ├── session.ts          #   Browser-сессия: капча → решение → поиск
-│   │   └── rucaptcha.ts        #   Клиент RuCaptcha API v2
+│   ├── captcha/           # Puppeteer + RuCaptcha (один экземпляр)
+│   │   ├── session.ts     # Browser-сессия: капча → решение → поиск
+│   │   └── rucaptcha.ts   # Клиент RuCaptcha API v2
 │   │
-│   ├── search/                 # Поиск дел (из CourtSniffer)
-│   │   ├── adapters/           #   district, appeal, cassation, magistrate
-│   │   ├── registry.ts         #   getSearchAdapter(courtType)
-│   │   └── cli.ts              #   CLI-точка входа (search:case / search:party)
+│   ├── search/            # Поиск дел (из CourtSniffer)
+│   │   ├── adapters/      # district, appeal, cassation, magistrate
+│   │   └── registry.ts    # getSearchAdapter(courtType)
 │   │
-│   ├── parse/                  # Парсинг карточек дел (из CourtFlow)
-│   │   ├── adapters/           #   district, appeal, cassation, magistrate
-│   │   └── registry.ts         #   getParseAdapter(courtType)
+│   ├── parse/             # Парсинг карточек дел (из CourtFlow)
+│   │   ├── adapters/      # district, appeal, cassation, magistrate
+│   │   └── registry.ts    # getParseAdapter(courtType)
 │   │
-│   ├── intake/                 # Классификатор запросов (из CourtDesk)
-│   │   ├── classify.ts         #   classify(input) → Classification
-│   │   └── types.ts            #   IntakeRequest, Classification
+│   ├── intake/            # Классификатор запросов
+│   │   ├── classify.ts    # classify(input) → Classification
+│   │   └── types.ts       # IntakeRequest, Classification
 │   │
-│   ├── scheduler/              # Оркестратор мониторинга (из CourtFlow)
-│   │   ├── orchestrator.ts     #   Полный прогон + retry-прогон
-│   │   └── smoke.ts            #   E2E smoke-тест
+│   ├── scheduler/         # Оркестратор мониторинга
+│   │   └── orchestrator.ts # runFull / runRetry / runNew / runSingle
 │   │
-│   ├── store/                  # Хранилище состояния (JSON, tmp+rename)
-│   │   ├── cases.ts            #   CRUD для дел
-│   │   ├── events.ts           #   История изменений
-│   │   ├── clients.ts          #   Клиенты (привязка дел к клиентам CRM)
-│   │   └── index.ts            #   Barrel
+│   ├── store/             # Хранилище состояния (JSON, tmp+rename)
+│   │   ├── cases.ts       # CRUD для дел + in-memory cache
+│   │   ├── events.ts      # История изменений
+│   │   └── index.ts       # Barrel
 │   │
-│   ├── api/                    # Express-сервер (точка входа)
-│   │   ├── server.ts           #   Запуск, middleware
-│   │   ├── routes/             #   Роуты по функционалу
-│   │   │   ├── search.ts       #     POST /api/search/case-number, /api/search/party
-│   │   │   ├── monitor.ts      #     POST /api/monitor/add, GET /api/monitor/status
-│   │   │   ├── intake.ts       #     POST /api/intake
-│   │   │   ├── courts.ts       #     GET /api/courts
-│   │   │   ├── legal-force.ts  #     GET /api/legal-force/:uid
-│   │   │   └── health.ts       #     GET /api/health
-│   │   └── middleware/         #   Валидация, ошибки, CORS
-│   │
-│   ├── viewer/                 # Web UI (параллельный интерфейс)
-│   │   ├── public/             #   Single-file HTML (как в Sniffer)
-│   │   └── server.ts           #   Express или встраивается в api/server.ts
-│   │
-│   └── cli/                    # CLI + TUI (опционально)
-│       ├── search.ts           #   Поиск из командной строки
-│       └── tui.ts              #   Терминальный дашборд (blessed, из Flow)
-│
-├── .env.example
-├── package.json                # Один package, workspaces не нужны
-└── tsconfig.json
+│   └── api/               # Express-сервер (точка входа)
+│       ├── server.ts      # createApp() + подключение всех роутеров
+│       ├── routes/
+│       │   ├── health.ts         # GET /api/health
+│       │   ├── status.ts         # GET /api/status  ← NEW-003
+│       │   ├── notifications.ts  # GET /api/notifications  ← NEW-003
+│       │   ├── cases.ts          # CRUD /api/cases
+│       │   ├── search.ts         # POST /api/search/*
+│       │   ├── parse.ts          # POST /api/parse/*
+│       │   ├── courts.ts         # GET /api/courts
+│       │   └── intake.ts         # POST /api/intake
+│       └── middleware/
+│           └── error.ts          # Global error handler
 ```
 
 ---
@@ -124,81 +112,69 @@ courtdesk/
 ## 4. Data Flow
 
 ### 4.1 Поиск (запрос от CRM)
-
 ```
-CRM ──→ POST /api/search/case-number { courtId, caseNumber }
+CRM ──→ POST /api/search/by-number { courtId, caseNumber }
          │
          ├─→ core/courts.ts (разрешить courtId → subdomain)
          ├─→ search/adapters/district.ts (или appeal/cassation/magistrate)
-         ├─→ ← SearchResult[]
-         │
-         └─→ Response { found, count, results, court }
+         └─→ Response { success, data: SearchResult[] }
 ```
 
 ### 4.2 Мониторинг (добавление дела)
-
 ```
-CRM ──→ POST /api/monitor/add { url, courtId, courtType }
+CRM ──→ POST /api/cases { url, courtId, courtType, caseNumber }
          │
-         ├─→ intake/classify (валидация URL)
-         ├─→ parse/adapters (парсинг карточки)
-         ├─→ store/cases (сохранение)
-         ├─→ scheduler (добавить в расписание)
-         │
-         └─→ Response { uid, status, suggested }
+         ├─→ store/cases (addCase)
+         ├─→ store/events (addEvent с корректным caseUid)
+         └─→ Response { success, data: WatchedCase }
 ```
 
 ### 4.3 Циклический прогон мониторинга
-
 ```
-scheduler/orchestrator (по расписанию или вручную)
-         │
-         ├─→ store/cases → список активных дел
-         ├─→ parse/adapters (для каждого дела)
-         ├─→ store/events (сохранить изменения)
-         └─→ store/cases (обновить lastChecked)
-```
-
-### 4.4 Web UI
-
-```
-Браузер ──→ viewer/public/index.html
-              │
-              ├──→ GET /api/courts (справочник)
-              ├──→ POST /api/search/... (поиск)
-              ├──→ POST /api/monitor/add (добавить)
-              └──→ GET /api/monitor/status (проверить)
+POST /api/parse/run { mode: 'full' | 'retry' | 'new' }
+  → 202 Accepted
+  → runFull() в фоне
+       │
+       ├─→ listCases({ status: 'monitoring' | 'decision' | 'error' })
+       ├─→ processOne(case)
+       │     ├─→ fetchHtml(url)         # await → event loop свободен
+       │     ├─→ getCase(uid)           # NEW-002: перечитать перед записью
+       │     ├─→ updateCase(...)        # обновить состояние
+       │     └─→ addEvent(uid, makeEvent(uid, ...))  # NEW-001: caseUid корректен
+       └─→ updateCase(uid, { status: 'error' })  # при исключении
 ```
 
-Web UI использует **те же API-эндпоинты**, что и CRM. Разница только в клиенте (браузерный JS vs HTTP-запросы из 1С).
+### 4.4 Дашборд (Web UI)
+```
+Браузер ──→ GET /api/status
+             → { monitoring, waiting, decision, enforcedToday, health }
+
+Браузер ──→ GET /api/notifications
+             → { data: Notification[] }
+
+Браузер ──→ GET /api/cases?status=monitoring
+             → { data: WatchedCase[] }
+```
 
 ---
 
 ## 5. Типы (единые)
 
 ### 5.1 Общие
-
 ```typescript
 export type CourtType = 'district' | 'appeal' | 'cassation' | 'magistrate';
 
-export type CaseStatus = 'searching' | 'monitoring' | 'completed' | 'archived' | 'error';
-
-export interface CourtInfo {
-  code: string;
-  name: string;
-  courtType: CourtType;
-  subdomain: string;
-  region: string;
-  address: string;
-  website: string;
-  phone: string;
-  oktmo: string;
-  oktmoMethod: string;
-}
+// NEW-007: полный lifecycle дела
+export type CaseStatus =
+  | 'waiting'    // ожидается появление дела
+  | 'monitoring' // активный мониторинг
+  | 'decision'   // решение вынесено
+  | 'enforced'   // решение вступило в силу
+  | 'archived'   // заархивировано пользователем
+  | 'error';     // ошибка последнего прогона
 ```
 
 ### 5.2 Поиск (из Sniffer)
-
 ```typescript
 export interface SearchRequest {
   courtId: string;
@@ -218,48 +194,11 @@ export interface SearchResult {
   judge: string | null;
   result: string | null;
   legalForceDate: string | null;
-  filingDate: string | null;
-  decisionDate: string | null;
-  parties: { role: string; name: string }[];
-  courtId: string;
-  courtCode?: string;
-  courtType: CourtType;
+  // ... (полный список в core/types.ts)
 }
 ```
 
-### 5.3 Парсинг карточки (из Flow, упрощён)
-
-```typescript
-export interface CaseCard {
-  uid: string;
-  number: string;
-  court: string;        // subdomain
-  courtType: CourtType;
-  filingDate: string | null;
-  judge: string | null;
-  result: string | null;
-  legalForceDate: string | null;
-  hearingDate: string | null;
-  category: string[];
-  events: CaseEvent[];
-  parties: CaseParty[];
-}
-
-export interface CaseEvent {
-  eventName: string | null;
-  eventDate: string | null;
-  result: string | null;
-  judge: string | null;
-}
-
-export interface CaseParty {
-  role: string;
-  name: string;
-}
-```
-
-### 5.4 Хранилище
-
+### 5.3 Хранилище
 ```typescript
 export interface WatchedCase {
   uid: string;
@@ -268,22 +207,39 @@ export interface WatchedCase {
   courtCode: string;
   courtType: CourtType;
   number: string;
-  status: CaseStatus;
+  status: CaseStatus; // включает 'archived'
+  result: string | null;
   legalForceDate: string | null;
   legalForceNotified: boolean;
-  clientId?: string;
+  userId: string | null;
   lastChecked: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
-export interface CaseEventLog {
+export interface CaseHistoryEvent {
   uid: string;
-  caseUid: string;
+  caseUid: string; // NEW-001: всегда заполнен
   type: string;
-  date: string;
+  message: string;
   data: Record<string, unknown>;
   createdAt: string;
+}
+```
+
+### 5.4 API-запросы
+```typescript
+// NEW-006: mode синхронизирован с реальным switch
+export interface ParseRunRequest {
+  mode: 'full' | 'retry' | 'new';
+}
+
+export interface DashboardStatus {
+  monitoring: number;
+  waiting: number;
+  decision: number;
+  enforcedToday: number;
+  health: 'ok' | 'degraded' | 'error';
 }
 ```
 
@@ -295,74 +251,69 @@ export interface CaseEventLog {
 
 | Метод | Путь | Назначение | Тело / Query |
 |-------|------|-----------|--------------|
-| `POST` | `/api/intake` | Классификация запроса | `{ input: string }` |
-| `POST` | `/api/search/case-number` | Поиск по номеру дела | `{ courtId, courtType?, caseNumber }` |
-| `POST` | `/api/search/party` | Поиск по участникам | `{ courtId, courtType?, defendant?, plaintiff?, from?, to? }` |
+| `GET` | `/api/health` | Liveness probe | — |
+| `GET` | `/api/status` | Счётчики дашборда + health | — |
+| `GET` | `/api/notifications` | Уведомления о событиях | — |
+| `GET` | `/api/cases` | Список дел | `?status=&userId=&courtId=&q=` |
+| `GET` | `/api/cases/stats` | Детальная статистика | — |
+| `GET` | `/api/cases/:uid` | Карточка дела | — |
+| `POST` | `/api/cases` | Добавить в мониторинг | `{ url, courtId, courtType, caseNumber }` |
+| `PATCH` | `/api/cases/:uid` | Обновить разрешённые поля | `{ status?, result?, ... }` |
+| `DELETE` | `/api/cases/:uid` | Удалить дело | — |
+| `POST` | `/api/cases/wait` | Отслеживать появление | `{ courtId, courtType, party, filingDate }` |
+| `POST` | `/api/search/by-number` | Поиск по номеру | `{ courtId, courtType?, caseNumber }` |
+| `POST` | `/api/search/by-party` | Поиск по участникам | `{ courtId, courtType?, defendant?, plaintiff? }` |
 | `POST` | `/api/parse/url` | Парсинг карточки дела | `{ url, courtId?, courtType? }` |
-| `POST` | `/api/monitor/add` | Добавить дело в мониторинг | `{ url, courtId?, courtType?, clientId? }` |
-| `DELETE` | `/api/monitor/:uid` | Удалить из мониторинга | — |
-| `GET` | `/api/monitor/status` | Список дел в мониторинге | `?clientId=&status=` |
-| `GET` | `/api/monitor/status/:uid` | Статус и история по делу | — |
-| `GET` | `/api/legal-force/:uid` | Статус вступления в силу | — |
-| `GET` | `/api/legal-force/reminders` | Дела, где скоро/уже наступило | `?days=7` |
-| `GET` | `/api/courts` | Поиск судов | `?q=` или пусто |
+| `POST` | `/api/parse/run` | Запуск прогона (202 Accepted) | `{ mode: 'full'\|'retry'\|'new' }` |
+| `GET` | `/api/courts` | Поиск судов | `?q=` |
 | `GET` | `/api/courts/:id` | Инфо о суде | — |
-| `GET` | `/api/health` | Статус сервиса | — |
+| `POST` | `/api/intake` | Классификация входного текста | `{ input: string }` |
 
 ### 6.2 Формат ответа
-
 ```typescript
-// Успех
 interface ApiResponse<T> {
   success: true;
   data: T;
-  suggested?: string[];   // Подсказки сценариев (как в CourtDesk)
 }
-
-// Ошибка
 interface ApiError {
   success: false;
   error: string;
-  code?: string;          // 'COURT_NOT_FOUND' | 'PARSE_ERROR' | 'CAPTCHA_REQUIRED' | ...
+  code: string;
 }
 ```
 
-### 6.3 1С-интеграция
-
-Формат: HTTP POST/GET, Content-Type: application/json, тела запросов/ответов — UTF-8.
-1С умеет работать с REST из коробки (HTTPСоединение, ЧтениеJSON).
+### 6.3 PATCH /api/cases/:uid — разрешённые поля
+Только: `status`, `result`, `legalForceDate`, `legalForceNotified`, `userId`, `url`.
+Нельзя менять: `uid`, `createdAt`, `courtId`, `courtType`, `number`.
 
 ---
 
 ## 7. Хранилище (store)
 
 ### 7.1 Формат файлов
-
 ```
 data/
-├── cases.json            # Record<string, WatchedCase>
-├── events.json           # Record<string, CaseEventLog[]>
-└── clients.json          # Record<string, Client> (если нужно)
+├── cases.json   # Record<string, WatchedCase>
+└── events.json  # Record<string, CaseHistoryEvent[]>
 ```
 
 ### 7.2 Атомарность
-
 Все записи через tmp + rename (как в CourtFlow):
 ```
 cases.json → cases.tmp.XXXX → rename → cases.json
 ```
 
-### 7.3 Индексы
+### 7.3 In-memory cache
+Один `readFileSync` при старте. `_cache: Map<string, WatchedCase>` обновляется при каждом `addCase` / `updateCase` / `deleteCase`. Cache является единственным источником истины в runtime.
 
-Для быстрого поиска по `clientId`, `status`, `legalForceDate` — держать в памяти Map,
-восстанавливаемые при старте из JSON.
+### 7.4 Race condition (известное ограничение)
+Node.js однопоточен, но `await fetchHtml()` освобождает event loop. В окне между `await` HTTP-запрос может изменить `_cache`. Scheduler перечитывает `getCase()` перед каждым `updateCase` (NEW-002). При переходе на worker_threads — нужен proper mutex.
 
 ---
 
 ## 8. Captcha
 
 **Стратегия:** один модуль `captcha/`, используемый и search, и parse (для magistrate).
-Копипаста из Sniffer + Flow устраняется.
 
 **Как работает:**
 1. Открыть страницу msudrf через Puppeteer
@@ -382,12 +333,16 @@ cases.json → cases.tmp.XXXX → rename → cases.json
 
 | Режим | Когда | Что делает |
 |-------|-------|-----------|
-| **full** | Вручную / по расписанию | Перепарсить все активные дела |
-| **retry** | После full (отложенно) | Только дела, где lastChecked > staleThresholdH |
-| **incremental** | После добавления нового дела | Парсинг только нового дела |
+| **full** | Вручную / по расписанию | Перепарсить monitoring + decision + error дела |
+| **retry** | После full (отложенно) | Только устаревшие monitoring + error дела |
+| **new** | После добавления waiting-дел | Поиск по участнику через searchAdapter |
 
-### 9.2 Расписание
+### 9.2 Обработка ошибок
+- При исключении в `processOne` — `status` → `'error'`, `lastChecked` обновляется
+- `runFull` и `runRetry` включают error-дела (NEW-004)
+- `isStale()` определяет стратегию retry по `lastChecked`
 
+### 9.3 Расписание
 По умолчанию: полный прогон — `0 8 * * 1,3,5` (пн/ср/пт в 8:00)
 Retry-прогон через 3 часа после полного.
 Настраивается в `.env` или `config.json`.
@@ -397,7 +352,7 @@ Retry-прогон через 3 часа после полного.
 ## 10. Web UI
 
 ### 10.1 Принципы
-- Одна HTML-страница (как в CourtSniffer viewer)
+- Одна HTML-страница
 - Event delegation, data-* атрибуты, XSS-safe
 - Тёмная тема
 - Все запросы через fetch к `/api/*`
@@ -407,10 +362,11 @@ Retry-прогон через 3 часа после полного.
 
 | Экран | Что показывает |
 |-------|---------------|
+| **Дашборд** | GET /api/status → счётчики; GET /api/notifications → события |
 | **Поиск** | Подбор суда по названию, ввод code, номер дела / ФИО, таблица результатов |
 | **Мониторинг** | Список отслеживаемых дел, статус, дата последней проверки |
 | **Детали дела** | Карточка дела, история изменений, дата вступления в силу |
-| **Даты вступления** | Календарь/список дел с ближайшими датами вступления |
+| **Даты вступления** | Список дел с ближайшими датами вступления |
 
 ---
 
@@ -419,52 +375,21 @@ Retry-прогон через 3 часа после полного.
 | Из Sniffer | Из Flow | Из Desk |
 |-----------|---------|---------|
 | search/adapters (4 шт) | parse/adapters (4 шт) | intake/classify |
-| core/encoding.ts | core/urls.ts (извлечение case_id) | core/types.ts *(референс)* |
-| core/courts.ts + unified-courts.json | scheduler/orchestrator.ts | api/server.ts *(референс)* |
-| captcha/session.ts + rucaptcha.ts | exporter/json.ts | — |
-| viewer/public/index.html | viewer/public/index.html *(референс)* | — |
-| cli.ts (search) | cli/tui.ts, client.ts | — |
-| config.ts | core/config.ts | — |
-| smoke.ts | scheduler/smoke.ts | — |
-
-Каждый модуль не копируется вслепую, а адаптируется под единые типы и структуру.
+| core/encoding.ts | scheduler/orchestrator.ts | core/types.ts *(референс)* |
+| core/courts.ts + unified-courts.json | — | api/server.ts *(референс)* |
+| captcha/session.ts + rucaptcha.ts | — | — |
 
 ---
 
 ## 12. Стратегия миграции
 
-### Фаза 1: Фундамент
-1. Создать структуру проекта (package.json, tsconfig, eslint)
-2. `core/` — единые типы, справочник судов, encoding, config
-3. `captcha/` — Puppeteer + RuCaptcha (один раз)
-4. Проверить: `tsc --noEmit`, smoke-тест
+### Фаза 1–4: Выполнено ✅
+- Фундамент, поиск, парсинг, оркестрация, API, инфраструктура
+- Code Review 2026-07-21 + 2026-07-22 применён
 
-### Фаза 2: Поиск + Парсинг
-5. `search/` — адаптеры поиска (из Sniffer)
-6. `parse/` — адаптеры парсинга (из Flow)
-7. `intake/` — классификатор (из Desk)
-
-### Фаза 3: Оркестрация
-8. `store/` — JSON-хранилище
-9. `scheduler/` — оркестратор мониторинга
-
-### Фаза 4: Интерфейсы
-10. `api/` — Express API (все эндпоинты)
-11. `viewer/` — Web UI
-12. Интеграционное тестирование (CRM + UI)
-13. Заморозка старых репозиториев
-
----
-
-## 13. Решения (ADR)
-
-| Дата | Решение | Обоснование |
-|------|---------|-------------|
-| 2026-07-21 | Единый проект (не микросервисы) | Одна кодовая база, один деплой, нет накладных расходов на сеть. Разнести можно потом, собрать сейчас — сложнее. |
-| 2026-07-21 | Один package.json, не workspaces | Все пакеты в одном процессе, одна версия зависимостей, npm install — один раз. |
-| 2026-07-21 | JSON-хранилище (не SQL) | Объём данных небольшой (< 10 000 дел). SQLite даёт транзакции, но tmp+rename достаточно. При росте — миграция на SQLite без смены интерфейса store/. |
-| 2026-07-21 | REST API (не GraphQL) | 1С умеет REST. GraphQL — overkill для 5-10 эндпоинтов. |
-| 2026-07-21 | API и UI — один Express-процесс | Экономия портов, нет CORS при разработке. Если понадобится — UI выносится за reverse-proxy. |
-| 2026-07-21 | Search ≠ Parse (разные адаптеры) | Sniffer ищет (name_op=r), Flow разбирает карточку (name_op=case). Разные URL, разный парсинг. Один интерфейс — разные реализации. |
-| 2026-07-21 | Core — единый источник типов | CourtType, SearchResult, CaseCard — в одном файле. Никаких копий по пакетам. |
-| 2026-07-21 | Intake — глубокий модуль (один `classify`) | Весь разбор URL/текста внутри. Адаптеры поиска и парсинга не занимаются классификацией. |
+### Фаза 5: В работе
+1. Тесты для новых роутов (`/api/status`, `/api/notifications`)
+2. `POST /api/resolve` — суд + номер → ссылка
+3. Viewer (Web UI дашборд)
+4. Persistent уведомления (`store/notifications.ts`)
+5. Smoke-тест magistrate

@@ -6,7 +6,7 @@ import { getSearchAdapter } from '../search/index.js';
 import type { WatchedCase, CaseHistoryEvent } from '../core/types.js';
 
 const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000;
-const RATE_DELAY_MS = 1500; // RATE-001: задержка между запросами к sudrf.ru — защита от блокировки IP
+const RATE_DELAY_MS = 1500; // RATE-001: задержка между запросами к sudrf.ru
 
 function now(): string {
   return new Date().toISOString();
@@ -17,10 +17,16 @@ function isStale(c: WatchedCase): boolean {
   return Date.now() - new Date(c.lastChecked).getTime() > STALE_THRESHOLD_MS;
 }
 
-function makeEvent(type: string, message: string, data?: Record<string, unknown>): CaseHistoryEvent {
+// NEW-001 FIXED: caseUid передаётся первым параметром
+function makeEvent(
+  caseUid: string,
+  type: string,
+  message: string,
+  data?: Record<string, unknown>,
+): CaseHistoryEvent {
   return {
     uid: crypto.randomUUID(),
-    caseUid: '',
+    caseUid,
     type,
     message,
     data: data ?? {},
@@ -33,16 +39,21 @@ function sleep(ms: number): Promise<void> {
 }
 
 export async function runFull(): Promise<{ ok: number; fail: number }> {
-  const cases = listCases({ status: 'monitoring' }).concat(listCases({ status: 'decision' }));
+  // NEW-004 FIXED: включаем error-дела в полный прогон
+  const cases = listCases({ status: 'monitoring' })
+    .concat(listCases({ status: 'decision' }))
+    .concat(listCases({ status: 'error' }));
   return processBatch(cases);
 }
 
 export async function runRetry(): Promise<{ ok: number; fail: number }> {
-  const cases = listCases({ status: 'monitoring' }).filter(isStale);
-  return processBatch(cases);
+  // NEW-004 FIXED: error-дела также участвуют в retry
+  const monitoring = listCases({ status: 'monitoring' }).filter(isStale);
+  const errors = listCases({ status: 'error' }).filter(isStale);
+  return processBatch(monitoring.concat(errors));
 }
 
-// BUG-002: waiting-дела — поиск по участнику через searchAdapter, а не fetchHtml('')
+// BUG-002 FIXED: waiting-дела — поиск по участнику через searchAdapter
 export async function runNew(): Promise<{ ok: number; fail: number }> {
   const cases = listCases({ status: 'waiting' });
   return processWaitingBatch(cases);
@@ -59,6 +70,8 @@ async function processBatch(cases: WatchedCase[]): Promise<{ ok: number; fail: n
     } catch (err) {
       fail++;
       console.error(`[scheduler] fail ${c.uid} (${c.number}):`, err);
+      // Ставим статус error чтобы дело попало в runRetry
+      updateCase(c.uid, { status: 'error', lastChecked: now() });
     }
     // RATE-001: пауза между запросами (не после последнего)
     if (i < cases.length - 1) await sleep(RATE_DELAY_MS);
@@ -85,19 +98,25 @@ async function processWaitingBatch(cases: WatchedCase[]): Promise<{ ok: number; 
 
 // Обработка waiting-кейса: ищем дело по участнику + дате подачи
 async function processWaiting(c: WatchedCase): Promise<void> {
-  // Данные участника хранятся в events: тип 'waiting', data.party + data.filingDate
-  // getEvents импортирован статически вверху файла
   const events = getEvents(c.uid);
   const waitEvent = events.find(e => e.type === 'waiting');
   if (!waitEvent) {
     console.warn(`[scheduler/new] ${c.uid}: нет waiting-события с данными участника`);
+    // NEW-005 FIXED: обновляем lastChecked даже при отсутствии данных
+    updateCase(c.uid, { lastChecked: now() });
     return;
   }
 
   const party = String(waitEvent.data['party'] ?? '');
-  const filingDate = waitEvent.data['filingDate'] ? String(waitEvent.data['filingDate']) : undefined;
+  const filingDate = waitEvent.data['filingDate']
+    ? String(waitEvent.data['filingDate'])
+    : undefined;
 
-  if (!party) return;
+  if (!party) {
+    // NEW-005 FIXED: обновляем lastChecked при пустом party
+    updateCase(c.uid, { lastChecked: now() });
+    return;
+  }
 
   const adapter = getSearchAdapter(c.courtType);
   const results = await adapter.searchByParty({
@@ -121,7 +140,8 @@ async function processWaiting(c: WatchedCase): Promise<void> {
     number: r.caseNumber,
     lastChecked: now(),
   });
-  addEvent(c.uid, makeEvent('found', `Дело появилось: ${r.caseNumber}`, { caseUrl: r.caseUrl }));
+  // NEW-001 FIXED: caseUid передаётся в makeEvent
+  addEvent(c.uid, makeEvent(c.uid, 'found', `Дело появилось: ${r.caseNumber}`, { caseUrl: r.caseUrl }));
 }
 
 async function processOne(c: WatchedCase): Promise<void> {
@@ -129,34 +149,58 @@ async function processOne(c: WatchedCase): Promise<void> {
   const html = await fetchHtml(c.url);
   const card = await adapter.parse(html, c.url);
 
+  // NEW-002 FIXED: перечитываем актуальное состояние перед каждой записью,
+  // чтобы не затереть изменения, внесённые через PATCH API пока шёл fetchHtml.
   const prev = getCase(c.uid);
-  if (prev) {
-    if (card.card.result && !prev.result) {
-      updateCase(c.uid, { status: 'decision', result: card.card.result });
-      addEvent(c.uid, makeEvent('decision', `Вынесено решение: ${card.card.result}`));
-    }
+  if (!prev) return; // дело удалено параллельным запросом
 
-    if (c.status === 'decision' && !c.legalForceDate) {
-      try {
-        const searchAdapter = getSearchAdapter(c.courtType);
-        const results = await searchAdapter.searchByCaseNumber({
-          courtId: c.courtId,
-          courtCode: c.courtCode,
-          courtType: c.courtType,
-          caseNumber: c.number,
-        });
-        const r = results.find(r => r.uid === c.uid || r.caseNumber === c.number);
-        if (r?.legalForceDate) {
-          updateCase(c.uid, { status: 'enforced', legalForceDate: r.legalForceDate });
-          addEvent(c.uid, makeEvent('enforced', `Решение вступило в силу ${r.legalForceDate}`, { legalForceDate: r.legalForceDate }));
-        }
-      } catch {
-        // Поиск может быть недоступен — не фатально
-      }
+  // Если дело было заархивировано/удалено через UI — не перезаписываем
+  if (prev.status === 'archived' || prev.status === 'deleted' as unknown) return;
+
+  if (card.card.result && !prev.result) {
+    // NEW-002: перечитываем снова непосредственно перед записью
+    const latest = getCase(c.uid);
+    if (latest && latest.result === null) {
+      updateCase(c.uid, { status: 'decision', result: card.card.result });
+      // NEW-001 FIXED: caseUid в makeEvent
+      addEvent(c.uid, makeEvent(c.uid, 'decision', `Вынесено решение: ${card.card.result}`));
     }
   }
 
-  updateCase(c.uid, { lastChecked: now() });
+  if (prev.status === 'decision' && !prev.legalForceDate) {
+    try {
+      const searchAdapter = getSearchAdapter(c.courtType);
+      const results = await searchAdapter.searchByCaseNumber({
+        courtId: c.courtId,
+        courtCode: c.courtCode,
+        courtType: c.courtType,
+        caseNumber: c.number,
+      });
+      const r = results.find(r => r.uid === c.uid || r.caseNumber === c.number);
+      if (r?.legalForceDate) {
+        // NEW-002: перечитываем перед записью
+        const latest = getCase(c.uid);
+        if (latest && !latest.legalForceDate) {
+          updateCase(c.uid, { status: 'enforced', legalForceDate: r.legalForceDate });
+          // NEW-001 FIXED: caseUid в makeEvent
+          addEvent(
+            c.uid,
+            makeEvent(c.uid, 'enforced', `Решение вступило в силу ${r.legalForceDate}`, {
+              legalForceDate: r.legalForceDate,
+            }),
+          );
+        }
+      }
+    } catch {
+      // Поиск может быть недоступен — не фатально
+    }
+  }
+
+  // Финальный lastChecked — снова проверяем что дело ещё существует
+  const finalState = getCase(c.uid);
+  if (finalState) {
+    updateCase(c.uid, { lastChecked: now() });
+  }
 }
 
 async function fetchHtml(url: string): Promise<string> {
