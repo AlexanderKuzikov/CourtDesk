@@ -16,6 +16,9 @@
     "url": "https://github.com/AlexanderKuzikov/CourtDesk/issues"
   },
   "license": "Apache-2.0",
+  "engines": {
+    "node": ">=20.6.0"
+  },
   "allowScripts": {
     "esbuild@0.28.1": true,
     "puppeteer@25.3.0": true

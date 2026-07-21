@@ -1,0 +1,19 @@
+# Сервер работает на Linux, пользователи разрабатывают на Windows 10/11.
+# Git нормализует окончания строк при пуше в LF, при чекауте на Windows — CRLF.
+* text=auto eol=lf
+
+# Текстовые файлы — всегда LF в репозитории
+*.ts   text eol=lf
+*.js   text eol=lf
+*.json text eol=lf
+*.md   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.env* text eol=lf
+
+# Бинарные — не трогаем
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.ico  binary
+*.pdf  binary
