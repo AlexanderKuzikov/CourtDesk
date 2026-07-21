@@ -8,7 +8,9 @@
 
 ## Статус
 
-**v0.1.0** — Фаза 4 завершена. Основные баги code review исправлены. Добавлены первые smoke/unit тесты для store, scheduler и API routes.
+**v0.1.0** — Фаза 4 завершена. Основные баги code review исправлены. Добавлены первые smoke/unit тесты для store, scheduler и API routes. После замечаний агента исправлены typecheck-проблемы в route/query typings, тестовых моках и убран остаточный dynamic import из scheduler.
+
+> ⚠️ **Дисциплина delivery:** после добавления `supertest` в `package.json` необходимо закоммитить обновлённый `package-lock.json`, иначе GitHub Actions с `npm ci` падает до запуска тестов.
 
 | Компонент | Статус | Источник |
 |-----------|--------|----------|
@@ -23,7 +25,8 @@
 | Scheduler | ✅ Исправлено (BUG-002, RATE-001, BUG-011) | CourtFlow |
 | Store | ✅ Исправлено (BUG-006, BUG-009) | CourtFlow |
 | API | ✅ Исправлено (BUG-003, BUG-004, BUG-008) | Новый |
-| Tests | 🟡 Базовые smoke/unit тесты добавлены | Vitest |
+| Tests | 🟡 Базовые smoke/unit тесты добавлены, typecheck-ошибки исправлены | Vitest |
+| CI | 🟠 Требует lockfile + локального прогона `npm install && npx tsc --noEmit` | GitHub Actions |
 | Viewer | 🟡 Заглушка | CourtSniffer |
 
 ---
@@ -133,6 +136,7 @@ CRM отправляет запросы, получает JSON. Фильтруе
 | 2026-07-21 | PATCH whitelist | Через REST нельзя менять `uid`, `createdAt`, `courtId`, `courtType` и служебные поля |
 | 2026-07-21 | Linux-server / Windows-clients | В репозитории фиксируем LF через `.gitattributes`; Windows-пользователи работают через обычный Git checkout |
 | 2026-07-21 | Тесты без реального I/O и сети | Store, scheduler и route-smoke тестируются через mocks, чтобы локально гонялись быстро и стабильно |
+| 2026-07-22 | CI должен быть зелёным до merge | Любое изменение deps требует обновления `package-lock.json`; перед push обязательны `npm install && npx tsc --noEmit` |
 
 ---
 
@@ -148,7 +152,7 @@ CRM отправляет запросы, получает JSON. Фильтруе
 | BUG-007 | 🟡 MEDIUM | `package.json` | Нет `engines` для Node ≥ 20.6 | FIXED |
 | BUG-008 | 🟡 MEDIUM | `api/routes/parse.ts` | `POST /api/parse/run` висел до конца прогона | FIXED |
 | BUG-010 | 🟢 LOW | `.gitattributes` | Не были зафиксированы LF для Linux-сервера | FIXED |
-| BUG-011 | 🟢 LOW | `scheduler/orchestrator.ts` | Dynamic import `iconv-lite` в hot path | FIXED |
+| BUG-011 | 🟢 LOW | `scheduler/orchestrator.ts` | Dynamic import в hot path | FIXED |
 | RATE-001 | 🟠 HIGH | `scheduler/orchestrator.ts` | Нет rate limit между запросами | FIXED |
 
 > **Закрыты как не воспроизводящиеся:** BUG-001, BUG-005.
@@ -170,13 +174,14 @@ CRM отправляет запросы, получает JSON. Фильтруе
 | 2026-07-21 | `ebeea53` | **docs** — CONTEXT.md: статусы багов обновлены до FIXED |
 | 2026-07-21 | `e8297cb` | **test** — store, cases route, parse/run, runNew smoke/unit tests |
 | 2026-07-21 | `7d7f989` | **chore** — `supertest` + `@types/supertest` для route tests |
-| 2026-07-21 | *(текущий)* | **docs** — CONTEXT.md обновлён: тестовое покрытие и новые коммиты |
+| 2026-07-22 | `8dd66b7` | **fix(tsc)** — query param types, static getEvents import, typed test mocks |
+| 2026-07-22 | *(текущий)* | **docs** — CONTEXT.md: добавлены замечания про CI/lockfile и typecheck |
 
 ---
 
 ## Следующие шаги (приоритет)
 
-1. Прогнать `npm install && npm test && npm run lint` на Linux-окружении
+1. Закоммитить актуальный `package-lock.json` после `npm install`, затем прогнать `npx tsc --noEmit`, `npm test` и добиться зелёного CI
 2. Добавить отдельный smoke-тест для `POST /api/parse/url` magistrate path с mock `fetchMagistrateHtml`
 3. Добавить endpoint/стейт для фонового scheduler-run (`idle/running/lastResult`)
 4. Сделать viewer для списка дел и статусов

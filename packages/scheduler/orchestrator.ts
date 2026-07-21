@@ -1,6 +1,6 @@
 // Оркестратор мониторинга
 import iconv from 'iconv-lite'; // статический импорт — BUG-011
-import { listCases, updateCase, addEvent, getCase } from '../store/index.js';
+import { listCases, updateCase, addEvent, getCase, getEvents } from '../store/index.js';
 import { getParseAdapter } from '../parse/index.js';
 import { getSearchAdapter } from '../search/index.js';
 import type { WatchedCase, CaseHistoryEvent } from '../core/types.js';
@@ -86,7 +86,7 @@ async function processWaitingBatch(cases: WatchedCase[]): Promise<{ ok: number; 
 // Обработка waiting-кейса: ищем дело по участнику + дате подачи
 async function processWaiting(c: WatchedCase): Promise<void> {
   // Данные участника хранятся в events: тип 'waiting', data.party + data.filingDate
-  const { getEvents } = await import('../store/index.js');
+  // getEvents импортирован статически вверху файла
   const events = getEvents(c.uid);
   const waitEvent = events.find(e => e.type === 'waiting');
   if (!waitEvent) {
@@ -99,8 +99,8 @@ async function processWaiting(c: WatchedCase): Promise<void> {
 
   if (!party) return;
 
-  const searchAdapter = getSearchAdapter(c.courtType);
-  const results = await searchAdapter.searchByParty({
+  const adapter = getSearchAdapter(c.courtType);
+  const results = await adapter.searchByParty({
     courtId: c.courtId,
     courtCode: c.courtCode,
     courtType: c.courtType,
@@ -114,7 +114,6 @@ async function processWaiting(c: WatchedCase): Promise<void> {
     return;
   }
 
-  // Дело нашлось — берём первый результат
   const r = results[0];
   updateCase(c.uid, {
     status: 'monitoring',
@@ -170,7 +169,7 @@ async function fetchHtml(url: string): Promise<string> {
   if (ct.includes('charset=utf-8') || ct.includes('charset=UTF-8')) {
     return res.text();
   }
-  // CP1251 — декодируем через iconv (статичный импорт вверху)
+  // CP1251 — декодируем через iconv (статичный импорт вверху файла)
   const buf = await res.arrayBuffer();
   return iconv.decode(Buffer.from(buf), 'win1251');
 }

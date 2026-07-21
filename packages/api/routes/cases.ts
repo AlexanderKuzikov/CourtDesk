@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { getCase, listCases, addCase, updateCase, deleteCase, getStats } from '../../store/index.js';
 import { addEvent as addHistoryEvent } from '../../store/events.js';
-import type { WatchedCase } from '../../core/types.js';
+import type { WatchedCase, CaseStatus } from '../../core/types.js';
 
 const router = Router();
 
@@ -10,6 +10,12 @@ function fail(res: Response, code: string, msg: string, status = 400) {
   res.status(status).json({ success: false, error: msg, code });
 }
 function errMsg(e: unknown) { return e instanceof Error ? e.message : 'Внутренняя ошибка'; }
+
+/** Express 5: req.query значения имеют тип string | string[] | ParsedQs | ParsedQs[] | undefined.
+ *  Для скалярных параметров используем помощную функцию. */
+function strQuery(v: unknown): string | undefined {
+  return typeof v === 'string' ? v : undefined;
+}
 
 // Поля, которые пользователь может менять через PATCH.
 // uid, createdAt, courtId, courtType — неизменяемы.
@@ -20,12 +26,11 @@ const PATCH_ALLOWED = new Set<keyof WatchedCase>([
 // Список дел
 router.get('/api/cases', (req: Request, res: Response) => {
   try {
-    const { status, userId, courtId, q } = req.query;
     const cases = listCases({
-      status: (status as string) as import('../../core/types.js').CaseStatus | undefined,
-      userId: userId as string | undefined,
-      courtId: courtId as string | undefined,
-      q: q as string | undefined,
+      status: strQuery(req.query['status']) as CaseStatus | undefined,
+      userId: strQuery(req.query['userId']),
+      courtId: strQuery(req.query['courtId']),
+      q: strQuery(req.query['q']),
     });
     ok(res, cases);
   } catch (e) { fail(res, 'STORE_ERROR', 'Ошибка получения списка: ' + errMsg(e), 500); }
@@ -40,7 +45,7 @@ router.get('/api/cases/stats', (_req: Request, res: Response) => {
 // Одно дело
 router.get('/api/cases/:uid', (req: Request, res: Response) => {
   try {
-    const c = getCase(req.params.uid);
+    const c = getCase(req.params['uid']);
     if (!c) return fail(res, 'NOT_FOUND', 'Дело не найдено', 404);
     ok(res, c);
   } catch (e) { fail(res, 'STORE_ERROR', errMsg(e), 500); }
@@ -102,7 +107,7 @@ router.patch('/api/cases/:uid', (req: Request, res: Response) => {
     const safeUpdates = Object.fromEntries(
       Object.entries(body).filter(([k]) => PATCH_ALLOWED.has(k as keyof WatchedCase)),
     ) as Partial<WatchedCase>;
-    const updated = updateCase(req.params.uid, safeUpdates);
+    const updated = updateCase(req.params['uid'], safeUpdates);
     if (!updated) return fail(res, 'NOT_FOUND', 'Дело не найдено', 404);
     ok(res, updated);
   } catch (e) { fail(res, 'STORE_ERROR', errMsg(e), 500); }
@@ -111,7 +116,7 @@ router.patch('/api/cases/:uid', (req: Request, res: Response) => {
 // Удалить дело
 router.delete('/api/cases/:uid', (req: Request, res: Response) => {
   try {
-    const deleted = deleteCase(req.params.uid);
+    const deleted = deleteCase(req.params['uid']);
     if (!deleted) return fail(res, 'NOT_FOUND', 'Дело не найдено', 404);
     ok(res, null);
   } catch (e) { fail(res, 'STORE_ERROR', errMsg(e), 500); }
