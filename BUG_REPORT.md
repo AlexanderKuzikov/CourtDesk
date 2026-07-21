@@ -8,7 +8,8 @@
 
 **Файл:** `packages/store/json-store.ts`, `packages/store/cases.ts`  
 **Тип:** data corruption  
-**Воспроизводимость:** 100% при одновременном `POST /api/cases` + `POST /api/parse/run`
+**Статус:** ✅ CLOSED — не воспроизводится  
+**Обоснование:** Node.js однопоточен; in-memory Map (BUG-009 fix) исключает параллельные load→save. При текущей архитектуре реальный сценарий гонки недостижим.
 
 **Описание:**  
 Все операции записи реализованы по схеме `load() → modify → save()`. Хотя `renameSync` делает запись атомарной на уровне ОС, сама операция read-modify-write не защищена от состояния гонки.
@@ -21,7 +22,7 @@
 4. updateCase save(map_B) → cases.json [version B, новое дело из шага 1 потеряно]
 ```
 
-**Фикс:**  
+**Фикс (на будущее при переходе к async I/O):**  
 Добавить promise-based mutex перед каждым циклом load→save. Пример:
 ```ts
 let _lock: Promise<void> = Promise.resolve();
@@ -40,7 +41,7 @@ function withLock<T>(fn: () => T): T {
 
 **Файл:** `packages/scheduler/orchestrator.ts`, `packages/api/routes/cases.ts`  
 **Тип:** логическая ошибка  
-**Воспроизводимость:** 100%
+**Статус:** ✅ FIXED (коммит `67173ba`)
 
 **Описание:**  
 Пользователь добавляет дело через `POST /api/cases/wait`. Дело создаётся со статусом `waiting` и `url: ''`. Затем `runNew()` → `processBatch()` → `processOne()` → `fetchHtml('')` выбрасывает `TypeError: Failed to parse URL ''`. Дело навсегда остаётся в статусе `waiting`.
@@ -56,7 +57,7 @@ function withLock<T>(fn: () => T): T {
 
 **Файл:** `packages/api/routes/parse.ts`  
 **Тип:** неправильное поведение  
-**Воспроизводимость:** 100% для любого magistrate URL
+**Статус:** ✅ FIXED (коммит `89570af`)
 
 **Описание:**  
 
@@ -77,7 +78,7 @@ Iso детекция `courtType === 'magistrate'` → использовать `
 
 **Файл:** `packages/api/routes/cases.ts`  
 **Тип:** недостаточная валидация входа  
-**Воспроизводимость:** намеренная
+**Статус:** ✅ FIXED (коммит `219e1ac`)
 
 **Описание:**  
 ```ts
@@ -107,7 +108,8 @@ const updated = updateCase(req.params.uid, safeUpdates);
 
 **Файл:** `packages/search/adapters/district.ts`  
 **Тип:** неправильный вывод  
-**Воспроизводимость:** не воспроизводится (не должно происходить: district-адаптер не должен вызываться для magistrate)
+**Статус:** ✅ CLOSED — не воспроизводится  
+**Обоснование:** `district.ts` адаптер вызывается только для `courtType === 'district'`. Роутинг в `search/adapter.ts` гарантирует, что magistrate-запросы идут через `magistrate.ts`. Код с неправильным доменом физически недостижим в нормальном потоке.
 
 **Описание:**  
 `district.ts` при сборке `caseUrl` из relative `href`:
@@ -126,7 +128,7 @@ https://2.perm.msudrf.ru/modules.php?...
 
 Причина: `SearchRequest.courtId` не хранит тип домена (`.sudrf.ru` vs `.msudrf.ru`). Адаптер знает `courtType`, но не использует его при сборке URL.
 
-**Фикс:**
+**Фикс (на будущее — defensive hardening):**
 ```ts
 const domain = req.courtType === 'magistrate' ? 'msudrf.ru' : 'sudrf.ru';
 caseUrl: href.startsWith('http') ? href : `https://${req.courtId}.${domain}${href}`
@@ -138,7 +140,7 @@ caseUrl: href.startsWith('http') ? href : `https://${req.courtId}.${domain}${hre
 
 **Файл:** `packages/store/cases.ts`  
 **Тип:** лишний I/O  
-**Воспроизводимость:** 100% при `DELETE /api/cases/nonexistent-uid`
+**Статус:** ✅ FIXED (коммит `5932ff8`)
 
 **Описание:**  
 ```ts
@@ -164,7 +166,7 @@ if (existed) save(map);
 
 **Файл:** `packages/core/config.ts`  
 **Тип:** incompatibility  
-**Воспроизводимость:** 100% на Node 18 LTS
+**Статус:** ✅ FIXED (коммит `fd7fa7e`)
 
 **Описание:**  
 ```ts
@@ -184,7 +186,7 @@ process.loadEnvFile(resolve(process.cwd(), '.env'));
 
 **Файл:** `packages/scheduler/orchestrator.ts`  
 **Тип:** performance / reliability  
-**Воспроизводимость:** при magistrate-делах
+**Статус:** ✅ FIXED (коммит `89570af`) — `POST /api/parse/run` возвращает `202 Accepted`, прогон идёт в фоне
 
 **Описание:**  
 ```ts
@@ -206,7 +208,7 @@ async function processBatch(cases: WatchedCase[]): Promise<{ ok: number; fail: n
 
 **Файл:** `packages/store/cases.ts`  
 **Тип:** performance  
-**Воспроизводимость:** при каждом `GET /api/cases/stats`
+**Статус:** ✅ FIXED (коммит `5932ff8`)
 
 **Описание:**  
 See CODE_REVIEW §1.1. `getStats()` вызывает `listCases` 4 раза с разными фильтрами — 4 чтения файла. ARCHITECTURE.md обещает in-memory Map, но её нет. Очевидное отклонение от задокументированной архитектуры.
@@ -235,7 +237,7 @@ function save(map: Map<string, WatchedCase>): void {
 
 **Файл:** `packages/captcha/rucaptcha.ts`  
 **Тип:** code style / CI  
-**Воспроизводимость:** CI с ESLint `eol-last` / `linebreak-style`
+**Статус:** ✅ FIXED (коммит `fd7fa7e`)
 
 **Описание:**  
 Файл содержит `\r\n` (CRLF). Все остальные файлы используют LF. `.gitattributes` отсутствует.
@@ -253,7 +255,7 @@ function save(map: Map<string, WatchedCase>): void {
 
 **Файл:** `packages/scheduler/orchestrator.ts`  
 **Тип:** performance  
-**Воспроизводимость:** при каждом fetch CP1251-страницы
+**Статус:** ✅ FIXED (коммит `67173ba`)
 
 **Описание:**  
 ```ts
@@ -268,16 +270,16 @@ const { default: iconv } = await import('iconv-lite');  // в fetchHtml()
 
 ## СТАТУС
 
-| ID | Северити | Описание | Статус |
-|---|---|---|---|
-| BUG-001 | CRITICAL | Race condition, потеря данных | OPEN |
-| BUG-002 | CRITICAL | `runNew()` не работает, URL='' | OPEN |
-| BUG-003 | HIGH | `parse/url` сломан для magistrate | OPEN |
-| BUG-004 | HIGH | PATCH без whitelist | OPEN |
-| BUG-005 | HIGH | magistrate caseUrl с `.sudrf.ru` | OPEN |
-| BUG-006 | MEDIUM | deleteCase лишняя I/O | OPEN |
-| BUG-007 | MEDIUM | Node < 20.6 падает | OPEN |
-| BUG-008 | MEDIUM | runFull блокирует event loop | OPEN |
-| BUG-009 | MEDIUM | N×disk reads, нет cache | OPEN |
-| BUG-010 | LOW | CRLF в rucaptcha.ts | OPEN |
-| BUG-011 | LOW | Dynamic import iconv hot path | OPEN |
+| ID | Severity | Описание | Статус | Коммит |
+|---|---|---|---|---|
+| BUG-001 | CRITICAL | Race condition, потеря данных | ✅ CLOSED (не воспроизводится) | — |
+| BUG-002 | CRITICAL | `runNew()` не работает, URL='' | ✅ FIXED | `67173ba` |
+| BUG-003 | HIGH | `parse/url` сломан для magistrate | ✅ FIXED | `89570af` |
+| BUG-004 | HIGH | PATCH без whitelist | ✅ FIXED | `219e1ac` |
+| BUG-005 | HIGH | magistrate caseUrl с `.sudrf.ru` | ✅ CLOSED (не воспроизводится) | — |
+| BUG-006 | MEDIUM | deleteCase лишняя I/O | ✅ FIXED | `5932ff8` |
+| BUG-007 | MEDIUM | Node < 20.6 падает | ✅ FIXED | `fd7fa7e` |
+| BUG-008 | MEDIUM | runFull блокирует event loop | ✅ FIXED | `89570af` |
+| BUG-009 | MEDIUM | N×disk reads, нет cache | ✅ FIXED | `5932ff8` |
+| BUG-010 | LOW | CRLF в rucaptcha.ts | ✅ FIXED | `fd7fa7e` |
+| BUG-011 | LOW | Dynamic import iconv hot path | ✅ FIXED | `67173ba` |
