@@ -8,22 +8,22 @@
 
 ## Статус
 
-**v0.1.0** — архитектура утверждена, начата Фаза 1 (core + captcha).
+**v0.1.0** — Фаза 4 завершена. Проведён Code Review, выявлены критические баги. Начат этап фиксов.
 
 | Компонент | Статус | Источник |
 |-----------|--------|----------|
 | Архитектура | ✅ Утверждена | ARCHITECTURE.md |
 | API-контракты | ✅ Утверждены | CONTEXT.md |
 | Use cases | ✅ Утверждены | CONTEXT.md |
-| Core (типы) | 🟡 В работе | — |
-| Captcha | 🔜 Фаза 1 | CourtSniffer |
-| Search | ✅ Фаза 2 | CourtSniffer |
-| Parse | ✅ Фаза 2 | CourtFlow |
-| Intake | ✅ Есть | CourtDesk |
-| Scheduler | ✅ Фаза 3 | CourtFlow |
-| Store | ✅ Фаза 3 | CourtFlow |
-| API | ✅ Фаза 4 | Новый |
-| Viewer | 🟡 Фаза 4 (стартовый) | CourtSniffer |
+| Core (типы) | ✅ Готово | — |
+| Captcha | ✅ Готово | CourtSniffer |
+| Search | ✅ Готово | CourtSniffer |
+| Parse | ✅ Готово | CourtFlow |
+| Intake | ✅ Готово | CourtDesk |
+| Scheduler | ⚠️ Баги (BUG-002, BUG-008) | CourtFlow |
+| Store | ⚠️ Баги (BUG-001, BUG-006, BUG-009) | CourtFlow |
+| API | ⚠️ Баги (BUG-003, BUG-004, BUG-005) | Новый |
+| Viewer | 🟡 Заглушка | CourtSniffer |
 
 ---
 
@@ -65,13 +65,15 @@
 2. Система периодически ищет по участнику + дате
 3. Когда карточка появляется — уведомление + авто-добавление в мониторинг
 
+> ⚠️ **BUG-002:** текущая реализация `runNew()` не работает — вызывает `fetchHtml('')` вместо поиска по участнику.
+
 ### UC-4: Отслеживание решения и вступления в силу
 
 1. Дело в мониторинге. В карточке появился `result` → 🔍
 2. Система запускает поиск по номеру дела (раз в день)
 3. Когда `legalForceDate` найдена → ✅ Вступило + уведомление
 
-**Никаких расчётов сроков.** Только факт: вступило / не вступило. Юридических гарантий не даём.
+**Никаких расчётов сроков.** Только факт: вступило / не вступило.
 
 ### UC-5: CRM-запросы (1С)
 
@@ -97,7 +99,7 @@ CRM отправляет запросы, получает JSON. Фильтруе
 | 12 | `GET /api/courts?q=` | Поиск судов по названию |
 | 13 | `GET /api/courts/:id` | Инфо о суде |
 | 14 | `GET /api/notifications` | Уведомления |
-| 15 | `POST /api/parse/run` | Запуск парсинга (full/new/errors) |
+| 15 | `POST /api/parse/run` | Запуск парсинга (full/new/retry) |
 
 **Формат ответа:**
 ```json
@@ -130,6 +132,27 @@ CRM отправляет запросы, получает JSON. Фильтруе
 | 2026-07-21 | userId — просто поле | CRM фильтрует сама, объёмы мизерные |
 | 2026-07-21 | Нет авторизации | Локальная сеть |
 | 2026-07-21 | CourtSniffer, CourtFlow — заморозить | Функционал мигрирует в CourtDesk |
+| 2026-07-21 | Store — singleton in-memory Map | Принято после CODE_REVIEW: N×disk reads неприемлемы, обещано в ARCHITECTURE.md |
+| 2026-07-21 | store write-lock | Принято после CODE_REVIEW: race condition BUG-001 требует promise-mutex перед load→save |
+| 2026-07-21 | PATCH whitelist | Принято после CODE_REVIEW: BUG-004, без whitelist — data tamper |
+
+---
+
+## Известные баги (из BUG_REPORT.md)
+
+| ID | Severity | Файл | Описание | Статус |
+|----|----------|------|----------|---------|
+| BUG-001 | 🔴 CRITICAL | `store/cases.ts` | Race condition: потеря данных при concurrent load→save | OPEN |
+| BUG-002 | 🔴 CRITICAL | `scheduler/orchestrator.ts` | `runNew()` вызывает `fetchHtml('')`, waiting-кейс никогда не обрабатывается | OPEN |
+| BUG-003 | 🟠 HIGH | `api/routes/parse.ts` | magistrate: нет captcha + CP1251 не декодируется | OPEN |
+| BUG-004 | 🟠 HIGH | `api/routes/cases.ts` | PATCH без whitelist — можно перезаписать uid/createdAt/status | OPEN |
+| BUG-005 | 🟠 HIGH | `search/adapters/district.ts` | magistrate caseUrl строится с `.sudrf.ru` вместо `.msudrf.ru` | OPEN |
+| BUG-006 | 🟡 MEDIUM | `store/cases.ts` | `deleteCase` пишет файл даже если uid не существовал | OPEN |
+| BUG-007 | 🟡 MEDIUM | `core/config.ts` | `process.loadEnvFile` требует Node ≥ 20.6, нет `engines` в package.json | OPEN |
+| BUG-008 | 🟡 MEDIUM | `scheduler/orchestrator.ts` | `runFull` блокирует event loop на всё время прогона | OPEN |
+| BUG-009 | 🟡 MEDIUM | `store/cases.ts` | Нет in-memory cache — N×readFileSync на каждый запрос | OPEN |
+| BUG-010 | 🟢 LOW | `captcha/rucaptcha.ts` | CRLF endings, нет `.gitattributes` | OPEN |
+| BUG-011 | 🟢 LOW | `scheduler/orchestrator.ts` | Dynamic import `iconv-lite` в hot path | OPEN |
 
 ---
 
@@ -143,10 +166,25 @@ CRM отправляет запросы, получает JSON. Фильтруе
 | 2026-07-21 | — | Архитектура пересмотрена: CourtDesk — единый сервис, вбирает Sniffer + Flow |
 | 2026-07-21 | — | Утверждены use cases, API-контракты |
 | 2026-07-21 | — | Старые проекты (Sniffer, Flow) — архив |
-| 2026-07-21 | `9cc099c` | **Фаза 1: core + captcha — типы, справочник, encoding, config, errors, captcha (Puppeteer)** |
+| 2026-07-21 | `9cc099c` | **Фаза 1: core + captcha** — типы, справочник, encoding, config, errors, captcha (Puppeteer) |
 | 2026-07-21 | `447d560` | **Фаза 2: search + parse + intake** |
 | 2026-07-21 | `746b46d` | **Фаза 3: store + scheduler** |
-| 2026-07-21 | *(текущий)* | **Фаза 4: API + Viewer — 15 эндпоинтов, Express 5, Web UI** |
+| 2026-07-21 | *(a2f1829)* | **Фаза 4: API + Viewer** — 15 эндпоинтов, Express, Web UI |
+| 2026-07-21 | `eceddc8` | **CODE_REVIEW.md** — полный разбор всех пакетов, 9 секций, приоритеты 🔴/🟠/🟡 |
+| 2026-07-21 | `8062dbe` | **BUG_REPORT.md** — 11 багов: 2 CRITICAL, 3 HIGH, 4 MEDIUM, 2 LOW |
+| 2026-07-21 | *(текущий)* | **CONTEXT.md** — обновлён: статусы компонентов, таблица багов, новые решения |
+
+---
+
+## Следующие шаги (приоритет)
+
+1. **BUG-001** — store: добавить singleton in-memory Map + promise-mutex
+2. **BUG-002** — orchestrator: переработать `runNew()` под поиск по участнику
+3. **BUG-003** — parse route: детект magistrate → `fetchMagistrateHtml` + iconv
+4. **BUG-004** — cases route: PATCH whitelist
+5. **BUG-005** — district adapter: домен из `courtType`
+6. **BUG-007** — добавить `engines` в `package.json`
+7. Viewer: наполнить `packages/viewer/public/`
 
 ---
 
@@ -166,7 +204,10 @@ courtdesk/
 │   └── viewer/      # Web UI
 ├── .env.example
 ├── package.json
-└── tsconfig.json
+├── tsconfig.json
+├── ARCHITECTURE.md
+├── CODE_REVIEW.md   ← добавлен 2026-07-21
+└── BUG_REPORT.md    ← добавлен 2026-07-21
 ```
 
 ---
@@ -187,4 +228,3 @@ courtdesk/
 | store/ | CourtFlow (exporter) |
 | api/ | Новый (общее из Sniffer viewer + Desk api) |
 | viewer/ | Новый (идея из Sniffer viewer) |
-| cli/ | Sniffer + Flow (опционально) |
