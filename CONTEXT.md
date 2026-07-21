@@ -17,9 +17,9 @@
 | Use cases | ✅ Утверждены | CONTEXT.md |
 | Core (типы) | 🟡 В работе | — |
 | Captcha | 🔜 Фаза 1 | CourtSniffer |
-| Search | 🔜 Фаза 2 | CourtSniffer |
-| Parse | 🔜 Фаза 2 | CourtFlow |
-| Intake | ✅ Есть (адаптировать) | CourtDesk (скелет) |
+| Search | ✅ Фаза 2 | CourtSniffer |
+| Parse | ✅ Фаза 2 | CourtFlow |
+| Intake | ✅ Есть | CourtDesk |
 | Scheduler | 🔜 Фаза 3 | CourtFlow |
 | Store | 🔜 Фаза 3 | CourtFlow |
 | API | 🔜 Фаза 4 | Новый |
@@ -143,7 +143,8 @@ CRM отправляет запросы, получает JSON. Фильтруе
 | 2026-07-21 | — | Архитектура пересмотрена: CourtDesk — единый сервис, вбирает Sniffer + Flow |
 | 2026-07-21 | — | Утверждены use cases, API-контракты |
 | 2026-07-21 | — | Старые проекты (Sniffer, Flow) — архив |
-| 2026-07-21 | *(текущий)* | **Фаза 1: core + captcha — типы, справочник, encoding, config, errors, captcha (Puppeteer)** |
+| 2026-07-21 | `9cc099c` | **Фаза 1: core + captcha — типы, справочник, encoding, config, errors, captcha (Puppeteer)** |
+| 2026-07-21 | *(текущий)* | **Фаза 2: search + parse + intake — адаптеры поиска (из Sniffer), адаптеры парсинга (из Flow), классификатор (из Desk)** |
 
 ---
 

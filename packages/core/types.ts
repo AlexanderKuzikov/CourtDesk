@@ -51,19 +51,30 @@ export interface SearchResult {
   matchScore?: number;
 }
 
-// ---- Парсинг карточки (из CourtFlow, упрощён) ----
+// ---- Парсинг карточки (из CourtFlow) ----
 
 export interface CaseCard {
+  $schema: string;
   uid: string;
+  type: string;
   number: string;
-  court: string;       // subdomain
+  court: string;        // subdomain без суффикса .sudrf.ru / .msudrf.ru
   courtType: CourtType;
-  filingDate: string | null;
-  judge: string | null;
-  result: string | null;
-  legalForceDate: string | null;
-  hearingDate: string | null;
-  category: string[];
+  identifiers: {
+    delo_id: string | null;
+    case_uid: string | null;
+    case_type: string | null;
+  };
+  publishedAt: string | null;  // ISO
+  modifiedAt: string | null;
+  card: {
+    filingDate: string | null;  // YYYY-MM-DD
+    category: string[];
+    judge: string | null;
+    hearingDate: string | null;
+    result: string | null;
+    proceedingType: string | null;
+  };
   events: CaseEvent[];
   parties: CaseParty[];
 }
@@ -71,17 +82,22 @@ export interface CaseCard {
 export interface CaseEvent {
   eventName: string | null;
   eventDate: string | null;   // YYYY-MM-DD
-  result: string | null;
-  judge: string | null;
+  eventTime: string | null;
   location: string | null;
+  result: string | null;
+  reason: string | null;
+  judge: string | null;
+  note: string | null;
   publishDate: string | null;
 }
 
 export interface CaseParty {
-  role: string;
-  name: string;
-  inn?: string;
-  ogrn?: string;
+  role: string | null;
+  name: string | null;
+  inn: string | null;
+  kpp: string | null;
+  ogrn: string | null;
+  ogrnip: string | null;
 }
 
 // ---- Хранилище / Дашборд ----
@@ -208,4 +224,24 @@ export interface DashboardStatus {
   decision: number;
   enforcedToday: number;
   health: 'ok' | 'degraded' | 'error';
+}
+
+// ---- Совместимость с CourtFlow (parse-адаптеры) ----
+
+/** Алиас для обратной совместимости с кодом из CourtFlow */
+export type Case = CaseCard;
+
+export interface CourtAdapter {
+  parse(html: string, url: string): Promise<CaseCard>;
+}
+
+export interface RunResult {
+  courtId: string;
+  courtType: CourtType;
+  url: string;
+  success: boolean;
+  uid?: string;
+  error?: string;
+  duration: number;
+  timestamp: string;
 }
