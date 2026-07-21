@@ -3,12 +3,19 @@ import type { WatchedCase, CaseStatus } from '../core/types.js';
 
 const FILE = 'cases.json';
 
+// In-memory cache — единственный источник истины в runtime.
+// Сбрасывается только через save(). readFileSync вызывается один раз при старте.
+let _cache: Map<string, WatchedCase> | null = null;
+
 function load(): Map<string, WatchedCase> {
+  if (_cache) return _cache;
   const raw = readJson<Record<string, WatchedCase>>(FILE, {});
-  return new Map(Object.entries(raw));
+  _cache = new Map(Object.entries(raw));
+  return _cache;
 }
 
 function save(map: Map<string, WatchedCase>): void {
+  _cache = map;
   const obj: Record<string, WatchedCase> = {};
   for (const [k, v] of map) obj[k] = v;
   writeJson(FILE, obj);
@@ -57,12 +64,14 @@ export function updateCase(uid: string, updates: Partial<WatchedCase>): WatchedC
 export function deleteCase(uid: string): boolean {
   const map = load();
   const existed = map.has(uid);
+  if (!existed) return false; // BUG-006: не писать файл если uid не существует
   map.delete(uid);
   save(map);
-  return existed;
+  return true;
 }
 
 export function getStats(): { monitoring: number; waiting: number; decision: number; enforcedToday: number } {
+  // Один проход по кэшу вместо 4×load()
   const all = Array.from(load().values());
   const today = new Date().toISOString().slice(0, 10);
   return {
