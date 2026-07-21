@@ -8,7 +8,7 @@
 
 ## Статус
 
-**v0.1.0** — Фаза 4 завершена. Code Review проведён, отзыв владельца получен. Баги уточнены. Начат этап фиксов.
+**v0.1.0** — Фаза 4 завершена. Основные баги code review исправлены. Начата стабилизация перед Linux-деплоем.
 
 | Компонент | Статус | Источник |
 |-----------|--------|----------|
@@ -18,11 +18,11 @@
 | Core (типы) | ✅ Готово | — |
 | Captcha | ✅ Готово | CourtSniffer |
 | Search | ✅ Готово | CourtSniffer |
-| Parse | ✅ Готово | CourtFlow |
+| Parse | ✅ Исправлено (BUG-003) | CourtFlow |
 | Intake | ✅ Готово | CourtDesk |
-| Scheduler | ⚠️ Баги (BUG-002, BUG-008) | CourtFlow |
-| Store | ⚠️ Баги (BUG-006, BUG-009) | CourtFlow |
-| API | ⚠️ Баги (BUG-003, BUG-004) | Новый |
+| Scheduler | ✅ Исправлено (BUG-002, BUG-008, RATE-001, BUG-011) | CourtFlow |
+| Store | ✅ Исправлено (BUG-006, BUG-009) | CourtFlow |
+| API | ✅ Исправлено (BUG-003, BUG-004, BUG-008) | Новый |
 | Viewer | 🟡 Заглушка | CourtSniffer |
 
 ---
@@ -62,10 +62,10 @@
 ### UC-3: Отслеживать появление дела
 
 1. Суд + участник + дата подачи → «Отслеживать появление»
-2. Система периодически ищет по участнику + дате
-3. Когда карточка появляется — уведомление + авто-добавление в мониторинг
+2. Система периодически ищет по участнику + дате через `searchAdapter.searchByParty`
+3. Когда карточка появляется — уведомление + авто-перевод в monitoring
 
-> ⚠️ **BUG-002:** `runNew()` вызывает `fetchHtml('')` — waiting-кейс необрабатывается. Требует переработки через `searchAdapter.searchByParty`.
+> ✅ **BUG-002 fixed:** `runNew()` больше не вызывает `fetchHtml('')`, waiting-кейсы обрабатываются отдельным путём поиска.
 
 ### UC-4: Отслеживание решения и вступления в силу
 
@@ -89,7 +89,7 @@ CRM отправляет запросы, получает JSON. Фильтруе
 | 2 | `GET /api/cases` | Список дел (фильтры: status, userId, courtId, q) |
 | 3 | `GET /api/cases/:uid` | Карточка дела + история изменений |
 | 4 | `POST /api/cases` | Добавить дело в мониторинг |
-| 5 | `PATCH /api/cases/:uid` | Обновить статус/заметку |
+| 5 | `PATCH /api/cases/:uid` | Обновить разрешённые поля |
 | 6 | `DELETE /api/cases/:uid` | Удалить из мониторинга |
 | 7 | `POST /api/cases/wait` | Отслеживать появление дела |
 | 8 | **`POST /api/resolve`** | Суд + номер → ссылка на карточку |
@@ -99,7 +99,7 @@ CRM отправляет запросы, получает JSON. Фильтруе
 | 12 | `GET /api/courts?q=` | Поиск судов по названию |
 | 13 | `GET /api/courts/:id` | Инфо о суде |
 | 14 | `GET /api/notifications` | Уведомления |
-| 15 | `POST /api/parse/run` | Запуск парсинга (full/new/retry) |
+| 15 | `POST /api/parse/run` | Асинхронный запуск парсинга (`202 Accepted`) |
 
 **Формат ответа:**
 ```json
@@ -112,6 +112,8 @@ CRM отправляет запросы, получает JSON. Фильтруе
 - userId — просто поле, CRM фильтрует сама
 - URL карточки — полный (с case_id), возвращается из `/api/resolve`
 - Несколько результатов поиска — возвращаются массивом, CRM выбирает сама
+- `PATCH /api/cases/:uid` принимает только whitelist полей
+- `POST /api/parse/run` сразу отвечает `202 Accepted`, реальная работа идёт в фоне
 
 ---
 
@@ -132,13 +134,13 @@ CRM отправляет запросы, получает JSON. Фильтруе
 | 2026-07-21 | userId — просто поле | CRM фильтрует сама, объёмы мизерные |
 | 2026-07-21 | Нет авторизации | Локальная сеть |
 | 2026-07-21 | CourtSniffer, CourtFlow — заморозить | Функционал мигрирует в CourtDesk |
-| 2026-07-21 | BUG-001 (рейс-кондишн) — не воспроизводится | Все store-операции sync (readFileSync/writeFileSync). Node.js однопоточный — между load() и save() нет await, значит callback не вклинится. Проблема появится только если добавить async между load и save. |
-| 2026-07-21 | BUG-005 (magistrate caseUrl) — не воспроизводится | Magistrate использует magistrate.ts-адаптер со своей логикой сборки URL. District-адаптер не вызывается для magistrate-судов при правильной диспетчеризации. |
-| 2026-07-21 | BUG-008 (блокировка event loop) — UX, не reliability | runFull висит в HTTP-ответе. Фикс: 202 Accepted + background. Было заложено с самого начала. |
-| 2026-07-21 | BUG-010 (CRLF) — отложено | Windows-среда разработки. Добавить .gitattributes при переходе на Linux/CI. |
-| 2026-07-21 | Rate limit для scheduler | Из отзыва владельца: scheduler гоняет runFull без интервалов — риск блокировки IP судрф. Требует delay 1–2 сек между запросами. |
-| 2026-07-21 | store/events.ts — in-memory cache | Аналогично BUG-009: addEvent читает полный events.json на каждый вызов. Фиксить вместе с BUG-009. |
-| 2026-07-21 | PATCH whitelist | BUG-004: без whitelist — data tamper возможен |
+| 2026-07-21 | BUG-001 (рейс-кондишн) — не воспроизводится | Все store-операции sync (readFileSync/writeFileSync). Node.js однопоточный — между load() и save() нет await. |
+| 2026-07-21 | BUG-005 (magistrate caseUrl) — не воспроизводится | Magistrate использует magistrate.ts-адаптер со своей логикой URL. |
+| 2026-07-21 | BUG-008 — UX, не reliability | HTTP-ручка не должна висеть час. Фикс: `202 Accepted` + background. |
+| 2026-07-21 | Linux-server / Windows-clients | Сервер работает на Linux, поэтому в репозитории фиксируем LF через `.gitattributes`; пользователи на Windows получают нормальный checkout через Git. |
+| 2026-07-21 | Store — singleton in-memory cache | `cases.json` и `events.json` читаются один раз в runtime, запись — только при изменении. |
+| 2026-07-21 | Scheduler rate limit | Между запросами к sudrf/msudrf нужен delay ~1.5 сек, чтобы не ловить IP block. |
+| 2026-07-21 | PATCH whitelist | Через REST нельзя менять `uid`, `createdAt`, `courtId`, `courtType` и служебные поля. |
 
 ---
 
@@ -146,18 +148,18 @@ CRM отправляет запросы, получает JSON. Фильтруе
 
 | ID | Severity | Файл | Описание | Статус |
 |----|----------|------|----------|---------|
-| BUG-002 | 🔴 CRITICAL | `scheduler/orchestrator.ts` | `runNew()` вызывает `fetchHtml('')` — waiting-кейс никогда не обрабатывается | OPEN |
-| BUG-003 | 🔴 CRITICAL | `api/routes/parse.ts` | magistrate: нет captcha + CP1251 не декодируется — 7751 судов не работает | OPEN |
-| BUG-004 | 🟠 HIGH | `api/routes/cases.ts` | PATCH без whitelist — можно перезаписать uid/createdAt/status | OPEN |
-| BUG-009 | 🟠 HIGH | `store/cases.ts` + `store/events.ts` | Нет in-memory cache — N×readFileSync на каждый запрос; events.json — аналогично | OPEN |
-| BUG-006 | 🟡 MEDIUM | `store/cases.ts` | `deleteCase` пишет файл даже если uid не существовал | OPEN |
-| BUG-007 | 🟡 MEDIUM | `core/config.ts` | `process.loadEnvFile` требует Node ≥ 20.6, нет `engines` в package.json | OPEN |
-| BUG-008 | 🟡 MEDIUM | `scheduler/orchestrator.ts` | `POST /api/parse/run` висит до окончания прогона — UX проблема, фикс: 202 Accepted | OPEN |
-| BUG-010 | 🟢 LOW | `captcha/rucaptcha.ts` | CRLF endings, нет `.gitattributes` | OPEN |
-| BUG-011 | 🟢 LOW | `scheduler/orchestrator.ts` | Dynamic import `iconv-lite` в hot path | OPEN |
-| RATE-001 | 🟠 HIGH | `scheduler/orchestrator.ts` | Нет rate limit между запросами — риск блокировки IP судрф | OPEN |
+| BUG-002 | 🔴 CRITICAL | `scheduler/orchestrator.ts` | `runNew()` был сломан для waiting-кейсов | FIXED |
+| BUG-003 | 🔴 CRITICAL | `api/routes/parse.ts` | magistrate: captcha + CP1251 | FIXED |
+| BUG-004 | 🟠 HIGH | `api/routes/cases.ts` | PATCH без whitelist | FIXED |
+| BUG-009 | 🟠 HIGH | `store/cases.ts` + `store/events.ts` | Нет in-memory cache | FIXED |
+| BUG-006 | 🟡 MEDIUM | `store/cases.ts` | `deleteCase` писал файл даже если uid не существовал | FIXED |
+| BUG-007 | 🟡 MEDIUM | `package.json` | Нет `engines` для Node ≥ 20.6 | FIXED |
+| BUG-008 | 🟡 MEDIUM | `api/routes/parse.ts` | `POST /api/parse/run` висел до конца прогона | FIXED |
+| BUG-010 | 🟢 LOW | `.gitattributes` | Не были зафиксированы LF для Linux-сервера | FIXED |
+| BUG-011 | 🟢 LOW | `scheduler/orchestrator.ts` | Dynamic import `iconv-lite` в hot path | FIXED |
+| RATE-001 | 🟠 HIGH | `scheduler/orchestrator.ts` | Нет rate limit между запросами | FIXED |
 
-> **Закрыты ревьюером как не воспроизводящиеся:** BUG-001 (race condition — store sync, Node single-thread), BUG-005 (magistrate.ts своя URL-логика).
+> **Закрыты как не воспроизводящиеся:** BUG-001, BUG-005.
 
 ---
 
@@ -177,21 +179,23 @@ CRM отправляет запросы, получает JSON. Фильтруе
 | 2026-07-21 | `a2f1829` | **Фаза 4: API + Viewer** — 15 эндпоинтов, Express, Web UI |
 | 2026-07-21 | `eceddc8` | **CODE_REVIEW.md** — полный разбор всех пакетов |
 | 2026-07-21 | `8062dbe` | **BUG_REPORT.md** — 11 багов |
-| 2026-07-21 | `ec8e50b` | **CONTEXT.md** — обновлён: статусы, баги, решения |
-| 2026-07-21 | *(текущий)* | **CONTEXT.md** — отзыв владельца зафиксирован: пересмотр багов, новые замечания (RATE-001, events cache) |
+| 2026-07-21 | `4ab03a2` | **CONTEXT.md** — отзыв владельца зафиксирован |
+| 2026-07-21 | `5932ff8` | **fix(store)** — in-memory cache для cases/events, fix deleteCase |
+| 2026-07-21 | `219e1ac` | **fix(api)** — PATCH whitelist |
+| 2026-07-21 | `67173ba` | **fix(scheduler)** — runNew, rate limit, static iconv |
+| 2026-07-21 | `89570af` | **fix(api)** — magistrate parse + `202 Accepted` |
+| 2026-07-21 | `fd7fa7e` | **fix(config)** — Node engines + `.gitattributes` |
+| 2026-07-21 | *(текущий)* | **CONTEXT.md** — статусы багов обновлены до FIXED |
 
 ---
 
 ## Следующие шаги (приоритет)
 
-1. **BUG-002** — `runNew()`: заменить `fetchHtml` на `searchAdapter.searchByParty` с данными из `WatchedCase`
-2. **BUG-003** — `parse/url`: детекция magistrate → `fetchMagistrateHtml` + iconv
-3. **BUG-004** — `PATCH`: whitelist полей
-4. **BUG-009** — store/cases + store/events: singleton in-memory Map + инвалидация при save
-5. **RATE-001** — scheduler: delay 1–2 сек между `processOne`
-6. **BUG-008** — `POST /api/parse/run`: 202 Accepted + background
-7. **BUG-007** — `engines` в `package.json`
-8. Viewer: наполнить `packages/viewer/public/`
+1. Viewer: наполнить `packages/viewer/public/`
+2. Добавить smoke-тесты на `/api/parse/url`, `/api/cases/wait`, `/api/parse/run`
+3. Добавить health/status для background-run состояния scheduler
+4. Продумать batch-отчётность: сколько дел обновлено, сколько найдено, сколько упало
+5. При необходимости — вынести фоновый прогон из Express в отдельный worker-процесс
 
 ---
 
@@ -210,6 +214,7 @@ courtdesk/
 │   ├── api/         # Express API
 │   └── viewer/      # Web UI
 ├── .env.example
+├── .gitattributes
 ├── package.json
 ├── tsconfig.json
 ├── ARCHITECTURE.md
