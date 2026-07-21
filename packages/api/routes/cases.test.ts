@@ -141,7 +141,7 @@ describe('POST /api/cases/wait — waiting-кейс', () => {
       courtId: 'kirov--perm', courtType: 'district', party: 'Иванов Иван', filingDate: '2026-06-01',
     });
     expect(res.status).toBe(200);
-    const [c] = storeMock.addCase.mock.calls[0] as [WatchedCase];
+    const c = storeMock.addCase.mock.calls[0]?.[0] as WatchedCase;
     expect(c.status).toBe('waiting');
     expect(c.url).toBe('');
     expect(c.number).toBe('');
