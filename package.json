@@ -16,6 +16,10 @@
     "url": "https://github.com/AlexanderKuzikov/CourtDesk/issues"
   },
   "license": "Apache-2.0",
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "puppeteer@25.3.0": true
+  },
   "author": "Alexander Kuzikov (https://github.com/AlexanderKuzikov)",
   "repository": {
     "type": "git",
@@ -32,7 +36,8 @@
   "dependencies": {
     "cheerio": "^1.0.0",
     "express": "^5.2.1",
-    "iconv-lite": "^0.7.3"
+    "iconv-lite": "^0.7.3",
+    "puppeteer": "^25.3.0"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",

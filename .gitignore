@@ -43,7 +43,7 @@ out/
 .DS_Store
 Thumbs.db
 
-# Data
-data/
+# Runtime data (хранилище мониторинга, логи)
+/data/
 
 /.goose

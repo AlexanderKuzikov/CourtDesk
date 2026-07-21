@@ -1,2 +1,19 @@
+// Core — barrel
+
 export * from './types.js';
-export * from './config.js';
+export {
+  findCourtBySubdomain,
+  findCourtByCode,
+  findCourtByCodeOrSubdomain,
+  findCourtsByName,
+  findCourtsByRegion,
+  getTotalCourts,
+  getAllCourts,
+} from './courts.js';
+export {
+  getRuCaptchaKey,
+  hasCaptchaKeys,
+} from './config.js';
+export {
+  encodeParam,
+} from './encoding.js';

@@ -1,27 +1,17 @@
-export interface Config {
-  snifferUrl: string;
-  flowUrl: string;
-  databasePath: string;
-  port: number;
-  captcha: {
-    apiKey: string;
-    fallbackApiKey: string;
-  };
+// Конфигурация CourtSniffer — загрузка секретов из .env
+import { resolve } from 'path';
+
+// .env опционален: запуск без cp .env.example .env не должен падать
+try {
+  process.loadEnvFile(resolve(process.cwd(), '.env'));
+} catch (e: unknown) {
+  if (!(e instanceof Error && 'code' in e && (e as NodeJS.ErrnoException).code === 'ENOENT')) throw e;
 }
 
-export function loadConfig(): Config {
-  try {
-    process.loadEnvFile();
-  } catch {}
+export function getRuCaptchaKey(): string {
+  return process.env.RUCAPTCHA_API_KEY || process.env.TWOCAPTCHA_API_KEY || '';
+}
 
-  return {
-    snifferUrl: process.env.SNIFFER_URL ?? 'http://127.0.0.1:8765',
-    flowUrl: process.env.FLOW_URL ?? 'http://127.0.0.1:8766',
-    databasePath: process.env.DATABASE_PATH ?? './data/courtdesk.db',
-    port: parseInt(process.env.PORT ?? '8767', 10),
-    captcha: {
-      apiKey: process.env.RUCAPTCHA_API_KEY ?? '',
-      fallbackApiKey: process.env.RUCAPTCHA_FALLBACK_API_KEY ?? '',
-    },
-  };
+export function hasCaptchaKeys(): boolean {
+  return Boolean(process.env.RUCAPTCHA_API_KEY || process.env.TWOCAPTCHA_API_KEY);
 }
