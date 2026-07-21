@@ -8,7 +8,7 @@
 
 ## Статус
 
-**v0.1.0** — Фаза 4 завершена. Основные баги code review исправлены. Начата стабилизация перед Linux-деплоем.
+**v0.1.0** — Фаза 4 завершена. Основные баги code review исправлены. Добавлены первые smoke/unit тесты для store, scheduler и API routes.
 
 | Компонент | Статус | Источник |
 |-----------|--------|----------|
@@ -18,11 +18,12 @@
 | Core (типы) | ✅ Готово | — |
 | Captcha | ✅ Готово | CourtSniffer |
 | Search | ✅ Готово | CourtSniffer |
-| Parse | ✅ Исправлено (BUG-003) | CourtFlow |
+| Parse | ✅ Исправлено (BUG-003, BUG-008) | CourtFlow |
 | Intake | ✅ Готово | CourtDesk |
-| Scheduler | ✅ Исправлено (BUG-002, BUG-008, RATE-001, BUG-011) | CourtFlow |
+| Scheduler | ✅ Исправлено (BUG-002, RATE-001, BUG-011) | CourtFlow |
 | Store | ✅ Исправлено (BUG-006, BUG-009) | CourtFlow |
 | API | ✅ Исправлено (BUG-003, BUG-004, BUG-008) | Новый |
+| Tests | 🟡 Базовые smoke/unit тесты добавлены | Vitest |
 | Viewer | 🟡 Заглушка | CourtSniffer |
 
 ---
@@ -126,21 +127,12 @@ CRM отправляет запросы, получает JSON. Фильтруе
 | 2026-07-21 | JSON-хранилище (не SQL) | Объём < 10 000 дел, tmp+rename достаточно |
 | 2026-07-21 | REST API (не GraphQL) | 1С умеет REST, 15 эндпоинтов — не GraphQL-задача |
 | 2026-07-21 | API и UI — один Express-процесс | Экономия портов, нет CORS при разработке |
-| 2026-07-21 | Search ≠ Parse (разные адаптеры) | Поиск (name_op=r) и парсинг карточки (name_op=case) — разные URL и парсинг |
-| 2026-07-21 | Core — единый источник типов | CourtType, SearchResult, CaseCard — в одном месте |
-| 2026-07-21 | Intake — один `classify` | Весь разбор внутри, остальные модули не занимаются классификацией |
-| 2026-07-21 | Дата вступления — только из поиска | В карточке дела этой даты нет. CourtSniffer уже умеет |
-| 2026-07-21 | Нет расчёта сроков | Слишком много нюансов. Только факт вступления |
-| 2026-07-21 | userId — просто поле | CRM фильтрует сама, объёмы мизерные |
-| 2026-07-21 | Нет авторизации | Локальная сеть |
-| 2026-07-21 | CourtSniffer, CourtFlow — заморозить | Функционал мигрирует в CourtDesk |
-| 2026-07-21 | BUG-001 (рейс-кондишн) — не воспроизводится | Все store-операции sync (readFileSync/writeFileSync). Node.js однопоточный — между load() и save() нет await. |
-| 2026-07-21 | BUG-005 (magistrate caseUrl) — не воспроизводится | Magistrate использует magistrate.ts-адаптер со своей логикой URL. |
-| 2026-07-21 | BUG-008 — UX, не reliability | HTTP-ручка не должна висеть час. Фикс: `202 Accepted` + background. |
-| 2026-07-21 | Linux-server / Windows-clients | Сервер работает на Linux, поэтому в репозитории фиксируем LF через `.gitattributes`; пользователи на Windows получают нормальный checkout через Git. |
-| 2026-07-21 | Store — singleton in-memory cache | `cases.json` и `events.json` читаются один раз в runtime, запись — только при изменении. |
-| 2026-07-21 | Scheduler rate limit | Между запросами к sudrf/msudrf нужен delay ~1.5 сек, чтобы не ловить IP block. |
-| 2026-07-21 | PATCH whitelist | Через REST нельзя менять `uid`, `createdAt`, `courtId`, `courtType` и служебные поля. |
+| 2026-07-21 | Search ≠ Parse (разные адаптеры) | Поиск и парсинг карточки — разные URL и логика |
+| 2026-07-21 | Store — singleton in-memory cache | `cases.json` и `events.json` читаются один раз в runtime, запись — только при изменении |
+| 2026-07-21 | Scheduler rate limit | Между запросами к sudrf/msudrf нужен delay ~1.5 сек |
+| 2026-07-21 | PATCH whitelist | Через REST нельзя менять `uid`, `createdAt`, `courtId`, `courtType` и служебные поля |
+| 2026-07-21 | Linux-server / Windows-clients | В репозитории фиксируем LF через `.gitattributes`; Windows-пользователи работают через обычный Git checkout |
+| 2026-07-21 | Тесты без реального I/O и сети | Store, scheduler и route-smoke тестируются через mocks, чтобы локально гонялись быстро и стабильно |
 
 ---
 
@@ -170,32 +162,25 @@ CRM отправляет запросы, получает JSON. Фильтруе
 | 2026-07-17 | — | Создан репозиторий CourtDesk |
 | 2026-07-17 | — | Intake-модуль (классификатор) |
 | 2026-07-17 | — | 18 unit-тестов Intake |
-| 2026-07-21 | — | Архитектура пересмотрена: CourtDesk — единый сервис, вбирает Sniffer + Flow |
-| 2026-07-21 | — | Утверждены use cases, API-контракты |
-| 2026-07-21 | — | Старые проекты (Sniffer, Flow) — архив |
-| 2026-07-21 | `9cc099c` | **Фаза 1: core + captcha** |
-| 2026-07-21 | `447d560` | **Фаза 2: search + parse + intake** |
-| 2026-07-21 | `746b46d` | **Фаза 3: store + scheduler** |
-| 2026-07-21 | `a2f1829` | **Фаза 4: API + Viewer** — 15 эндпоинтов, Express, Web UI |
-| 2026-07-21 | `eceddc8` | **CODE_REVIEW.md** — полный разбор всех пакетов |
-| 2026-07-21 | `8062dbe` | **BUG_REPORT.md** — 11 багов |
-| 2026-07-21 | `4ab03a2` | **CONTEXT.md** — отзыв владельца зафиксирован |
 | 2026-07-21 | `5932ff8` | **fix(store)** — in-memory cache для cases/events, fix deleteCase |
 | 2026-07-21 | `219e1ac` | **fix(api)** — PATCH whitelist |
 | 2026-07-21 | `67173ba` | **fix(scheduler)** — runNew, rate limit, static iconv |
 | 2026-07-21 | `89570af` | **fix(api)** — magistrate parse + `202 Accepted` |
 | 2026-07-21 | `fd7fa7e` | **fix(config)** — Node engines + `.gitattributes` |
-| 2026-07-21 | *(текущий)* | **CONTEXT.md** — статусы багов обновлены до FIXED |
+| 2026-07-21 | `ebeea53` | **docs** — CONTEXT.md: статусы багов обновлены до FIXED |
+| 2026-07-21 | `e8297cb` | **test** — store, cases route, parse/run, runNew smoke/unit tests |
+| 2026-07-21 | `7d7f989` | **chore** — `supertest` + `@types/supertest` для route tests |
+| 2026-07-21 | *(текущий)* | **docs** — CONTEXT.md обновлён: тестовое покрытие и новые коммиты |
 
 ---
 
 ## Следующие шаги (приоритет)
 
-1. Viewer: наполнить `packages/viewer/public/`
-2. Добавить smoke-тесты на `/api/parse/url`, `/api/cases/wait`, `/api/parse/run`
-3. Добавить health/status для background-run состояния scheduler
-4. Продумать batch-отчётность: сколько дел обновлено, сколько найдено, сколько упало
-5. При необходимости — вынести фоновый прогон из Express в отдельный worker-процесс
+1. Прогнать `npm install && npm test && npm run lint` на Linux-окружении
+2. Добавить отдельный smoke-тест для `POST /api/parse/url` magistrate path с mock `fetchMagistrateHtml`
+3. Добавить endpoint/стейт для фонового scheduler-run (`idle/running/lastResult`)
+4. Сделать viewer для списка дел и статусов
+5. При необходимости — вынести background-run из Express в отдельный worker
 
 ---
 
@@ -204,15 +189,15 @@ CRM отправляет запросы, получает JSON. Фильтруе
 ```
 courtdesk/
 ├── packages/
-│   ├── core/        # Типы, справочник судов, encoding, config
-│   ├── captcha/     # Puppeteer + RuCaptcha
-│   ├── search/      # Поиск (из Sniffer)
-│   ├── parse/       # Парсинг карточек (из Flow)
-│   ├── intake/      # Классификатор
-│   ├── scheduler/   # Мониторинг по расписанию
-│   ├── store/       # JSON-хранилище
-│   ├── api/         # Express API
-│   └── viewer/      # Web UI
+│   ├── core/
+│   ├── captcha/
+│   ├── search/
+│   ├── parse/
+│   ├── intake/
+│   ├── scheduler/
+│   ├── store/
+│   ├── api/
+│   └── viewer/
 ├── .env.example
 ├── .gitattributes
 ├── package.json
@@ -221,22 +206,3 @@ courtdesk/
 ├── CODE_REVIEW.md
 └── BUG_REPORT.md
 ```
-
----
-
-## Источники кода
-
-| Модуль | Откуда берём |
-|--------|-------------|
-| core/encoding.ts | CourtSniffer |
-| core/courts.ts | CourtSniffer (unified-courts.json) |
-| core/config.ts | CourtSniffer (упрощённый, .env) |
-| core/types.ts | Собираем из всех трёх проектов |
-| captcha/ | CourtSniffer (более новый/чистый) |
-| search/adapters | CourtSniffer |
-| parse/adapters | CourtFlow |
-| intake/ | CourtDesk (уже есть) |
-| scheduler/ | CourtFlow (orchestrator) |
-| store/ | CourtFlow (exporter) |
-| api/ | Новый (общее из Sniffer viewer + Desk api) |
-| viewer/ | Новый (идея из Sniffer viewer) |
