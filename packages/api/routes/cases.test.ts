@@ -1,19 +1,36 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import express from 'express';
 import type { Express } from 'express';
+import type { WatchedCase } from '../../core/types.js';
 
-// Мокаем весь store, чтобы не трогать файловую систему
+const baseCase: WatchedCase = {
+  uid: 'u1',
+  url: 'https://kirov--perm.sudrf.ru/modules.php?name_op=case&case_id=1',
+  courtId: 'kirov--perm',
+  courtCode: 'kirov--perm',
+  courtType: 'district',
+  number: '2-100/2026',
+  status: 'monitoring',
+  result: null,
+  legalForceDate: null,
+  legalForceNotified: false,
+  userId: null,
+  lastChecked: null,
+  createdAt: '2026-07-21T10:00:00.000Z',
+  updatedAt: '2026-07-21T10:00:00.000Z',
+};
+
 const storeMock = {
-  listCases: vi.fn(() => []),
-  getCase: vi.fn(() => null),
-  addCase: vi.fn(),
-  updateCase: vi.fn(() => null),
-  deleteCase: vi.fn(() => false),
+  listCases: vi.fn((): WatchedCase[] => []),
+  getCase: vi.fn((): WatchedCase | null => null),
+  addCase: vi.fn((): void => undefined),
+  updateCase: vi.fn((): WatchedCase | null => null),
+  deleteCase: vi.fn((): boolean => false),
   getStats: vi.fn(() => ({ monitoring: 0, waiting: 0, decision: 0, enforcedToday: 0 })),
 };
 
 const eventsMock = {
-  addEvent: vi.fn(),
+  addEvent: vi.fn((): void => undefined),
 };
 
 vi.mock('../../store/index.js', () => storeMock);
@@ -30,7 +47,7 @@ async function buildApp(): Promise<Express> {
 async function req(app: Express, method: string, path: string, body?: unknown) {
   const { default: supertest } = await import('supertest');
   const r = (supertest(app) as any)[method](path);
-  if (body) r.send(body).set('Content-Type', 'application/json');
+  if (body !== undefined) r.send(body).set('Content-Type', 'application/json');
   return r;
 }
 
@@ -39,8 +56,10 @@ describe('PATCH /api/cases/:uid — whitelist (BUG-004)', () => {
 
   beforeEach(async () => {
     vi.resetModules();
-    Object.values(storeMock).forEach(fn => (fn as any).mockReset?.());
-    storeMock.updateCase.mockReturnValue({ uid: 'u1', status: 'decision' });
+    storeMock.listCases.mockReturnValue([]);
+    storeMock.getCase.mockReturnValue(null);
+    storeMock.updateCase.mockReturnValue({ ...baseCase, status: 'decision' });
+    storeMock.deleteCase.mockReturnValue(false);
     app = await buildApp();
   });
 
@@ -83,12 +102,11 @@ describe('DELETE /api/cases/:uid — не пишет если uid нет (BUG-00
 
   beforeEach(async () => {
     vi.resetModules();
-    Object.values(storeMock).forEach(fn => (fn as any).mockReset?.());
+    storeMock.deleteCase.mockReturnValue(false);
     app = await buildApp();
   });
 
   it('404 на удаление несуществующего', async () => {
-    storeMock.deleteCase.mockReturnValue(false);
     const res = await req(app, 'delete', '/api/cases/ghost');
     expect(res.status).toBe(404);
   });
@@ -106,7 +124,8 @@ describe('POST /api/cases/wait — waiting-кейс', () => {
 
   beforeEach(async () => {
     vi.resetModules();
-    Object.values(storeMock).forEach(fn => (fn as any).mockReset?.());
+    storeMock.addCase.mockImplementation(() => undefined);
+    eventsMock.addEvent.mockImplementation(() => undefined);
     app = await buildApp();
   });
 
@@ -117,11 +136,12 @@ describe('POST /api/cases/wait — waiting-кейс', () => {
   });
 
   it('создаёт waiting-дело со всеми обязательными полями', async () => {
+    storeMock.updateCase.mockReturnValue(null);
     const res = await req(app, 'post', '/api/cases/wait', {
       courtId: 'kirov--perm', courtType: 'district', party: 'Иванов Иван', filingDate: '2026-06-01',
     });
     expect(res.status).toBe(200);
-    const [c] = storeMock.addCase.mock.calls[0];
+    const [c] = storeMock.addCase.mock.calls[0] as [WatchedCase];
     expect(c.status).toBe('waiting');
     expect(c.url).toBe('');
     expect(c.number).toBe('');

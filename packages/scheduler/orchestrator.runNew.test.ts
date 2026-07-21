@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { WatchedCase, CaseHistoryEvent } from '../core/types.js';
 
-// Мокаем зависимости оркестратора до его импорта
 const storeMock = {
-  listCases: vi.fn(),
-  updateCase: vi.fn(),
-  addEvent: vi.fn(),
-  getCase: vi.fn(() => null),
-  getEvents: vi.fn(() => []),
+  listCases: vi.fn((): WatchedCase[] => []),
+  updateCase: vi.fn((): WatchedCase | null => null),
+  addEvent: vi.fn((): void => undefined),
+  getCase: vi.fn((): WatchedCase | null => null),
+  getEvents: vi.fn((): CaseHistoryEvent[] => []),
 };
 
 const searchAdapter = {
@@ -18,8 +18,6 @@ vi.mock('../store/index.js', () => storeMock);
 vi.mock('iconv-lite', () => ({ default: { decode: vi.fn((b: Buffer) => b.toString()) } }));
 vi.mock('../parse/index.js', () => ({ getParseAdapter: vi.fn() }));
 vi.mock('../search/index.js', () => ({ getSearchAdapter: vi.fn(() => searchAdapter) }));
-
-import type { WatchedCase } from '../core/types.js';
 
 function makeWaiting(overrides: Partial<WatchedCase> = {}): WatchedCase {
   return {
@@ -41,17 +39,29 @@ function makeWaiting(overrides: Partial<WatchedCase> = {}): WatchedCase {
   };
 }
 
+function makeWaitEvent(caseUid: string, party: string, filingDate?: string): CaseHistoryEvent {
+  return {
+    uid: crypto.randomUUID(),
+    caseUid,
+    type: 'waiting',
+    message: '',
+    data: { party, ...(filingDate ? { filingDate } : {}) },
+    createdAt: '2026-07-21T10:00:00.000Z',
+  };
+}
+
 describe('runNew — waiting-кейсы через searchByParty (BUG-002)', () => {
   beforeEach(() => {
     vi.resetModules();
-    Object.values(storeMock).forEach(fn => (fn as any).mockReset?.());
-    searchAdapter.searchByParty.mockReset();
     storeMock.listCases.mockReturnValue([]);
     storeMock.getEvents.mockReturnValue([]);
+    storeMock.updateCase.mockReturnValue(null);
+    storeMock.addEvent.mockReturnValue(undefined);
+    searchAdapter.searchByParty.mockReset();
+    searchAdapter.searchByParty.mockResolvedValue([]);
   });
 
-  it('если дел нет — ок=0, fail=0', async () => {
-    storeMock.listCases.mockReturnValue([]);
+  it('если дел нет — ok=0, fail=0', async () => {
     const { runNew } = await import('./orchestrator.js');
     const result = await runNew();
     expect(result).toEqual({ ok: 0, fail: 0 });
@@ -59,7 +69,7 @@ describe('runNew — waiting-кейсы через searchByParty (BUG-002)', () 
 
   it('без waiting-события — не вызывает searchByParty', async () => {
     const c = makeWaiting();
-    storeMock.listCases.mockImplementation((f: any) =>
+    storeMock.listCases.mockImplementation((f?: { status?: string }) =>
       f?.status === 'waiting' ? [c] : []
     );
     storeMock.getEvents.mockReturnValue([]); // нет waiting-события
@@ -70,17 +80,12 @@ describe('runNew — waiting-кейсы через searchByParty (BUG-002)', () 
 
   it('нашёл дело — обновляет статус в monitoring и url', async () => {
     const c = makeWaiting({ uid: 'w2' });
-    storeMock.listCases.mockImplementation((f: any) =>
+    storeMock.listCases.mockImplementation((f?: { status?: string }) =>
       f?.status === 'waiting' ? [c] : []
     );
-    storeMock.getEvents.mockReturnValue([
-      {
-        uid: 'e1', caseUid: 'w2', type: 'waiting',
-        message: 'Ожидается',
-        data: { party: 'Иванов Иван', filingDate: '2026-06-01' },
-        createdAt: '2026-07-21T10:00:00.000Z',
-      },
-    ]);
+    storeMock.getEvents.mockReturnValue([makeWaitEvent('w2', 'Иванов Иван', '2026-06-01')]);
+    storeMock.updateCase.mockReturnValue({ ...c, status: 'monitoring', url: 'https://kirov--perm.sudrf.ru/modules.php?name_op=case&case_id=1' });
+
     searchAdapter.searchByParty.mockResolvedValue([{
       caseNumber: '2-100/2026',
       caseUrl: 'https://kirov--perm.sudrf.ru/modules.php?name_op=case&case_id=1',
@@ -100,19 +105,12 @@ describe('runNew — waiting-кейсы через searchByParty (BUG-002)', () 
     expect(storeMock.addEvent).toHaveBeenCalledWith('w2', expect.objectContaining({ type: 'found' }));
   });
 
-  it('ничего не нашло — обновляет lastChecked, ok=1', async () => {
+  it('ничего не нашло — обновляет lastChecked', async () => {
     const c = makeWaiting({ uid: 'w3' });
-    storeMock.listCases.mockImplementation((f: any) =>
+    storeMock.listCases.mockImplementation((f?: { status?: string }) =>
       f?.status === 'waiting' ? [c] : []
     );
-    storeMock.getEvents.mockReturnValue([
-      {
-        uid: 'e2', caseUid: 'w3', type: 'waiting',
-        message: '',
-        data: { party: 'Сидоров Семён' },
-        createdAt: '2026-07-21T10:00:00.000Z',
-      },
-    ]);
+    storeMock.getEvents.mockReturnValue([makeWaitEvent('w3', 'Сидоров Семён')]);
     searchAdapter.searchByParty.mockResolvedValue([]);
 
     const { runNew } = await import('./orchestrator.js');
