@@ -20,10 +20,10 @@
 | Search | ✅ Фаза 2 | CourtSniffer |
 | Parse | ✅ Фаза 2 | CourtFlow |
 | Intake | ✅ Есть | CourtDesk |
-| Scheduler | 🔜 Фаза 3 | CourtFlow |
-| Store | 🔜 Фаза 3 | CourtFlow |
-| API | 🔜 Фаза 4 | Новый |
-| Viewer | 🔜 Фаза 4 | CourtSniffer (идея) |
+| Scheduler | ✅ Фаза 3 | CourtFlow |
+| Store | ✅ Фаза 3 | CourtFlow |
+| API | ✅ Фаза 4 | Новый |
+| Viewer | 🟡 Фаза 4 (стартовый) | CourtSniffer |
 
 ---
 
@@ -144,7 +144,9 @@ CRM отправляет запросы, получает JSON. Фильтруе
 | 2026-07-21 | — | Утверждены use cases, API-контракты |
 | 2026-07-21 | — | Старые проекты (Sniffer, Flow) — архив |
 | 2026-07-21 | `9cc099c` | **Фаза 1: core + captcha — типы, справочник, encoding, config, errors, captcha (Puppeteer)** |
-| 2026-07-21 | *(текущий)* | **Фаза 2: search + parse + intake — адаптеры поиска (из Sniffer), адаптеры парсинга (из Flow), классификатор (из Desk)** |
+| 2026-07-21 | `447d560` | **Фаза 2: search + parse + intake** |
+| 2026-07-21 | `746b46d` | **Фаза 3: store + scheduler** |
+| 2026-07-21 | *(текущий)* | **Фаза 4: API + Viewer — 15 эндпоинтов, Express 5, Web UI** |
 
 ---
 
