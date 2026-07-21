@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { getTotalCourts, hasCaptchaKeys } from '../../core/index.js';
+import { getStats } from '../../store/index.js';
 
 const router = Router();
 
@@ -8,7 +9,6 @@ router.get('/api/health', (_req, res) => {
 });
 
 router.get('/api/status', (_req, res) => {
-  const { getStats } = require('../../store/index.js');
   const stats = getStats();
   res.json({
     success: true,

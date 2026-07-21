@@ -25,6 +25,8 @@ app.use(parseRouter);
 app.use(courtsRouter);
 app.use(intakeRouter);
 
+
+
 // Static (viewer UI)
 app.use(express.static(PUBLIC_DIR));
 
