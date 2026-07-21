@@ -1,243 +1,215 @@
 # CODE REVIEW — CourtDesk
-> Ревью выполнено: 2026-07-21  
-> Охват: все пакеты (core, captcha, intake, store, scheduler, api, search/adapters)
+> Ревью выполнено: **2026-07-22**  
+> Ревьюер: Perplexity (на основе реального кода в репозитории)  
+> Охват: все пакеты — core, captcha, intake, store, scheduler, api, parse, search  
+> Статус предыдущих находок верифицирован по фактическому коду.
 
 ---
 
 ## ОБЩАЯ ОЦЕНКА
 
-Проект структурно грамотный. Архитектурные решения — единый процесс, JSON-хранилище, один `package.json` — адекватны масштабу. Но реализация содержит ряд серьёзных проблем, которые **сломают систему в продакшне**. Ниже — по пакетам, от критичного к минорному.
+Архитектура адекватна масштабу: монолит, JSON-хранилище, один package.json, ESM + tsx. Большинство критичных и серьёзных проблем из ревью 2026-07-21 **действительно исправлены** в коде. Ниже — только то, что осталось нефиксированным или было обнаружено при ревью фактического кода.
+
+Оценка по-пакетно: зелёный = всё ок, жёлтый = minor issues, оранжевый = есть реальные проблемы.
 
 ---
 
-## 1. `packages/store` — КРИТИЧНО
+## СТАТУС ПРЕДЫДУЩИХ НАХОДОК
 
-### 1.1 N×2 чтений с диска на каждый вызов
+| ID | Было | Статус по реальному коду |
+|----|------|--------------------------|
+| §1.1 | N×disk reads, нет in-memory cache | ✅ ИСПРАВЛЕНО — `_cache: Map` реализован, `getStats()` один проход |
+| §1.2 | Race condition read-modify-write | ⚠️ ЧАСТИЧНО — in-memory cache убирает гонку при HTTP, но `runFull()` через `202 Accepted` запускает фоновый процесс, который пишет в store параллельно с HTTP-запросами. Один поток, но event loop не гарантирует порядок при `async save()` |
+| §1.3 | `deleteCase` пишет файл при несуществующем uid | ✅ ИСПРАВЛЕНО — `if (!existed) return false` перед `save()` |
+| §2.1 | `runNew()` сломан — `fetchHtml('')` | ✅ ИСПРАВЛЕНО — отдельный `processWaiting()` через `searchByParty` |
+| §2.2 | 3× updateCase за processOne | ⚠️ ЧАСТИЧНО — теперь in-memory cache, но 3 вызова `save()` всё равно делают 3 `writeJson()` |
+| §2.4 | Dynamic import iconv в hot path | ✅ ИСПРАВЛЕНО — `import iconv from 'iconv-lite'` на верхнем уровне |
+| §3.1 | PATCH без whitelist | ✅ ИСПРАВЛЕНО — `PATCH_ALLOWED` Set реализован |
+| §3.2 | `res: any` | ✅ ИСПРАВЛЕНО — `res: Response` из express |
+| §4.1 | magistrate без captcha + CP1251 | ✅ ИСПРАВЛЕНО — `fetchMagistrateHtml` + `fetchWithIconv` |
+| §5.2 | `findCourtsByName` — преждевременный `map` | ❌ НЕ ИСПРАВЛЕНО — в реальном коде: `.filter().map().slice()` |
+| §6.2 | Нет `engines` в package.json | ✅ ИСПРАВЛЕНО — `"engines": { "node": ">=20.6.0" }` |
+| §6.1 | Комментарий «CourtSniffer» в config.ts | ❌ НЕ ИСПРАВЛЕНО — по-прежнему `// Конфигурация CourtSniffer` |
+| §7.1 | CRLF endings | ✅ ИСПРАВЛЕНО — `.gitattributes` добавлен |
+| §9.1 | Нет CORS | ❌ НЕ ИСПРАВЛЕНО — в `server.ts` нет CORS middleware |
+| §9.2 | monitor/legal-force роутеры не подключены | ❌ НЕ ИСПРАВЛЕНО — в `server.ts` подключены только 6 роутеров |
 
-Каждая экспортируемая функция (`getCase`, `listCases`, `addCase`, `updateCase`, `deleteCase`, `getStats`) вызывает `load()`, которая делает `readFileSync` + `JSON.parse`. `getStats()` вызывает `listCases` с 4 разными фильтрами — это **4 отдельных чтения файла** за один HTTP-запрос. ARCHITECTURE.md обещает in-memory Map, но её нет.
+---
 
-```
-// Что происходит при GET /api/cases/stats:
-getStats()
-  listCases({ status: 'monitoring' })  → readFileSync #1
-  listCases({ status: 'waiting' })     → readFileSync #2
-  listCases({ status: 'decision' })    → readFileSync #3
-  listCases({ status: 'enforced' })    → readFileSync #4
-```
+## 1. `packages/store/cases.ts` — 🟡 МИНОРНО
 
-**Фикс:** добавить модульный singleton `let _cache: Map<string, WatchedCase> | null = null` с инвалидацией при каждой записи.
+### 1.1 Три `writeJson()` на один `processOne()` — избыточный fsync
 
-### 1.2 Race condition при конкурентных запросах
-
-`writeFileSync` + `renameSync` атомарны на уровне ОС, но логика **read-modify-write не атомарна**:
-
-```
-Req A: load() → map_A
-Req B: load() → map_B
-Req A: save(map_A)   ← затирает изменения B
-Req B: save(map_B)   ← затирает изменения A
-```
-
-Express async + scheduler вызываемый из `POST /api/parse/run` создают реальный сценарий. При одновременном добавлении дела пользователем и прогоне scheduler — данные теряются.
-
-**Фикс:** синхронная очередь (`async-mutex` или собственный promise-lock перед каждым `load→save`).
-
-### 1.3 `deleteCase` всегда пишет файл, даже если uid не существовал
+После введения in-memory cache `readFileSync` вызывается только один раз. Однако `save()` по-прежнему вызывает `writeJson()` синхронно. В `processOne()` это может происходить 3–5 раз за одну итерацию:
 
 ```ts
-export function deleteCase(uid: string): boolean {
-  const map = load();
-  const existed = map.has(uid);
-  map.delete(uid);  // map.delete на несуществующем ключе — no-op
-  save(map);        // ← запись происходит ВСЕГДА
-  return existed;
+updateCase(c.uid, { status: 'decision', result })  // writeJson #1
+addEvent(c.uid, makeEvent(...))                      // writeJson events.json #2
+updateCase(c.uid, { status: 'enforced', ... })       // writeJson #3
+addEvent(c.uid, ...)                                 // writeJson events.json #4
+updateCase(c.uid, { lastChecked: now() })             // writeJson #5
+```
+
+На 100 делах — 500 `writeJson` за `runFull()`. При этом промежуточные состояния (status: 'decision' + status: 'enforced' в одном прогоне) писать бессмысленно — важно только финальное состояние.
+
+**Фикс:** батчить изменения в `processOne` через один `updateCase` с объединёнными updates в конце обработки.
+
+### 1.2 `listCases` не поддерживает фильтрацию по `number` — только по `q`
+
+```ts
+if (filter.q) {
+  const q = filter.q.toLowerCase();
+  if (!c.number.toLowerCase().includes(q) && !c.courtId.toLowerCase().includes(q)) return false;
 }
 ```
 
-Лишняя I/O операция при каждом `DELETE /api/cases/:uid` с несуществующим uid. Нужно `if (existed) save(map)`.
+Эндпоинт `GET /api/cases?q=` ищет по `number` и `courtId`. Поиск по `userId` и `status` — отдельные параметры. Нет поиска по `number` как точному совпадению — при дублировании дел в разных судах невозможно получить конкретное дело по номеру без перебора.
 
 ---
 
-## 2. `packages/scheduler/orchestrator.ts` — КРИТИЧНО
+## 2. `packages/scheduler/orchestrator.ts` — 🟠 СЕРЬЁЗНО
 
-### 2.1 `waiting`-кейс сломан логически
+### 2.1 `processOne()` — race condition с фоновым `runFull()`
+
+`POST /api/parse/run` отвечает 202 и запускает `runFull()` в фоне (`.then().catch()`). При этом `processOne()` читает состояние кейса через `getCase()` **до** начала обработки, а записывает через `updateCase()` — после (несколько раз). Если параллельно пришёл `PATCH /api/cases/:uid` — `updateCase` из HTTP-запроса перезапишет in-memory Map, а следующий `updateCase` из `processOne` перезапишет его обратно.
+
+```
+200ms: HTTP PATCH /api/cases/abc → updateCase(abc, { status: 'archived' })
+210ms: processOne(abc) → updateCase(abc, { lastChecked: now() }) ← перезапишет status!
+```
+
+Node.js однопоточен, но `await fetchHtml()` освобождает event loop и позволяет HTTP-обработчикам выполняться между `await`.
+
+**Фикс:** read-modify-write для `processOne` должен быть атомарным. Минимум: перечитать состояние кейса непосредственно перед записью: `const latest = getCase(c.uid)` перед каждым `updateCase`, чтобы не затирать изменения, внесённые через API.
+
+### 2.2 `makeEvent()` не проставляет `caseUid`
 
 ```ts
-export async function runNew(): Promise<{ ok: number; fail: number }> {
-  const cases = listCases({ status: 'waiting' });
+function makeEvent(type: string, message: string, data?: Record<string, unknown>): CaseHistoryEvent {
+  return {
+    uid: crypto.randomUUID(),
+    caseUid: '',          // ← ВСЕГДА пустая строка!
+    type,
+    message,
+    ...
+  };
+}
+```
+
+Создаваемые события **не привязаны к делу** — `caseUid = ''`. Функция `addEvent(c.uid, makeEvent(...))` передаёт uid первым аргументом, но `makeEvent` не получает его. При поиске событий по `caseUid` — возвращается пустой массив.
+
+**Фикс:** `makeEvent(caseUid: string, type: string, ...)` — добавить первый параметр, или заполнять `caseUid` в `addEvent()`.
+
+### 2.3 `processWaiting()` — нет обновления `lastChecked` при пустом результате поиска
+
+```ts
+if (results.length === 0) {
+  updateCase(c.uid, { lastChecked: now() });
+  return;
+}
+```
+
+Есть — `lastChecked` обновляется. Но нет обновления при `!party` (выход раньше):
+
+```ts
+if (!party) return;  // ← lastChecked не обновляется
+```
+
+Дело «зависает» без обновления `lastChecked`, `isStale()` будет возвращать `true` при каждом `runRetry`, и каждый `runRetry` будет пытаться обработать это дело снова.
+
+### 2.4 `runFull()` не обрабатывает `error`-статус
+
+```ts
+export async function runFull(): Promise<{ ok: number; fail: number }> {
+  const cases = listCases({ status: 'monitoring' }).concat(listCases({ status: 'decision' }));
   return processBatch(cases);
 }
-
-async function processOne(c: WatchedCase): Promise<void> {
-  const adapter = getParseAdapter(c.courtType);
-  const html = await fetchHtml(c.url);   // ← c.url = '' для waiting-кейса!
-  // ...
-}
 ```
 
-Для `waiting`-дела `url` создаётся пустой строкой (`url: ''` в `cases.ts`). `fetchHtml('')` выбросит исключение до того как дойдёт до кода проверки статуса. Режим `runNew` / `mode: 'new'` **никогда не работает**.
-
-### 2.2 Три `updateCase` за один `processOne` = три полных цикла read→write
-
-```ts
-async function processOne(c: WatchedCase): Promise<void> {
-  // ...
-  if (card.card.result && !prev.result) {
-    updateCase(c.uid, { status: 'decision', ... });  // load→save #1
-    addEvent(c.uid, makeEvent(...));                  // load→save events #2
-  }
-  if (c.status === 'decision' && !c.legalForceDate) {
-    updateCase(c.uid, { status: 'enforced', ... });  // load→save #3
-    addEvent(c.uid, makeEvent(...));                  // load→save events #4
-  }
-  updateCase(c.uid, { lastChecked: now() });          // load→save #5
-}
-```
-
-При 100 делах в мониторинге `runFull()` = **500+ синхронных I/O** за один прогон. При этом каждое `updateCase` читает весь `cases.json` заново.
-
-### 2.3 Нет лимита конкурентности
-
-`processBatch` — последовательный `for...of` с `await`. Для magistrate с капчей (2+ минуты на дело) при 50 делах `runFull` будет висеть **1.5+ часа**, блокируя event loop для всех HTTP-запросов сервера.
-
-### 2.4 Dynamic import iconv-lite в hot path
-
-```ts
-// В fetchHtml, вызывается для каждого дела:
-const { default: iconv } = await import('iconv-lite');
-```
-
-`iconv-lite` — статическая зависимость, используется везде. Dynamic import здесь — лишний overhead. Вынести на уровень модуля: `import iconv from 'iconv-lite'`.
+Дела со статусом `'error'` не включены в `runFull()` и не включены в `runRetry()`. После ошибки дело навсегда «застревает» в `error`-статусе без повторных попыток. CONTEXT.md не описывает стратегию retry для `error`-дел.
 
 ---
 
-## 3. `packages/api/routes/cases.ts` — СЕРЬЁЗНО
+## 3. `packages/api/server.ts` — 🟠 СЕРЬЁЗНО
 
-### 3.1 `PATCH /api/cases/:uid` — нет whitelist полей
+### 3.1 Роутеры по CONTEXT.md §API-контракты не подключены
+
+CONTEXT.md определяет 15 эндпоинтов. В `server.ts` подключено 6 роутеров. Отсутствуют:
+
+| Эндпоинт | Статус |
+|----------|--------|
+| `GET /api/status` | ❌ Нет роутера |
+| `GET /api/notifications` | ❌ Нет роутера |
+| `POST /api/resolve` | ❌ Нет роутера |
+
+`GET /api/cases/stats` есть в `cases.ts`, но не эквивалентен `/api/status` из CONTEXT.md (тот должен включать `health`).
+
+### 3.2 Нет CORS middleware
+
+Web UI из `viewer/` работает на том же origin (статика через Express). Но при разработке (Vite dev server на `:5173`, API на `:8767`) или при внешнем клиенте — fetch упадёт с CORS error. Нет ни `cors()` middleware, ни `Access-Control-Allow-Origin` заголовка. ARCHITECTURE.md §10 упоминает CORS как «существующую возможность».
+
+### 3.3 `app.listen()` на верхнем уровне модуля — проблема для тестов
 
 ```ts
-router.patch('/api/cases/:uid', (req, res) => {
-  const updated = updateCase(req.params.uid, req.body ?? {});
-});
+const app = createApp();
+app.listen(PORT, '127.0.0.1', () => { ... });
 ```
 
-`updateCase` делает `{ ...existing, ...updates }` без фильтрации. Клиент может передать:
-- `{ uid: 'другой_uid' }` — изменить ключ записи (несогласованность Map)
-- `{ createdAt: '...' }` — перезаписать системные поля
-- `{ status: 'enforced' }` — обойти бизнес-логику перехода статусов
-
-Нужен явный whitelist: `{ status, result, legalForceDate, legalForceNotified, userId, url }`.
-
-### 3.2 `res: any` — типизация выброшена
-
-```ts
-function ok(res: any, data: unknown) { res.json({ success: true, data }); }
-function fail(res: any, code: string, msg: string, status = 400) { ... }
-```
-
-TypeScript-проект, `res` должен быть `Response` из express.
-
-### 3.3 Порядок маршрутов — потенциальная ловушка
-
-`GET /api/cases/stats` объявлен перед `GET /api/cases/:uid` — правильно. Но `POST /api/cases/wait` объявлен **после** `POST /api/cases` — нужно верифицировать тестом. Визуально работает, но легко сломать при рефакторинге.
+`createApp()` вынесен отдельно (INFRA-004 fix). Но `app.listen()` всё равно вызывается при `import './server.js'` — в тестах с `supertest(createApp())` это не страшно, но при множественных import — порт занят. Стандартный паттерн: `if (import.meta.url === pathToFileURL(process.argv[1]).href) app.listen(...)` или выделить `main.ts`.
 
 ---
 
-## 4. `packages/api/routes/parse.ts` — СЕРЬЁЗНО
+## 4. `packages/core/courts.ts` — 🟡 МИНОРНО
 
-### 4.1 `POST /api/parse/url` сломан для magistrate
-
-```ts
-const html = await fetch(url, {
-  headers: { 'User-Agent': 'CourtDesk/0.1' },
-}).then(r => r.text());
-```
-
-Две проблемы:
-1. `msudrf.ru` отдаёт страницу с капчей — `captcha/session.ts` здесь не используется.
-2. Node.js `fetch` (undici) не поддерживает `windows-1251` декодирование нативно. `r.text()` вернёт кракозябры для CP1251-ответов.
-
-Для magistrate этот эндпоинт **гарантированно не работает**.
-
-### 4.2 `mode: 'incremental'` из ARCHITECTURE.md упадёт в `runFull`
-
-```ts
-switch (mode) {
-  case 'full':  result = await runFull(); break;
-  case 'retry': result = await runRetry(); break;
-  case 'new':   result = await runNew(); break;
-  default:      result = await runFull(); break;  // ← ловит любой неизвестный mode
-}
-```
-
-ARCHITECTURE.md описывает режим `incremental`, но его нет в switch. Передача `mode: 'incremental'` молча запускает полный прогон.
-
----
-
-## 5. `packages/core/courts.ts` — СЕРЬЁЗНО
-
-### 5.1 Magistrate URL строится неправильно в district-адаптере
-
-`extractSubdomain` для `http://2.perm.msudrf.ru` возвращает `2.perm`.
-`extractCourtId` в `intake/classify.ts` для того же URL возвращает `2.perm`.
-
-Таким образом, `courtId = '2.perm'` — это корректно. Но `district.ts` строит URL как:
-
-```ts
-`https://${req.courtId}.sudrf.ru${href}`
-// → https://2.perm.sudrf.ru/...  ← НЕПРАВИЛЬНЫЙ ДОМЕН
-```
-
-Domain должен быть `2.perm.msudrf.ru`. District-адаптер не знает о типе суда при сборке URL из relative href. Проблема проявится при попытке перейти по ссылке из результатов поиска для magistrate.
-
-### 5.2 `findCourtsByName` — 10287 объектов в памяти при каждом вызове
+### 4.1 `findCourtsByName` — `map` перед `slice`
 
 ```ts
 return entries
   .filter(e => words.every(w => e.name.toLowerCase().includes(w)))
-  .map(toCourtInfo)   // ← новый объект на каждый из 10287 элементов
+  .map(toCourtInfo)   // ← все matching entries, до slice
   .slice(0, 50);
 ```
 
-`toCourtInfo` вызывается для всех отфильтрованных элементов до `slice`. При широком поиске («суд») создаётся 10287 объектов. Нужно `filter` → `slice` → `map`.
+При запросе «суд» потенциально 5000+ записей проходят через `toCourtInfo()` (создание нового объекта) до того как `slice(0, 50)` их отбросит. Порядок должен быть: `filter → slice → map`.
 
----
-
-## 6. `packages/core/config.ts` — МИНОРНО
-
-### 6.1 Комментарий «CourtSniffer» — не обновлён после копирования
+### 4.2 `getAllCourts()` — 10287 новых объектов на каждый вызов
 
 ```ts
-// Конфигурация CourtSniffer — загрузка секретов из .env
+export function getAllCourts(): CourtInfo[] {
+  return entries.map(toCourtInfo);
+}
 ```
 
-Копипаста из другого репозитория. Технически не влияет.
+Если `GET /api/courts` (без `q=`) вызывает `getAllCourts()` — это 10287 объектов при каждом запросе. Для справочника лучше вернуть `entries` напрямую или кэшировать результат `map` при инициализации модуля.
 
-### 6.2 `process.loadEnvFile` требует Node >= 20.6.0
-
-Non-standard API, добавленный в Node 20.6. Нет `engines` field в `package.json` — запуск на Node 18 LTS упадёт с `TypeError: process.loadEnvFile is not a function`.
-
----
-
-## 7. `packages/captcha/rucaptcha.ts` — МИНОРНО
-
-### 7.1 CRLF line endings
-
-Файл использует `\r\n` в отличие от всех остальных файлов (LF). `.gitattributes` отсутствует. При работе на Linux/CI будут проблемы с diff и potentially с ESLint (`eol-last`).
-
-### 7.2 Комментарий к `numeric: 4` вводит в заблуждение
+### 4.3 `COURT_TYPE_CODE` — `'GV'`, `'KV'` маппятся в `'district'`
 
 ```ts
-numeric: 4,  // msudrf captcha: буквы + цифры
+GV: 'district',   // Гарнизонный военный суд
+KV: 'district',   // Кассационный военный суд?
 ```
 
-В RuCaptcha API `numeric` — это enum: `0`=any, `1`=digits, `2`=letters, `3`=digits_or_letters, `4`=mixed. Значение `4` корректное, но комментарий не объясняет что это enum-значение, а не количество символов.
+Военные суды (`GV`, `OV`, `KV`) используют `sudrf.ru` субдомен, но их API-параметры могут отличаться от обычных районных судов. Маппинг в `'district'` технически работает для текущих адаптеров, но документально не обоснован.
 
 ---
 
-## 8. `packages/intake/classify.ts` — МИНОРНО
+## 5. `packages/intake/classify.ts` — 🟡 МИНОРНО
 
-### 8.1 ФИО-эвристика слишком широкая
+### 5.1 `CASE_NUMBER_RE` не покрывает реальные форматы
+
+```ts
+const CASE_NUMBER_RE = /^\d+-[а-яА-Я\d]+\/\d{4}$/;
+```
+
+Не покрывает:
+- Арбитражные: `А56-12345/2024` (кирилл. «А» в начале)
+- Кассация ВС: `88-КГ24-1-К8`
+- Апелляция: `33-1234/2024` (нет буквенного суффикса в некоторых судах)
+- Административные: `2а-123/2024`
+
+Паттерн слишком узкий — валидные номера дел будут класcифицированы как ФИО или `malformed`.
+
+### 5.2 ФИО-эвристика не проверяет алфавит
 
 ```ts
 const words = trimmed.split(/\s+/).filter(w => w.length >= 2);
@@ -246,40 +218,106 @@ if (words.length >= 2 && words.length <= 4) {
 }
 ```
 
-Любые 2-4 слова длиннее 1 символа распознаются как ФИО. `"POST /api"` → `search`. `"GET status ok"` → `search`. Нет проверки на кириллицу/латиницу как алфавит имён. Через CRM проблем нет (структурированные данные), но Web UI пользователь получит неожиданный результат.
+`"GET /api status"` (3 слова) → `type: 'search', defendant: 'GET /api status'`. Нет проверки на кириллицу. Это ломает intake для Web UI при случайном вводе.
 
-### 8.2 `CASE_NUMBER_RE` не покрывает арбитражные и кассационные номера
+### 5.3 `detectCourtTypeFromHost` — appeal определяется только по `deloId`
 
 ```ts
-const CASE_NUMBER_RE = /^\d+-[а-яА-Я\d]+\/\d{4}$/;
+if (deloId === '2800001') return 'cassation';
+if (deloId === '5') return 'appeal';
+return 'district';
 ```
 
-Реальные форматы: `А56-12345/2024` (арбитраж), `88-КГ24-1-К8` (кассация ВС). Паттерн не покрывает.
+`deloId` — нестабильный идентификатор, может измениться при обновлении СУДРФ. Для апелляционных судов надёжнее определять тип по субдомену (`oblsud`, `appl`) или по code из справочника судов.
 
 ---
 
-## 9. `packages/api/server.ts` — МИНОРНО
+## 6. `packages/core/config.ts` — 🟡 МИНОРНО
 
-### 9.1 Нет CORS middleware
+### 6.1 Комментарий «CourtSniffer» не обновлён
 
-Сервер слушает `127.0.0.1` — для production за reverse proxy это нормально. Но при разработке (фронт на `localhost:3000`, API на `localhost:8767`) fetch упадёт. ARCHITECTURE.md упоминает CORS как существующую возможность, но его нет.
+```ts
+// Конфигурация CourtSniffer — загрузка секретов из .env
+```
 
-### 9.2 Роутеры `/api/monitor/*` и `/api/legal-force/*` не подключены
+Копипаста из другого репозитория. Должно быть «CourtDesk».
 
-В `server.ts` подключены: `health`, `cases`, `search`, `parse`, `courts`, `intake`. Из ARCHITECTURE.md §6.1 — `/api/monitor/*` и `/api/legal-force/*` задокументированы как публичные контракты для CRM. Эти роутеры **не созданы и не подключены** — CRM-интеграция по этим путям невозможна.
+### 6.2 `process.loadEnvFile` — нет обработки `EACCES`
+
+```ts
+try {
+  process.loadEnvFile(resolve(process.cwd(), '.env'));
+} catch (e: unknown) {
+  if (!(e instanceof Error && 'code' in e && (e as NodeJS.ErrnoException).code === 'ENOENT')) throw e;
+}
+```
+
+Обрабатывается только `ENOENT`. Если `.env` существует, но нет прав на чтение (`EACCES`) — процесс упадёт с необработанной ошибкой. На prod-серверах с жёсткими правами файловой системы это реально.
+
+**Фикс:** добавить `'EACCES'` в условие или логировать warning вместо throw.
+
+---
+
+## 7. `packages/core/types.ts` — 🟡 МИНОРНО
+
+### 7.1 `ParseRunRequest.mode` не включает `'retry'`
+
+```ts
+export interface ParseRunRequest {
+  mode: 'full' | 'new' | 'errors';
+}
+```
+
+В `parse.ts` switch обрабатывает `'full' | 'retry' | 'new'`. Тип говорит `'errors'`, роутер принимает `'retry'`. Несоответствие: `mode: 'errors'` упадёт в `default: runFull()`, `mode: 'retry'` не задокументирован в типах.
+
+### 7.2 `CaseStatus` не включает `'archived'`
+
+```ts
+export type CaseStatus = 'waiting' | 'monitoring' | 'decision' | 'enforced' | 'error';
+```
+
+ARCHITECTURE.md §5.4 перечисляет `CaseStatus` как `'searching' | 'monitoring' | 'completed' | 'archived' | 'error'`. Типы в коде и типы в архитектуре не совпадают. `'archived'` статус упоминается в ARCHITECTURE.md но отсутствует в `types.ts` — нельзя архивировать дело через типизированный API.
+
+---
+
+## 8. `packages/api/routes/cases.ts` — 🟡 МИНОРНО
+
+### 8.1 `POST /api/cases` не валидирует формат `caseNumber`
+
+```ts
+const { url, courtId, courtCode, courtType, caseNumber, userId } = req.body ?? {};
+if (!url || !courtId || !courtType || !caseNumber) { ... }
+```
+
+Только проверка на truthy. Никаких проверок формата: `caseNumber: 123` (number), `caseNumber: 'garbage'` — всё пройдёт. В `WatchedCase.number` попадёт мусор, который потом сломает поиск дела.
+
+### 8.2 `POST /api/cases/wait` объявлен ПОСЛЕ `POST /api/cases`
+
+```ts
+router.post('/api/cases', ...)      // строка ~60
+router.post('/api/cases/wait', ...) // строка ~95
+```
+
+Express 5 правильно обрабатывает `/api/cases/wait` vs `/api/cases` — статический сегмент `wait` имеет приоритет над динамическим. Но это хрупко: если кто-то добавит `router.post('/api/cases/:uid', ...)` — порядок станет критичен. Лучше разместить специфичные роуты перед общим.
 
 ---
 
 ## ИТОГО
 
-| Приоритет | Файл | Проблема |
-|---|---|---|
-| 🔴 КРИТИЧНО | `store/cases.ts` | Race condition + N×disk reads, нет in-memory cache |
-| 🔴 КРИТИЧНО | `scheduler/orchestrator.ts` | `waiting`-кейс сломан, 3×updateCase на дело |
-| 🟠 СЕРЬЁЗНО | `api/routes/cases.ts` | PATCH без whitelist — data tamper возможен |
-| 🟠 СЕРЬЁЗНО | `api/routes/parse.ts` | magistrate сломан (нет captcha + CP1251) |
-| 🟠 СЕРЬЁЗНО | `core/courts.ts` | magistrate URL строится с неправильным доменом |
-| 🟡 МИНОРНО | `core/config.ts` | `loadEnvFile` требует Node ≥ 20.6, нет `engines` |
-| 🟡 МИНОРНО | `captcha/rucaptcha.ts` | CRLF endings, misleading комментарий |
-| 🟡 МИНОРНО | `intake/classify.ts` | ФИО-эвристика слишком широкая |
-| 🟡 МИНОРНО | `api/server.ts` | Нет CORS, нет monitor/legal-force роутеров |
+| Приоритет | Пакет/Файл | Проблема | BUG-ID |
+|-----------|-----------|----------|--------|
+| 🟠 СЕРЬЁЗНО | `scheduler/orchestrator.ts` | `makeEvent()` — `caseUid: ''` всегда | NEW-001 |
+| 🟠 СЕРЬЁЗНО | `scheduler/orchestrator.ts` | Race condition processOne vs PATCH API | NEW-002 |
+| 🟠 СЕРЬЁЗНО | `api/server.ts` | Нет CORS, нет `/api/status`, `/api/notifications` | NEW-003 |
+| 🟡 МИНОРНО | `scheduler/orchestrator.ts` | `error`-дела не ретраются в runFull/runRetry | NEW-004 |
+| 🟡 МИНОРНО | `scheduler/orchestrator.ts` | processWaiting: нет `lastChecked` при `!party` | NEW-005 |
+| 🟡 МИНОРНО | `core/courts.ts` | `findCourtsByName` — `map` перед `slice` | NEW-006 |
+| 🟡 МИНОРНО | `core/courts.ts` | `getAllCourts()` — 10287 объектов на каждый вызов | NEW-007 |
+| 🟡 МИНОРНО | `core/types.ts` | `ParseRunRequest.mode` != реальный switch | NEW-008 |
+| 🟡 МИНОРНО | `core/types.ts` | `CaseStatus` нет `'archived'` из ARCHITECTURE.md | NEW-009 |
+| 🟡 МИНОРНО | `intake/classify.ts` | `CASE_NUMBER_RE` не покрывает арбитраж/кассацию | NEW-010 |
+| 🟡 МИНОРНО | `intake/classify.ts` | ФИО-эвристика без проверки алфавита | NEW-011 |
+| 🟡 МИНОРНО | `core/config.ts` | `EACCES` не обрабатывается в loadEnvFile try/catch | NEW-012 |
+| 🟡 МИНОРНО | `api/routes/cases.ts` | `POST /api/cases` — нет валидации формата caseNumber | NEW-013 |
+| 🟢 INFO | `api/server.ts` | `app.listen()` на верхнем уровне модуля | NEW-014 |
+| 🟢 INFO | `core/config.ts` | Комментарий «CourtSniffer» не обновлён | NEW-015 |
