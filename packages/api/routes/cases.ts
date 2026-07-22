@@ -45,7 +45,7 @@ router.get('/api/cases/stats', (_req: Request, res: Response) => {
 // Одно дело
 router.get('/api/cases/:uid', (req: Request, res: Response) => {
   try {
-    const c = getCase(req.params['uid']);
+    const c = getCase(String(req.params['uid']));
     if (!c) return fail(res, 'NOT_FOUND', 'Дело не найдено', 404);
     ok(res, c);
   } catch (e) { fail(res, 'STORE_ERROR', errMsg(e), 500); }
@@ -107,7 +107,7 @@ router.patch('/api/cases/:uid', (req: Request, res: Response) => {
     const safeUpdates = Object.fromEntries(
       Object.entries(body).filter(([k]) => PATCH_ALLOWED.has(k as keyof WatchedCase)),
     ) as Partial<WatchedCase>;
-    const updated = updateCase(req.params['uid'], safeUpdates);
+    const updated = updateCase(String(req.params['uid']), safeUpdates);
     if (!updated) return fail(res, 'NOT_FOUND', 'Дело не найдено', 404);
     ok(res, updated);
   } catch (e) { fail(res, 'STORE_ERROR', errMsg(e), 500); }
@@ -116,7 +116,7 @@ router.patch('/api/cases/:uid', (req: Request, res: Response) => {
 // Удалить дело
 router.delete('/api/cases/:uid', (req: Request, res: Response) => {
   try {
-    const deleted = deleteCase(req.params['uid']);
+    const deleted = deleteCase(String(req.params['uid']));
     if (!deleted) return fail(res, 'NOT_FOUND', 'Дело не найдено', 404);
     ok(res, null);
   } catch (e) { fail(res, 'STORE_ERROR', errMsg(e), 500); }

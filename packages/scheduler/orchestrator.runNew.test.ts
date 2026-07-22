@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { WatchedCase, CaseHistoryEvent } from '../core/types.js';
+import type { WatchedCase, CaseHistoryEvent, SearchResult } from '../core/types.js';
 
 const storeMock = {
   listCases: vi.fn((): WatchedCase[] => []),
@@ -10,8 +10,8 @@ const storeMock = {
 };
 
 const searchAdapter = {
-  searchByParty: vi.fn(async () => []),
-  searchByCaseNumber: vi.fn(async () => []),
+  searchByParty: vi.fn(async (): Promise<SearchResult[]> => []),
+  searchByCaseNumber: vi.fn(async (): Promise<SearchResult[]> => []),
 };
 
 vi.mock('../store/index.js', () => storeMock);

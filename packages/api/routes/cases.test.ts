@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import express from 'express';
 import type { Express } from 'express';
-import type { WatchedCase } from '../../core/types.js';
+import type { WatchedCase, CaseHistoryEvent } from '../../core/types.js';
 
 const baseCase: WatchedCase = {
   uid: 'u1',
@@ -21,16 +21,16 @@ const baseCase: WatchedCase = {
 };
 
 const storeMock = {
-  listCases: vi.fn((): WatchedCase[] => []),
-  getCase: vi.fn((): WatchedCase | null => null),
-  addCase: vi.fn((): void => undefined),
-  updateCase: vi.fn((): WatchedCase | null => null),
-  deleteCase: vi.fn((): boolean => false),
+  listCases: vi.fn((f?: { status?: string; userId?: string; courtId?: string; q?: string }): WatchedCase[] => []),
+  getCase: vi.fn((uid: string): WatchedCase | null => null),
+  addCase: vi.fn((c: WatchedCase): void => undefined),
+  updateCase: vi.fn((uid: string, updates: Partial<WatchedCase>): WatchedCase | null => null),
+  deleteCase: vi.fn((uid: string): boolean => false),
   getStats: vi.fn(() => ({ monitoring: 0, waiting: 0, decision: 0, enforcedToday: 0 })),
 };
 
 const eventsMock = {
-  addEvent: vi.fn((): void => undefined),
+  addEvent: vi.fn((caseUid: string, event: CaseHistoryEvent): void => undefined),
 };
 
 vi.mock('../../store/index.js', () => storeMock);
@@ -55,6 +55,7 @@ describe('PATCH /api/cases/:uid — whitelist (BUG-004)', () => {
   let app: Express;
 
   beforeEach(async () => {
+    vi.clearAllMocks();
     vi.resetModules();
     storeMock.listCases.mockReturnValue([]);
     storeMock.getCase.mockReturnValue(null);
@@ -71,20 +72,20 @@ describe('PATCH /api/cases/:uid — whitelist (BUG-004)', () => {
 
   it('отфильтровывает uid из PATCH-тела', async () => {
     await req(app, 'patch', '/api/cases/u1', { uid: 'injected', status: 'enforced' });
-    const [, updates] = storeMock.updateCase.mock.calls[0];
+    const updates = storeMock.updateCase.mock.calls[0]?.[1];
     expect(updates).not.toHaveProperty('uid');
     expect(updates).toHaveProperty('status', 'enforced');
   });
 
   it('отфильтровывает createdAt из PATCH-тела', async () => {
     await req(app, 'patch', '/api/cases/u1', { createdAt: '1970-01-01', status: 'monitoring' });
-    const [, updates] = storeMock.updateCase.mock.calls[0];
+    const updates = storeMock.updateCase.mock.calls[0]?.[1];
     expect(updates).not.toHaveProperty('createdAt');
   });
 
   it('отфильтровывает courtType из PATCH-тела', async () => {
     await req(app, 'patch', '/api/cases/u1', { courtType: 'appeal', status: 'monitoring' });
-    const [, updates] = storeMock.updateCase.mock.calls[0];
+    const updates = storeMock.updateCase.mock.calls[0]?.[1];
     expect(updates).not.toHaveProperty('courtType');
   });
 
@@ -101,6 +102,7 @@ describe('DELETE /api/cases/:uid — не пишет если uid нет (BUG-00
   let app: Express;
 
   beforeEach(async () => {
+    vi.clearAllMocks();
     vi.resetModules();
     storeMock.deleteCase.mockReturnValue(false);
     app = await buildApp();
@@ -123,6 +125,7 @@ describe('POST /api/cases/wait — waiting-кейс', () => {
   let app: Express;
 
   beforeEach(async () => {
+    vi.clearAllMocks();
     vi.resetModules();
     storeMock.addCase.mockImplementation(() => undefined);
     eventsMock.addEvent.mockImplementation(() => undefined);

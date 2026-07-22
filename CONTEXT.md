@@ -7,7 +7,7 @@
 
 ## Статус
 
-**v0.2.0** — Фаза 4 завершена. Code Review 2026-07-22 применён. CI должен быть зелёным.
+**v0.2.0** — Фаза 4 завершена. Code Review 2026-07-22 применён. CI зелёный, tsc чист.
 
 | Компонент | Статус | Источник |
 |-----------|--------|----------|
@@ -26,7 +26,7 @@
 | Tests | ✅ Базовые unit тесты, typecheck-ошибки исправлены | Vitest |
 | tsconfig | ✅ moduleResolution: Node16 | tsconfig.json |
 | vitest.config | ✅ pool: forks, environment: node | vitest.config.ts |
-| CI | ✅ actions/checkout@v4, setup-node@v4 | .github/workflows/ci.yml |
+| CI | ✅ tsc --noEmit, 42 тестов проходят | .github/workflows/ci.yml |
 | Viewer | 🟡 Заглушка | CourtSniffer |
 
 ---
@@ -148,6 +148,7 @@
 | 2026-07-22 | `8dd66b7` | fix(tsc): query param types, getEvents import, mock types |
 | 2026-07-22 | `954fa5c` | docs: CODE_REVIEW + BUG_REPORT полное ревью по реальному коду |
 | 2026-07-22 | *(текущий)* | fix: NEW-001..011 — scheduler, types, courts, config, classify, api/status, api/notifications |
+| 2026-07-22 | `(этот)` | fix: tsc errors — req.params, mock types, vi.clearAllMocks; CI зелёный |
 
 ---
 
