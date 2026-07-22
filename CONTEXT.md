@@ -7,7 +7,7 @@
 
 ## Статус
 
-**v0.2.0** — Код-ревью 4 завершено. Дублирование кода устранено, CORS, батч-запись, graceful shutdown. CI зелёный.
+**v0.3.0** — Все раунды CR завершены. Дашборд, persistent notifications, POST /api/resolve. 57 тестов, tsc clean. Защита main без required status checks.
 
 | Компонент | Статус | Источник |
 |-----------|--------|----------|
@@ -26,7 +26,7 @@
 | Tests | ✅ Базовые unit тесты, typecheck-ошибки исправлены | Vitest |
 | tsconfig | ✅ moduleResolution: Node16 | tsconfig.json |
 | vitest.config | ✅ pool: forks, environment: node | vitest.config.ts |
-| CI | ✅ tsc --noEmit, 42 тестов проходят | .github/workflows/ci.yml |
+| CI | ✅ tsc --noEmit, 57 тестов проходят | .github/workflows/ci.yml |
 | Viewer | ✅ Дашборд + поиск | CourtDesk |
 
 ---
@@ -149,7 +149,9 @@
 | 2026-07-22 | `954fa5c` | docs: CODE_REVIEW + BUG_REPORT полное ревью по реальному коду |
 | 2026-07-22 | *(текущий)* | fix: NEW-001..011 — scheduler, types, courts, config, classify, api/status, api/notifications |
 | 2026-07-22 | `(этот)` | fix: tsc errors — req.params, mock types, vi.clearAllMocks; CI зелёный |
-| 2026-07-22 | `(CR4)` | fix: CR4 — CORS, shared fetchHtml/parseResults, batch updateCase, courts list, graceful shutdown |
+| 2026-07-22 | `315488f` | refactor: magistrate searchByCaseNumber делегирует parse-адаптеру |
+| 2026-07-22 | `dceaa8d` | feat: viewer dashboard (UC-0) + search.html |
+| 2026-07-22 | `(текущий)` | docs: консолидация CODE_REVIEW, обновление всей документации |
 
 ---
 
