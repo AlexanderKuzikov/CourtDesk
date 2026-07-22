@@ -7,6 +7,7 @@ const storeMock = {
   addEvent: vi.fn((): void => undefined),
   getCase: vi.fn((): WatchedCase | null => null),
   getEvents: vi.fn((): CaseHistoryEvent[] => []),
+  addNotification: vi.fn((): void => undefined),
 };
 
 const searchAdapter = {

@@ -1,9 +1,9 @@
 // Оркестратор мониторинга
 import iconv from 'iconv-lite'; // статический импорт — BUG-011
-import { listCases, updateCase, addEvent, getCase, getEvents } from '../store/index.js';
+import { listCases, updateCase, addEvent, getCase, getEvents, addNotification } from '../store/index.js';
 import { getParseAdapter } from '../parse/index.js';
 import { getSearchAdapter } from '../search/index.js';
-import type { WatchedCase, CaseHistoryEvent } from '../core/types.js';
+import type { WatchedCase, CaseHistoryEvent, Notification } from '../core/types.js';
 
 const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 const RATE_DELAY_MS = 1500; // RATE-001: задержка между запросами к sudrf.ru
@@ -142,6 +142,14 @@ async function processWaiting(c: WatchedCase): Promise<void> {
   });
   // NEW-001 FIXED: caseUid передаётся в makeEvent
   addEvent(c.uid, makeEvent(c.uid, 'found', `Дело появилось: ${r.caseNumber}`, { caseUrl: r.caseUrl }));
+  addNotification({
+    uid: crypto.randomUUID(),
+    caseUid: c.uid,
+    type: 'found',
+    message: `Дело ${r.caseNumber} появилось в системе`,
+    read: false,
+    createdAt: now(),
+  });
 }
 
 async function processOne(c: WatchedCase): Promise<void> {
@@ -164,6 +172,14 @@ async function processOne(c: WatchedCase): Promise<void> {
       updates.status = 'decision';
       updates.result = card.card.result;
       addEvent(c.uid, makeEvent(c.uid, 'decision', `Вынесено решение: ${card.card.result}`));
+      addNotification({
+        uid: crypto.randomUUID(),
+        caseUid: c.uid,
+        type: 'decision',
+        message: `По делу ${c.number} вынесено решение: ${card.card.result}`,
+        read: false,
+        createdAt: now(),
+      });
     }
   }
 
@@ -186,6 +202,14 @@ async function processOne(c: WatchedCase): Promise<void> {
               legalForceDate: r.legalForceDate,
             }),
           );
+          addNotification({
+            uid: crypto.randomUUID(),
+            caseUid: c.uid,
+            type: 'enforced',
+            message: `Решение по делу ${c.number} вступило в законную силу`,
+            read: false,
+            createdAt: now(),
+          });
         }
       }
     } catch {
