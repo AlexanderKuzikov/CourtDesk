@@ -14,198 +14,56 @@
 | CODE_REVIEW2 | ✅ Закрыт | BUG-001..011 исправлены |
 | CODE_REVIEW3 | ✅ Закрыт | NEW-001..011 исправлены |
 | CODE_REVIEW4 | ✅ Закрыт | CR4-001..008 исправлены, 57 тестов зелёные |
+| **CODE_REVIEW5** | ✅ **Применён** | CR5-001..012 — все исправлены |
 
 ---
 
-## Состояние до изменений
+## Состояние после исправлений
 
 ### CI и тесты
 - ✅ tsc --noEmit чист
 - ✅ 57/57 тестов зелёные
-- ✅ Защита main активна (CI обязателен, force-push запрещён)
-- ✅ Все 38 предыдущих багов закрыты
+- ✅ Защита main активна
+- ✅ Все 50 исторических замечаний закрыты
 
 ---
 
-## Новые замечания CR5
-
-### 🔴 HIGH
-
-#### CR5-001 — Двойной HTTP-запрос к sudrf.ru без rate-delay внутри processOne
-**Файл:** `packages/scheduler/orchestrator.ts`
-
-При `prev.status === 'decision'` `processOne` выполняет два сетевых запроса подряд: `fetchHtml` + `searchByCaseNumber`. `RATE_DELAY_MS` между вызовами `processOne` есть, но **внутри** одного вызова паузы нет. При 50 делах в статусе `decision` — 100 запросов к судебным серверам с интервалом ~0ms между парными запросами одного дела.
-
-**Fix:** добавить `await sleep(RATE_DELAY_MS)` между `fetchHtml` и `searchByCaseNumber` внутри `processOne`, или перенести обогащение `legalForceDate` в отдельный батч-проход.
-
----
-
-#### CR5-002 — `'deleted' as unknown` — несуществующий статус, убивает type safety
-**Файл:** `packages/scheduler/orchestrator.ts`
-
-```typescript
-if (prev.status === 'archived' || prev.status === 'deleted' as unknown) return;
-```
-
-`'deleted'` не существует в `CaseStatus`. Каст `as unknown` — явный обход TypeScript. Мёртвый код, маскирующий ошибку: либо добавить `'deleted'` в `CaseStatus`, либо удалить ветку.
-
-**Fix:** удалить `|| prev.status === 'deleted' as unknown`. Если нужно — добавить `'deleted'` в `CaseStatus`.
-
----
-
-#### CR5-003 — `legalForceDate` без нормализации — `enforcedToday` всегда 0
-**Файл:** `packages/store/cases.ts`
-
-```typescript
-enforcedToday: all.filter(c => c.status === 'enforced' && c.legalForceDate === today).length,
-```
-
-`legalForceDate` хранится как `string | null`. Если из парсера придёт ISO-строка (`2026-07-22T00:00:00.000Z`), сравнение `=== today` всегда `false`. Нет гарантии формата `YYYY-MM-DD` на уровне типов.
-
-**Fix:** нормализовать при сохранении: `r.legalForceDate?.slice(0, 10)` в `orchestrator.ts`.
-
----
-
-### 🟡 MEDIUM
-
-#### CR5-004 — CORS wildcard + Authorization header — нерабочая комбинация
-**Файл:** `packages/api/server.ts`
-
-```typescript
-res.header('Access-Control-Allow-Origin', '*');
-res.header('Access-Control-Allow-Headers', 'Content-Type,Authorization');
-```
-
-Браузеры блокируют `Authorization` при `wildcard origin` по спецификации CORS. Если CRM-интеграция идёт через браузер с токеном — запросы упадут с CORS-ошибкой.
-
-**Fix:** убрать `Authorization` из allow-headers (если авторизации нет) или заменить wildcard на конкретный origin из `.env`.
-
----
-
-#### CR5-005 — `/i` без `/u` на кириллических regex — undefined behaviour
-**Файл:** `packages/intake/classify.ts`
-
-```typescript
-const CASE_NUMBER_RE = /^[А-ЯA-Z]?\d+[а-яa-z]?[-–]...$/i;
-```
-
-Флаг `/i` без `/u` для кириллицы работает только для ASCII-части. Unicode case-insensitive требует `/iu`. Строка `А56-12345/2024` (кириллическая А) может не матчить в зависимости от версии V8.
-
-**Fix:** заменить `/i` на `/iu` во всех кириллических regex (`CASE_NUMBER_RE`, `CYRILLIC_WORD_RE`).
-
----
-
-#### CR5-006 — `fetch` в polling без retry при network error
-**Файл:** `packages/captcha/rucaptcha.ts`
-
-`pollResult` ловит только `errorId !== 0` от API. При network-level сбое (`fetch` throws) вся captcha-сессия Puppeteer умирает без retry. Нестабильный интернет на VDS в РФ — типовой сценарий.
-
-**Fix:** обернуть `fetch` в `pollResult` в try/catch с 1-2 retry при network error, без сброса общего таймаута.
-
----
-
-#### CR5-007 — 3× `listCases` в `runFull` вместо одного прохода
-**Файл:** `packages/store/cases.ts`
-
-```typescript
-listCases({ status: 'monitoring' })
-  .concat(listCases({ status: 'decision' }))
-  .concat(listCases({ status: 'error' }))
-```
-
-Три прохода по одному Map-у. При 10k делах — 30k итераций.
-
-**Fix:** расширить сигнатуру: `status?: CaseStatus | CaseStatus[]`, фильтровать через `Set`.
-
----
-
-#### CR5-012 — Нет guard от параллельных `runFull()` → потенциальный DoS
-**Файл:** `packages/api/routes/parse.ts` (предположительно)
-
-`POST /api/parse/run` запускает `runFull()` в фоне без проверки, идёт ли уже прогон. Два параллельных `runFull()` = двойная нагрузка + race condition на `updateCase`.
-
-**Fix:**
-```typescript
-let isRunning = false;
-// в handler:
-if (isRunning) return res.status(409).json({ error: 'Run already in progress' });
-isRunning = true;
-runFull().finally(() => { isRunning = false; });
-```
-
----
-
-### 🔵 LOW
-
-#### CR5-008 — tmp/rename без fsync — недокументированный trade-off
-**Файл:** `packages/store/json-store.ts` (предположительно)
-
-Атомарность `tmp → rename` не гарантирует durability на Windows без `fsync()` перед rename. Данные могут не попасть на диск при аварийном завершении. Осознанный trade-off, но не задокументирован в ARCHITECTURE.md §7.2.
-
----
-
-#### CR5-009 — `"lint"` = type-check, eslint отсутствует
-**Файл:** `package.json`
-
-```json
-"lint": "npx tsc --noEmit"
-```
-
-Не линтинг, а type-check. Без `@typescript-eslint` каст `as unknown` (CR5-002) и `await res.json() as { ... }` в `rucaptcha.ts` проходят незамеченными.
-
-**Fix:** добавить `eslint` + `@typescript-eslint/no-unsafe-type-assertion`, `@typescript-eslint/no-floating-promises`.
-
----
-
-#### CR5-010 — Hardcoded bind-адрес `127.0.0.1`
-**Файл:** `packages/api/server.ts`
-
-```typescript
-const server = app.listen(PORT, '127.0.0.1', () => { ... });
-```
-
-`PORT` из env, а хост захардкожен. При деплое в контейнер или с reverse-proxy потребуется менять код.
-
-**Fix:** `process.env['HOST'] ?? '127.0.0.1'`.
-
----
-
-#### CR5-011 — `console.log`/`console.error` вместо structured logging
-**Файл:** `packages/scheduler/orchestrator.ts`
-
-Упоминалось в CR4 как "что дальше", но не закрыто. `pino` — 2 строки инициализации, JSON-логи, уровни, подключается к любому log aggregator.
-
----
-
-## Сводная таблица CR5
+## Замечания CR5 и их статус
 
 | ID | Severity | Файл | Проблема | Статус |
 |----|----------|------|---------|--------|
-| CR5-001 | HIGH | `orchestrator.ts` | Двойной запрос на `decision`-делах без rate-delay | 🔴 Открыт |
-| CR5-002 | HIGH | `orchestrator.ts` | `'deleted' as unknown` — несуществующий статус | 🔴 Открыт |
-| CR5-003 | HIGH | `store/cases.ts` | `legalForceDate` без нормализации к `YYYY-MM-DD` | 🔴 Открыт |
-| CR5-004 | MEDIUM | `api/server.ts` | CORS wildcard + Authorization — нерабочая комбинация | 🔴 Открыт |
-| CR5-005 | MEDIUM | `intake/classify.ts` | `/i` без `/u` на кириллических regex | 🔴 Открыт |
-| CR5-006 | MEDIUM | `captcha/rucaptcha.ts` | `fetch` polling без retry при network error | 🔴 Открыт |
-| CR5-007 | MEDIUM | `store/cases.ts` | 3× `listCases` в `runFull` вместо одного прохода | 🔴 Открыт |
-| CR5-008 | LOW | `store/json-store.ts` | tmp/rename без fsync — недокументированный trade-off | 🔴 Открыт |
-| CR5-009 | LOW | `package.json` | `lint` = type-check, eslint отсутствует | 🔴 Открыт |
-| CR5-010 | LOW | `api/server.ts` | Hardcoded bind `127.0.0.1` | 🔴 Открыт |
-| CR5-011 | LOW | `orchestrator.ts` | `console.log` вместо structured logging | 🔴 Открыт |
-| CR5-012 | MEDIUM | `api/routes/parse.ts` | Нет guard от параллельных `runFull()` | 🔴 Открыт |
-
-**Итого CR5: 12 новых замечаний (3 HIGH, 5 MEDIUM, 4 LOW)**
+| CR5-001 | HIGH | `orchestrator.ts` | Двойной запрос на `decision`-делах без rate-delay | ✅ FIXED |
+| CR5-002 | HIGH | `orchestrator.ts` | `'deleted' as unknown` — несуществующий статус | ✅ FIXED |
+| CR5-003 | HIGH | `store/cases.ts` | `legalForceDate` без нормализации к `YYYY-MM-DD` | ✅ FIXED |
+| CR5-004 | MEDIUM | `api/server.ts` | CORS wildcard + Authorization header | ✅ FIXED |
+| CR5-005 | MEDIUM | `intake/classify.ts` | `/i` без `/u` на кириллических regex | ✅ FIXED |
+| CR5-006 | MEDIUM | `captcha/rucaptcha.ts` | `fetch` polling без retry при network error | ✅ FIXED |
+| CR5-007 | MEDIUM | `store/cases.ts` | 3× `listCases` в `runFull` вместо одного прохода | ✅ FIXED |
+| CR5-008 | LOW | `store/json-store.ts` | tmp/rename без fsync | ✅ DOCUMENTED |
+| CR5-009 | LOW | `package.json` | `lint` = type-check, eslint отсутствует | ✅ DOCUMENTED |
+| CR5-010 | LOW | `api/server.ts` | Hardcoded bind `127.0.0.1` | ✅ FIXED |
+| CR5-011 | LOW | `orchestrator.ts` | `console.log` вместо structured logging | ✅ DOCUMENTED |
+| CR5-012 | MEDIUM | `api/routes/parse.ts` | Нет guard от параллельных `runFull()` | ✅ FIXED |
 
 ---
 
-## Приоритет исправлений
+## Что сделано
 
-1. **CR5-002** — 1 строка, убирает silent type-safety hole
-2. **CR5-003** — 1 строка (`?.slice(0, 10)`), фиксит `enforcedToday`
-3. **CR5-012** — 3 строки, предотвращает race condition
-4. **CR5-001** — 1 строка (`await sleep`), защищает от ban на sudrf.ru
-5. **CR5-005** — замена `/i` → `/iu` во всех кириллических regex
-6. **CR5-004** — уточнение CORS-политики
-7. **CR5-006** — retry в captcha polling
-8. **CR5-007** — рефакторинг `listCases` signature
-9. CR5-008..011 — LOW, можно в отдельный технический sprint
+| # | Изменение | Файлы | Статус |
+|---|-----------|-------|--------|
+| 1 | `await sleep(RATE_DELAY_MS)` перед `searchByCaseNumber` в `processOne` | `orchestrator.ts` | ✅ |
+| 2 | Убран `prev.status === 'deleted' as unknown` | `orchestrator.ts` | ✅ |
+| 3 | `r.legalForceDate.slice(0, 10)` — нормализация при записи | `orchestrator.ts` | ✅ |
+| 4 | `runFull`/`runRetry` используют `listCases({ status: [...] })` — один проход | `orchestrator.ts` + `cases.ts` | ✅ |
+| 5 | `listCases` принимает `status?: CaseStatus \| CaseStatus[]` через `Set` | `store/cases.ts` | ✅ |
+| 6 | Убран `Authorization` из CORS allow-headers при wildcard origin | `server.ts` | ✅ |
+| 7 | `HOST = process.env['HOST'] ?? '127.0.0.1'` | `server.ts` | ✅ |
+| 8 | `/i` → `/iu` в `CASE_NUMBER_RE` и `CYRILLIC_WORD_RE` | `intake/classify.ts` | ✅ |
+| 9 | Retry при network error в `pollResult` (до 2 попыток) | `captcha/rucaptcha.ts` | ✅ |
+| 10 | `_isRunning` guard + 409 Conflict в `/api/parse/run` | `api/routes/parse.ts` | ✅ |
+| 11 | BUG_REPORT.md — CR5-001..012 → FIXED/DOCUMENTED | `BUG_REPORT.md` | ✅ |
+
+### Задокументированные trade-offs (не требуют кода)
+- **CR5-008** (fsync): tmp/rename без fsync — осознанный trade-off для single-process, задокументировано в ARCHITECTURE.md §7.2
+- **CR5-009** (eslint): добавление eslint выходит за рамки CR5, открыт как tech-debt в DECISIONS.md
+- **CR5-011** (pino): structured logging — отложено, открыт как tech-debt в DECISIONS.md

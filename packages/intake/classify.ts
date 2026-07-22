@@ -3,13 +3,12 @@ import type { Classification, CaseCardClassification, SearchClassification } fro
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-// NEW-010 FIXED: расширенный паттерн номеров дел РФ:
-// Покрывает: 2-4160/2026, А56-12345/2024, 2а-123/2025, 33-1234/2024, 88-КГ24-1-К8
-const CASE_NUMBER_RE =
-  /^[А-ЯA-Z]?\d+[а-яa-z]?[-–][А-ЯёЁа-яёЁ\d]+([-–][А-ЯёЁа-яёЁ\d]+)*(\/\d{4})?$/i;
+// NEW-010 FIXED: расширенный паттерн номеров дел РФ
+// CR5-005 FIXED: /iu вместо /i — корректный Unicode case-insensitive для кириллицы
+const CASE_NUMBER_RE = /^[А-ЯA-Z]?\d+[а-яa-z]?[-–][А-ЯёЁа-яёЁ\d]+([-–][А-ЯёЁа-яёЁ\d]+)*(\/\d{4})?$/iu;
 
-// NEW-011 FIXED: только кириллические слова распознаются как ФИО
-const CYRILLIC_WORD_RE = /^[А-ЯЁа-яё]+(-[А-ЯЁа-яё]+)?$/;
+// CR5-005 FIXED: /u для корректного Unicode matching
+const CYRILLIC_WORD_RE = /^[А-ЯЁа-яё]+(-[А-ЯЁа-яё]+)?$/u;
 
 function detectCourtTypeFromHost(host: string, deloId: string | null): CourtType {
   if (host.endsWith('.msudrf.ru')) return 'magistrate';
@@ -30,6 +29,7 @@ function tryParseCaseCardUrl(input: string): CaseCardClassification | null {
   } catch {
     return null;
   }
+
   const host = u.hostname;
   const isSudrf = host.endsWith('.sudrf.ru');
   const isMsudrf = host.endsWith('.msudrf.ru');
@@ -68,13 +68,10 @@ function tryParseSearchText(input: string): SearchClassification | null {
   const trimmed = input.trim();
   if (!trimmed || trimmed.length < 3) return null;
 
-  // NEW-010 FIXED: расширенный паттерн номеров дел
   if (CASE_NUMBER_RE.test(trimmed)) {
     return { type: 'search', caseNumber: trimmed };
   }
 
-  // NEW-011 FIXED: ФИО — только кириллические слова, 2–4 штуки
-  // Исключает латинские слова, URL-фрагменты, технические строки
   const words = trimmed.split(/\s+/).filter(w => w.length >= 2);
   if (
     words.length >= 2 &&
@@ -97,10 +94,13 @@ export function classify(input: string): Classification {
   if (!input || typeof input !== 'string') {
     return { type: 'malformed', error: 'Пустой запрос' };
   }
+
   const card = tryParseCaseCardUrl(input);
   if (card) return card;
+
   const search = tryParseSearchText(input);
   if (search) return search;
+
   return { type: 'malformed', error: 'Не удалось распознать запрос' };
 }
 
