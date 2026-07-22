@@ -1,23 +1,28 @@
 import { Router, type Request, type Response } from 'express';
 import { getSearchAdapter } from '../../search/index.js';
-import type { SearchRequest } from '../../core/types.js';
+import type { SearchRequest, CourtType } from '../../core/types.js';
 
 const router = Router();
 
+function validateCourtType(v: unknown): CourtType {
+  const s = String(v);
+  if (['district', 'appeal', 'cassation', 'magistrate'].includes(s)) return s as CourtType;
+  throw new Error(`Неизвестный тип суда: ${s}`);
+}
+
 router.post('/api/resolve', (req: Request, res: Response) => {
   try {
-    const { courtId, courtType, caseNumber } = req.body as Record<string, unknown>;
-    if (!courtId || !courtType || !caseNumber) {
+    const body = req.body as Record<string, unknown>;
+    const courtId = String(body['courtId'] ?? '');
+    const caseNumber = String(body['caseNumber'] ?? '');
+    const courtTypeRaw = body['courtType'];
+    if (!courtId || !courtTypeRaw || !caseNumber) {
       res.status(400).json({ success: false, error: 'Необходимы courtId, courtType и caseNumber', code: 'BAD_REQUEST' });
       return;
     }
-    const adapter = getSearchAdapter(String(courtType));
-    const url = adapter.buildSearchUrl({
-      courtId: String(courtId),
-      courtCode: String(courtId),
-      courtType: String(courtType),
-      caseNumber: String(caseNumber),
-    });
+    const courtType = validateCourtType(courtTypeRaw);
+    const adapter = getSearchAdapter(courtType);
+    const url = adapter.buildSearchUrl({ courtId, courtCode: courtId, courtType, caseNumber });
     res.json({ success: true, data: { url } });
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Unknown error';

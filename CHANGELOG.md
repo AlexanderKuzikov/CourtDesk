@@ -16,8 +16,8 @@
 - **SEARCH_PARAMS constants** (`packages/search/constants.ts`): hardcoded `delo_id`/`case_type` вынесены в единый конфиг, импортированы во все 4 адаптера
 - **Tests**: добавлено покрытие для `makeEvent`, `GET /api/status`, `GET /api/notifications`, `POST /api/resolve`
 - **Smoke test**: добавлен тест `POST /api/parse/url` для magistrate (через капча-сессию)
-- **POST /api/resolve**: новый эндпоинт (суд + номер → ссылка) `packages/api/routes/resolve.ts`
 - **Persistent notifications**: новое `store/notifications.ts` с JSON-хранилищем, `PATCH /api/notifications/:uid/read`, интеграция в scheduler (создание уведомлений при decision/enforced/found)
+- **Magistrate search refactor**: URL-парсинг из `search/adapters/magistrate.ts` делегирован в `parse/adapters/magistrate.ts` (устранено дублирование)
 
 ### Fixed
 - **tsconfig.json**: `moduleResolution` исправлен с `bundler` на `Node16` (вместе с `module: Node16`). `bundler` предназначен для Vite/esbuild и вызывал ошибки `tsc --noEmit` в Node ESM-проекте.

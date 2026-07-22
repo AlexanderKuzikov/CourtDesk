@@ -15,7 +15,7 @@ router.get('/api/notifications', (_req: Request, res: Response) => {
 
 router.patch('/api/notifications/:uid/read', (req: Request, res: Response) => {
   try {
-    const ok = markAsRead(req.params['uid']);
+    const ok = markAsRead(String(req.params['uid']));
     if (!ok) {
       res.status(404).json({ success: false, error: 'Уведомление не найдено', code: 'NOT_FOUND' });
       return;

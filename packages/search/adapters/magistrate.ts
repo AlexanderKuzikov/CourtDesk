@@ -121,47 +121,27 @@ export class MagistrateSearchAdapter implements SearchAdapter {
       throw new Error('Для мировых судов нужен ключ RuCaptcha в .env');
     }
 
-    // Парсинг по URL дела — прямой сценарий
+    // Парсинг по URL дела — делегируем parse-адаптеру
     if (req.caseNumber && req.caseNumber.startsWith('http')) {
       const { fetchMagistrateHtml } = await import('../../captcha/session.js');
       const html = await fetchMagistrateHtml({ url: req.caseNumber, apiKey, debugDir: 'captcha-debug' });
       if (isCaptchaPage(html)) {
         throw new Error('Captcha loop: не удалось загрузить страницу дела');
       }
-      const $ = cheerio.load(html);
-      // Парсинг карточки дела через tab-content
-      const rawCard: Record<string, string> = {};
-      $('.tab-content').first().find('table.tablcont tr').each((_, el) => {
-        const tds = $(el).find('td');
-        if (tds.length < 2) return;
-        const key = tds.eq(0).text().trim().replace(/:$/, '');
-        const value = tds.eq(1).text().trim();
-        if (key) rawCard[key] = value;
-      });
-      const caseNumber = $('h2').filter((_, el) => $(el).text().includes('ДЕЛО №'))
-        .first().text().replace(/ДЕЛО\s*№/i, '').trim() || '';
-      let uid = '';
-      $('a[href*="case_uid"]').first().each((_, el) => {
-        const m = $(el).attr('href')?.match(/case_uid=([a-f0-9-]+)/i);
-        if (m) uid = m[1];
-      });
-      const events: Array<{ date: string }> = [];
-      $('.tab-content').eq(1).find('table.tablcont tr').slice(2).each((_, row) => {
-        const tds = $(row).find('td');
-        if (tds.length < 4) return;
-        events.push({ date: tds.eq(1).text().trim() });
-      });
+      const { getParseAdapter } = await import('../../parse/index.js');
+      const adapter = getParseAdapter('magistrate');
+      const card = await adapter.parse(html, req.caseNumber);
       return [{
-        caseNumber,
+        caseNumber: card.number,
         caseUrl: req.caseNumber,
-        uid,
+        uid: card.uid,
         courtCode: req.courtCode,
-        judge: rawCard['Председательствующий судья'] || null,
-        result: rawCard['Результат рассмотрения'] || null,
-        legalForceDate: rawCard['Дело рассмотрено (выдан приказ)'] || null,
-        filingDate: events[0]?.date || null,
-        decisionDate: rawCard['Дело рассмотрено (выдан приказ)'] || null,
-        parties: [],
+        judge: card.card.judge,
+        result: card.card.result,
+        legalForceDate: null,
+        filingDate: card.card.filingDate,
+        decisionDate: card.card.hearingDate,
+        parties: card.parties.map(p => ({ role: p.role ?? '', name: p.name ?? '' })),
         courtId: req.courtId,
         courtType: 'magistrate',
       }];
