@@ -6,13 +6,15 @@ import { encodeParam } from '../../core/encoding.js';
 import type { SearchRequest, SearchResult } from '../../core/types.js';
 import type { SearchAdapter } from './types.js';
 import { fetchHtml, parseResults } from '../shared.js';
+import { SEARCH_PARAMS } from '../constants.js';
 
 export class DistrictSearchAdapter implements SearchAdapter {
   buildSearchUrl(req: SearchRequest): string {
+    const p = SEARCH_PARAMS.district;
     const base = `https://${req.courtId}.sudrf.ru/modules.php`;
     const q = [
       'name=sud_delo', 'srv_num=1',
-      'name_op=r', 'delo_id=1540005', 'case_type=0', 'new=0',
+      'name_op=r', `delo_id=${p.delo_id}`, `case_type=${p.case_type}`, 'new=0',
       'G1_PARTS__NAMESS=' + encodeParam(req.defendant || req.plaintiff || ''),
       'g1_case__CASE_NUMBERSS=' + encodeURIComponent(req.caseNumber || ''),
       'g1_case__JUDICIAL_UIDSS=',

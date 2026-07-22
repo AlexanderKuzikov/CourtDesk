@@ -14,6 +14,7 @@ import { getRuCaptchaKey } from '../../core/config.js';
 import { encodeParam } from '../../core/encoding.js';
 import type { SearchRequest, SearchResult } from '../../core/types.js';
 import type { SearchAdapter } from './types.js';
+import { SEARCH_PARAMS } from '../constants.js';
 
 /**
  * Парсинг таблицы результатов msudrf (формат ГАС «Правосудие»).
@@ -102,10 +103,11 @@ async function solveCaptchaOnPage(page: any, apiKey: string): Promise<void> {
 
 export class MagistrateSearchAdapter implements SearchAdapter {
   buildSearchUrl(req: SearchRequest): string {
+    const p = SEARCH_PARAMS.magistrate;
     const base = `https://${req.courtId}.msudrf.ru/modules.php`;
     const q = [
       'name=sud_delo', 'srv_num=1',
-      'name_op=r', 'delo_id=1540005', 'case_type=0', 'new=0',
+      'name_op=r', `delo_id=${p.delo_id}`, `case_type=${p.case_type}`, 'new=0',
       'G1_PARTS__NAMESS=' + encodeParam(req.defendant || req.plaintiff || ''),
       'g1_case__CASE_NUMBERSS=' + encodeURIComponent(req.caseNumber || ''),
       'Submit=%CD%E0%E9%F2%E8',

@@ -13,6 +13,7 @@
 - **Shared fetchHtml/parseResults**: дублированный код из `district.ts`, `appeal.ts`, `cassation.ts` вынесен в `packages/search/shared.ts`
 - **Batch updateCase**: `processOne()` делает один `updateCase` в конце, а не 3 промежуточных
 - **CODE_REVIEW4.md**: документация состояния до изменений
+- **SEARCH_PARAMS constants** (`packages/search/constants.ts`): hardcoded `delo_id`/`case_type` вынесены в единый конфиг, импортированы во все 4 адаптера
 
 ### Fixed
 - **tsconfig.json**: `moduleResolution` исправлен с `bundler` на `Node16` (вместе с `module: Node16`). `bundler` предназначен для Vite/esbuild и вызывал ошибки `tsc --noEmit` в Node ESM-проекте.
