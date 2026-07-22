@@ -152,17 +152,17 @@ async function processOne(c: WatchedCase): Promise<void> {
   // NEW-002 FIXED: перечитываем актуальное состояние перед каждой записью,
   // чтобы не затереть изменения, внесённые через PATCH API пока шёл fetchHtml.
   const prev = getCase(c.uid);
-  if (!prev) return; // дело удалено параллельным запросом
+  if (!prev) return;
 
-  // Если дело было заархивировано/удалено через UI — не перезаписываем
   if (prev.status === 'archived' || prev.status === 'deleted' as unknown) return;
 
+  const updates: Partial<WatchedCase> = {};
+
   if (card.card.result && !prev.result) {
-    // NEW-002: перечитываем снова непосредственно перед записью
     const latest = getCase(c.uid);
     if (latest && latest.result === null) {
-      updateCase(c.uid, { status: 'decision', result: card.card.result });
-      // NEW-001 FIXED: caseUid в makeEvent
+      updates.status = 'decision';
+      updates.result = card.card.result;
       addEvent(c.uid, makeEvent(c.uid, 'decision', `Вынесено решение: ${card.card.result}`));
     }
   }
@@ -171,18 +171,15 @@ async function processOne(c: WatchedCase): Promise<void> {
     try {
       const searchAdapter = getSearchAdapter(c.courtType);
       const results = await searchAdapter.searchByCaseNumber({
-        courtId: c.courtId,
-        courtCode: c.courtCode,
-        courtType: c.courtType,
-        caseNumber: c.number,
+        courtId: c.courtId, courtCode: c.courtCode,
+        courtType: c.courtType, caseNumber: c.number,
       });
       const r = results.find(r => r.uid === c.uid || r.caseNumber === c.number);
       if (r?.legalForceDate) {
-        // NEW-002: перечитываем перед записью
         const latest = getCase(c.uid);
         if (latest && !latest.legalForceDate) {
-          updateCase(c.uid, { status: 'enforced', legalForceDate: r.legalForceDate });
-          // NEW-001 FIXED: caseUid в makeEvent
+          updates.status = 'enforced';
+          updates.legalForceDate = r.legalForceDate;
           addEvent(
             c.uid,
             makeEvent(c.uid, 'enforced', `Решение вступило в силу ${r.legalForceDate}`, {
@@ -196,10 +193,11 @@ async function processOne(c: WatchedCase): Promise<void> {
     }
   }
 
-  // Финальный lastChecked — снова проверяем что дело ещё существует
+  // Единый вызов updateCase со всеми накопленными изменениями
   const finalState = getCase(c.uid);
   if (finalState) {
-    updateCase(c.uid, { lastChecked: now() });
+    updates.lastChecked = now();
+    updateCase(c.uid, updates);
   }
 }
 

@@ -2,82 +2,13 @@
 // delo_id=1540005 — гражданские дела первой инстанции
 // op=sf → op=r
 
-import * as cheerio from 'cheerio';
-import iconv from 'iconv-lite';
-import https from 'https';
 import { encodeParam } from '../../core/encoding.js';
 import type { SearchRequest, SearchResult } from '../../core/types.js';
 import type { SearchAdapter } from './types.js';
-
-function fetchHtml(url: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const parsed = new URL(url);
-    https.get({
-      hostname: parsed.hostname,
-      path: parsed.pathname + parsed.search,
-      rejectUnauthorized: false,
-      timeout: 120000,
-      headers: { 'User-Agent': 'CourtSniffer/0.1' },
-    }, res => {
-      // sudrf.ru может возвращать 403 Forbidden (блокировка по IP/User-Agent)
-      if (res.statusCode && res.statusCode >= 400) {
-        reject(new Error(`HTTP ${res.statusCode} — sudrf.ru временно недоступен`));
-        return;
-      }
-      const chunks: Buffer[] = [];
-      const ct = res.headers['content-type'] ?? '';
-      const cs = ct.match(/charset=([\w-]+)/i);
-      const encoding = (cs && cs[1]?.toLowerCase() === 'utf-8') ? 'utf8' : 'win1251';
-      res.on('data', (c: Buffer) => chunks.push(c));
-      res.on('end', () => {
-        try { resolve(iconv.decode(Buffer.concat(chunks), encoding)); }
-        catch { resolve(Buffer.concat(chunks).toString('utf8')); }
-      });
-    }).on('error', (err: Error) => {
-      if (err.message === 'timeout' || (err as NodeJS.ErrnoException).code === 'ETIMEOUT') {
-        reject(new Error('sudrf.ru временно недоступен (таймаут). Попробуйте позже.'));
-      } else {
-        reject(new Error(`Ошибка соединения с sudrf.ru: ${err.message}`));
-      }
-    }).on('timeout', function(this: any) { this.destroy(); reject(new Error('sudrf.ru временно недоступен (таймаут). Попробуйте позже.')); });
-  });
-}
-
-function parseResults(html: string, req: SearchRequest): SearchResult[] {
-  const $ = cheerio.load(html);
-  const results: SearchResult[] = [];
-  // Ищем таблицу результатов — ту, что содержит колонку "№ дела"
-  const table = $('table').filter((_, t) => $(t).text().includes('№ дела')).first();
-  if (!table.length) return results;
-
-  table.find('tr').slice(1).each((_, row) => {
-    const cells = $(row).find('td');
-    if (cells.length < 5) return;
-    const link = cells.eq(0).find('a');
-    const href = link.attr('href') || '';
-    const num = link.text().trim().split(/\s+/)[0] || '';
-    const uidMatch = href.match(/case_uid=([a-f0-9-]+)/i);
-    results.push({
-      caseNumber: num,
-      caseUrl: href.startsWith('http') ? href : `https://${req.courtId}.sudrf.ru${href}`,
-      uid: uidMatch ? uidMatch[1] : '',
-      courtCode: req.courtCode,
-      judge: cells.eq(3).text().trim() || null,
-      result: cells.eq(5).text().trim() || null,
-      legalForceDate: cells.eq(6).text().trim() || null,
-      filingDate: cells.eq(1).text().trim() || null,
-      decisionDate: cells.eq(4).text().trim() || null,
-      parties: [],
-      courtId: req.courtId,
-      courtType: req.courtType,
-    });
-  });
-  return results;
-}
+import { fetchHtml, parseResults } from '../shared.js';
 
 export class DistrictSearchAdapter implements SearchAdapter {
   buildSearchUrl(req: SearchRequest): string {
-    // PHP-форма ожидает ВСЕ поля из формы, даже пустые
     const base = `https://${req.courtId}.sudrf.ru/modules.php`;
     const q = [
       'name=sud_delo', 'srv_num=1',
@@ -105,7 +36,7 @@ export class DistrictSearchAdapter implements SearchAdapter {
       'G1_ORDER_INFO__ORDER_DATE1D=', 'G1_ORDER_INFO__ORDER_DATE2D=',
       'G1_ORDER_INFO__ORDER_NUMSS=', 'G1_ORDER_INFO__EXTERNALKEYSS=',
       'G1_ORDER_INFO__STATE_ID=', 'G1_ORDER_INFO__RECIP_ID=',
-      'Submit=%CD%E0%E9%F2%E8',  // Найти в CP1251
+      'Submit=%CD%E0%E9%F2%E8',
     ];
     return base + '?' + q.join('&');
   }

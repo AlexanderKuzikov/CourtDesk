@@ -6,6 +6,14 @@
 
 ## [Unreleased]
 
+### Added
+- **CORS middleware**: разблокирован dev-режим с Vite (:5173 → API :8767)
+- **Graceful shutdown**: SIGTERM/SIGINT → корректное завершение (`packages/api/server.ts`)
+- **GET /api/courts** без `q=` теперь возвращает полный список судов, а не только `{ total }`
+- **Shared fetchHtml/parseResults**: дублированный код из `district.ts`, `appeal.ts`, `cassation.ts` вынесен в `packages/search/shared.ts`
+- **Batch updateCase**: `processOne()` делает один `updateCase` в конце, а не 3 промежуточных
+- **CODE_REVIEW4.md**: документация состояния до изменений
+
 ### Fixed
 - **tsconfig.json**: `moduleResolution` исправлен с `bundler` на `Node16` (вместе с `module: Node16`). `bundler` предназначен для Vite/esbuild и вызывал ошибки `tsc --noEmit` в Node ESM-проекте.
 - **CI workflow**: `actions/checkout@v5` и `actions/setup-node@v5` заменены на `@v4` — v5 не существует и ломал CI на первом шаге.

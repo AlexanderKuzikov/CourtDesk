@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { findCourtsByName, findCourtByCodeOrSubdomain, getTotalCourts } from '../../core/index.js';
+import { findCourtsByName, findCourtByCodeOrSubdomain, getAllCourts } from '../../core/index.js';
 
 const router = Router();
 
@@ -10,7 +10,7 @@ router.get('/api/courts', (req, res) => {
     const courts = findCourtsByName(q).slice(0, 30);
     return res.json({ success: true, data: courts });
   }
-  res.json({ success: true, data: { total: getTotalCourts() } });
+  res.json({ success: true, data: getAllCourts() });
 });
 
 // Инфо о суде

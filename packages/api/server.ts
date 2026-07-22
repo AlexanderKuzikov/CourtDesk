@@ -15,8 +15,17 @@ import { errorHandler } from './middleware/error.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = resolve(__dirname, '..', 'viewer', 'public');
 
+function corsMiddleware(_req: express.Request, res: express.Response, next: express.NextFunction) {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+  if (_req.method === 'OPTIONS') { res.sendStatus(204); return; }
+  next();
+}
+
 export function createApp() {
   const app = express();
+  app.use(corsMiddleware);
   app.use(express.json({ limit: '1mb' }));
 
   app.use(healthRouter);
@@ -36,6 +45,21 @@ export function createApp() {
 
 const PORT = Number(process.env['PORT']) || 8767;
 const app = createApp();
-app.listen(PORT, '127.0.0.1', () => {
+
+function gracefulShutdown(signal: string) {
+  console.log(`[courtdesk] ${signal} получен, завершаю работу...`);
+  server.close(() => {
+    console.log('[courtdesk] HTTP сервер остановлен');
+    process.exit(0);
+  });
+  setTimeout(() => {
+    console.error('[courtdesk] Принудительное завершение по таймауту');
+    process.exit(1);
+  }, 10_000).unref();
+}
+
+const server = app.listen(PORT, '127.0.0.1', () => {
   console.log(`[courtdesk] API: http://127.0.0.1:${PORT}`);
 });
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));

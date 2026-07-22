@@ -7,7 +7,7 @@
 
 ## Статус
 
-**v0.2.0** — Фаза 4 завершена. Code Review 2026-07-22 применён. CI зелёный, tsc чист.
+**v0.2.0** — Код-ревью 4 завершено. Дублирование кода устранено, CORS, батч-запись, graceful shutdown. CI зелёный.
 
 | Компонент | Статус | Источник |
 |-----------|--------|----------|
@@ -149,6 +149,7 @@
 | 2026-07-22 | `954fa5c` | docs: CODE_REVIEW + BUG_REPORT полное ревью по реальному коду |
 | 2026-07-22 | *(текущий)* | fix: NEW-001..011 — scheduler, types, courts, config, classify, api/status, api/notifications |
 | 2026-07-22 | `(этот)` | fix: tsc errors — req.params, mock types, vi.clearAllMocks; CI зелёный |
+| 2026-07-22 | `(CR4)` | fix: CR4 — CORS, shared fetchHtml/parseResults, batch updateCase, courts list, graceful shutdown |
 
 ---
 
