@@ -18,7 +18,7 @@ function isStale(c: WatchedCase): boolean {
 }
 
 // NEW-001 FIXED: caseUid передаётся первым параметром
-function makeEvent(
+export function makeEvent(
   caseUid: string,
   type: string,
   message: string,

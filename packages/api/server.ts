@@ -10,6 +10,7 @@ import intakeRouter from './routes/intake.js';
 // NEW-003 FIXED: подключены роутеры /api/status и /api/notifications
 import statusRouter from './routes/status.js';
 import notificationsRouter from './routes/notifications.js';
+import resolveRouter from './routes/resolve.js';
 import { errorHandler } from './middleware/error.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -37,6 +38,7 @@ export function createApp() {
   // NEW-003: статус дашборда и уведомления
   app.use(statusRouter);
   app.use(notificationsRouter);
+  app.use(resolveRouter);
 
   app.use(express.static(PUBLIC_DIR));
   app.use(errorHandler);
