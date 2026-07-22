@@ -27,7 +27,7 @@
 | tsconfig | ✅ moduleResolution: Node16 | tsconfig.json |
 | vitest.config | ✅ pool: forks, environment: node | vitest.config.ts |
 | CI | ✅ tsc --noEmit, 42 тестов проходят | .github/workflows/ci.yml |
-| Viewer | 🟡 Заглушка | CourtSniffer |
+| Viewer | ✅ Дашборд + поиск | CourtDesk |
 
 ---
 
@@ -60,7 +60,7 @@
 | 5 | `PATCH /api/cases/:uid` | Обновить разрешённые поля | ✅ реализован |
 | 6 | `DELETE /api/cases/:uid` | Удалить | ✅ реализован |
 | 7 | `POST /api/cases/wait` | Отслеживать появление | ✅ реализован |
-| 8 | `POST /api/resolve` | Суд + номер → ссылка | 🟡 не реализован |
+| 8 | `POST /api/resolve` | Суд + номер → ссылка | ✅ реализован |
 | 9 | `POST /api/search/by-number` | Поиск по номеру | ✅ реализован |
 | 10 | `POST /api/search/by-party` | Поиск по участникам | ✅ реализован |
 | 11 | `POST /api/parse/url` | Парсинг URL | ✅ реализован |
@@ -155,11 +155,9 @@
 
 ## Следующие шаги
 
-1. **Обновить тесты** — добавить покрытие для `makeEvent(caseUid, ...)`, `GET /api/status`, `GET /api/notifications`
-2. Реализовать `POST /api/resolve` (суд + номер → ссылка)
-3. Добавить smoke-тест для `POST /api/parse/url` magistrate
-4. Добавить persistent хранилище уведомлений (`store/notifications.ts`)
-5. Viewer — список дел и статусы (дашборд UC-0)
+1. **Мониторинг в реальном времени** — WebSocket для push-уведомлений (или SSE)
+2. **Фильтры и сортировка** в таблице дел дашборда
+3. **Structured logging** — замена `console.log` на pino/winston
 
 ---
 
