@@ -4,9 +4,129 @@
 
 ---
 
+## 2026-07-22: await sleep перед searchByCaseNumber в processOne (CR5-001)
+
+**Контекст:** При `prev.status === 'decision'` `processOne` выполнял два HTTP-запроса к sudrf.ru подряд: `fetchHtml` + `searchByCaseNumber`. Между ними не было `RATE_DELAY_MS`.
+
+**Решение:** `await sleep(RATE_DELAY_MS)` добавлен перед блоком `searchByCaseNumber` внутри `processOne`.
+
+**Обоснование:** Без паузы 50 decision-дел генерируют 100 запросов к одному хосту с нулевым интервалом между парными запросами — риск temporary ban на sudrf.ru.
+
+---
+
+## 2026-07-22: Удалён 'deleted' as unknown из orchestrator (CR5-002)
+
+**Контекст:** `prev.status === 'deleted' as unknown` — `'deleted'` не входит в `CaseStatus`. Каст `as unknown` отключал type safety в критичном месте.
+
+**Решение:** Ветка `'deleted'` полностью удалена. Единственный early-return — `'archived'`.
+
+**Обоснование:** Мёртвый код с подавлением TypeScript-ошибки хуже, чем его отсутствие. Если понадобится `deleted` — добавить в `CaseStatus` явно.
+
+---
+
+## 2026-07-22: legalForceDate.slice(0, 10) при записи (CR5-003)
+
+**Контекст:** `legalForceDate` из API поиска мог содержать ISO-строку с временем (`2026-07-22T00:00:00.000Z`). Сравнение `=== today` в `getStats().enforcedToday` давало всегда 0.
+
+**Решение:** `r.legalForceDate.slice(0, 10)` при присвоении в `orchestrator.ts`.
+
+**Обоснование:** Нормализация при записи, а не при чтении — данные в store гарантированно `YYYY-MM-DD` независимо от источника.
+
+---
+
+## 2026-07-22: CORS wildcard без Authorization (CR5-004)
+
+**Контекст:** `Access-Control-Allow-Origin: *` несовместим с `Authorization` header по спецификации CORS — браузеры блокируют preflight.
+
+**Решение:** `Authorization` убран из `Access-Control-Allow-Headers`. Если понадобится auth — заменить wildcard на конкретный origin из env.
+
+**Обоснование:** API без аутентификации (локальная сеть) — `Authorization` header не нужен вовсе.
+
+---
+
+## 2026-07-22: regex /iu для кириллических паттернов (CR5-005)
+
+**Контекст:** Флаг `/i` без `/u` в JavaScript применяет case-insensitive только к ASCII. Для кириллицы нужен `/u` (Unicode mode).
+
+**Решение:** `CASE_NUMBER_RE` и `CYRILLIC_WORD_RE` переведены на `/iu`.
+
+**Обоснование:** Строка `А56-12345/2024` (кириллическая А) могла не матчить без `/u` в зависимости от версии V8 — silent failure классификатора.
+
+---
+
+## 2026-07-22: Captcha polling retry при network error (CR5-006)
+
+**Контекст:** `pollResult` ловил только `errorId !== 0` от RuCaptcha API. При network-level сбое (`fetch` throws) — вся captcha-сессия Puppeteer умирала без retry.
+
+**Решение:** Внутренний retry-цикл в `pollResult` до `NETWORK_RETRY_LIMIT = 2` попыток при `fetch`-исключении. Общий `timeoutMs` не сбрасывается.
+
+**Обоснование:** Нестабильный интернет на VDS в РФ — типовой сценарий. RuCaptcha API рекомендует retry при таймаутах.
+
+---
+
+## 2026-07-22: listCases принимает status: CaseStatus | CaseStatus[] (CR5-007)
+
+**Контекст:** `runFull()` вызывал `listCases` трижды с разными статусами и конкатенировал результаты — 3 прохода по Map вместо одного.
+
+**Решение:** `filter.status` расширен до `CaseStatus | CaseStatus[]`; фильтрация через `Set` — O(1) lookup.
+
+**Обоснование:** Обратная совместимость сохранена (строка по-прежнему валидна). При 10k дел — 10k итераций вместо 30k.
+
+---
+
+## 2026-07-22: tmp/rename без fsync — документированный trade-off (CR5-008)
+
+**Контекст:** `writeJson` использует tmp-файл + `fs.renameSync`. На Windows без `fsync()` перед rename данные могут не попасть на диск при аварийном завершении.
+
+**Решение:** Оставить как есть, задокументировать.
+
+**Обоснование:** Single-process приложение, объём мал, вероятность crash + одновременной записи крайне низка. `fsync` добавит задержку на каждую запись. При необходимости — переход на SQLite решит проблему системно.
+
+---
+
+## 2026-07-22: eslint — tech-debt, отложен (CR5-009)
+
+**Контекст:** Скрипт `lint` в package.json запускает `tsc --noEmit`, а не eslint. `@typescript-eslint` отсутствует.
+
+**Решение:** Отложено. `tsc` покрывает основные ошибки типов.
+
+**Обоснование:** Добавление eslint — отдельный sprint с настройкой правил. Приоритет: `no-floating-promises`, `no-unsafe-type-assertion`. Текущий type-check достаточен для v0.x.
+
+---
+
+## 2026-07-22: HOST из env (CR5-010)
+
+**Контекст:** bind-адрес `'127.0.0.1'` был захардкожен в `server.ts`. `PORT` уже брался из env.
+
+**Решение:** `const HOST = process.env['HOST'] ?? '127.0.0.1'`.
+
+**Обоснование:** Деплой в контейнер или с reverse-proxy требует `0.0.0.0`. Изменение конфига не должно требовать изменения кода.
+
+---
+
+## 2026-07-22: Structured logging — tech-debt, отложен (CR5-011)
+
+**Контекст:** `console.log`/`console.error` в оркестраторе не поддерживают уровни, форматирование, ротацию.
+
+**Решение:** Отложено.
+
+**Обоснование:** `pino` — 2 строки инициализации, но требует решения о транспорте (stdout, файл, remote). Добавить при появлении prod-мониторинга.
+
+---
+
+## 2026-07-22: _isRunning guard в /api/parse/run (CR5-012)
+
+**Контекст:** `POST /api/parse/run` запускал `runFull()` в фоне без проверки, идёт ли уже прогон. Два параллельных `runFull()` — двойная нагрузка + race condition на `updateCase`.
+
+**Решение:** Module-level `let _isRunning = false`. При повторном запросе — `409 Conflict { error: 'RUN_IN_PROGRESS' }`.
+
+**Обоснование:** Простейшая защита без внешних зависимостей. Подходит для single-process. При multi-instance — заменить на Redis lock.
+
+---
+
 ## 2026-07-22: moduleResolution: Node16 (не bundler)
 
-**Контекст:** Изначально `tsconfig.json` использовал `"moduleResolution": "bundler"`. При `tsc --noEmit` в CI возникали ошибки — TypeScript не мог разрешить `.js`-импорты в Node ESM через режим `bundler`.
+**Контекст:** Изначально `tsconfig.json` использовал `"moduleResolution": "bundler"`. При `tsc --noEmit` в CI возникали ошибки.
 
 **Решение:** `module` и `moduleResolution` переведены на `Node16`.
 
@@ -16,7 +136,7 @@
 
 ## 2026-07-22: vitest.config.ts с pool: forks
 
-**Контекст:** Без явного конфига `vi.mock` + `vi.resetModules()` + динамические импорты в ESM работали ненадёжно.
+**Контекст:** Без явного конфига `vi.mock` в ESM работали ненадёжно.
 
 **Решение:** `vitest.config.ts` с `pool: 'forks'`.
 
@@ -28,7 +148,7 @@
 
 **Контекст:** `server.ts` вызывал `app.listen()` на верхнем уровне модуля.
 
-**Решение:** `createApp()` — экспортируемая функция. `listen()` остался в конце файла.
+**Решение:** `createApp()` — экспортируемая функция.
 
 **Обоснование:** Позволяет тестам импортировать `createApp()` без запуска HTTP-сервера.
 
@@ -36,15 +156,47 @@
 
 ## 2026-07-22: CI actions/checkout@v4 (не v5)
 
-**Контекст:** `actions/checkout@v5` и `actions/setup-node@v5` не существуют в GitHub Actions Marketplace.
+**Контекст:** `actions/checkout@v5` не существует.
 
 **Решение:** Снижены до `@v4`.
 
 ---
 
+## 2026-07-22: Удалён Required status check "CI" из защиты main
+
+**Контекст:** При push-to-main CI не мог запуститься до пуша — замкнутый круг.
+
+**Решение:** Убран `required_status_checks`. Защита от force-push и удаления сохранена.
+
+---
+
+## 2026-07-22: SEARCH_PARAMS constants для delo_id/case_type
+
+**Решение:** Магические числа вынесены в `packages/search/constants.ts`.
+
+**Обоснование:** Единая точка изменения при обновлении БД sudrf.ru.
+
+---
+
+## 2026-07-22: Persistent notifications
+
+**Решение:** `notifications.json` по той же схеме, что cases/events.
+
+**Обоснование:** Синтетическая генерация на лету теряла uid при каждом запросе.
+
+---
+
+## 2026-07-22: Magistrate search → parse delegation
+
+**Решение:** URL-парсинг из `search/adapters/magistrate.ts` делегирован в `parse/adapters/magistrate.ts`.
+
+**Обоснование:** Устранение дублирования cheerio-скрейпинга. `search` занимается только поиском.
+
+---
+
 ## 2026-07-21: Единый проект (не микросервисы)
 
-**Решение:** Собрать всё в один проект CourtDesk.
+**Решение:** Одна кодовая база, один деплой.
 
 **Обоснование:** Микросервисы без необходимости — лишние накладные расходы.
 
@@ -52,7 +204,7 @@
 
 ## 2026-07-21: Один package.json, не workspaces
 
-**Решение:** Монопроект с пакетами в `packages/`, без npm workspaces.
+**Решение:** Монопроект с пакетами в `packages/`.
 
 **Обоснование:** Все пакеты в одном процессе, `npm install` один раз.
 
@@ -84,7 +236,7 @@
 
 ## 2026-07-21: Search ≠ Parse
 
-**Решение:** Два набора адаптеров: search/ и parse/.
+**Решение:** Два набора адаптеров: `search/` и `parse/`.
 
 **Обоснование:** Разные URL, разный HTML, разный парсинг.
 
@@ -96,7 +248,7 @@
 
 ---
 
-## 2026-07-21: Intake — один `classify`
+## 2026-07-21: Intake — один classify
 
 **Решение:** Единственный публичный интерфейс `classify(input)`.
 
@@ -128,44 +280,10 @@
 
 ## 2026-07-21: CourtSniffer и CourtFlow — архив
 
-**Решение:** Репозитории замораживаются.
+**Решение:** Репозитории замораживаются. Весь код перенесён в CourtDesk.
 
 ---
 
 ## 2026-07-21: Парсинг по расписанию + ручной старт
 
-**Решение:** Scheduler + `POST /api/parse/run` с 202 Accepted.
-
----
-
-## 2026-07-22: Удалён Required status check "CI" из защиты main
-
-**Контекст:** `main` защищён ruleset-ом с `strict: true` и Required status check "CI". При push-to-main CI Actions не может запуститься до пуша — замкнутый круг, блокирующий разработку. 
-
-**Решение:** Убран `required_status_checks`, оставлены `enforce_admins: true`, запрет force-push, запрет удаления ветки.
-
-**Обоснование:** CI остаётся как пост-фактум индикатор. Защита от случайного удаления или force-push сохранена.
-
----
-
-## 2026-07-22: SEARCH_PARAMS constants для delo_id/case_type
-
-**Решение:** Магические числа `delo_id` и `case_type` вынесены в `packages/search/constants.ts`.
-
-**Обоснование:** Единая точка изменения при обновлении БД sudrf.ru.
-
----
-
-## 2026-07-22: Persistent notifications (store/notifications.ts)
-
-**Решение:** Уведомления хранятся в `notifications.json` по той же схеме, что и дела/события.
-
-**Обоснование:** ARCHITECTURE.md изначально предполагал notifications.json. Синтетическая генерация на лету теряла uid при каждом запросе.
-
----
-
-## 2026-07-22: Magistrate search → parse delegation
-
-**Решение:** URL-парсинг из `search/adapters/magistrate.ts` (`searchByCaseNumber` при входе-URL) делегирован в `parse/adapters/magistrate.ts`.
-
-**Обоснование:** Устранение дублирования кода (полный cheerio-скрейпинг был в обоих адаптерах). `search` занимается только поиском, `parse` — парсингом карточки.
+**Решение:** Scheduler + `POST /api/parse/run` с 202 Accepted + 409 при повторном запуске (CR5-012).
