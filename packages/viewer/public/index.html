@@ -1,111 +1,59 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CourtDesk — Дашборд</title>
+  <link rel="stylesheet" href="/theme.css">
+  <script>function _t(){var s=localStorage.getItem('courtdesk-theme'),m=matchMedia('(prefers-color-scheme: light)').matches;document.documentElement.setAttribute('data-theme',s||(m?'light':'dark'))}_t()</script>
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: system-ui, -apple-system, sans-serif; font-size: 14px; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
-    header { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border-bottom: 2px solid #334155; padding: 14px 24px; display: flex; align-items: center; gap: 14px; }
-    header h1 { font-size: 20px; font-weight: 700; }
-    header h1 span { background: linear-gradient(90deg, #38bdf8, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-    header nav { margin-left: auto; display: flex; gap: 10px; }
-    header nav a { color: #94a3b8; text-decoration: none; font-size: 13px; padding: 4px 10px; border-radius: 6px; }
-    header nav a:hover { background: #334155; color: #e2e8f0; }
     .container { max-width: 1200px; margin: 0 auto; padding: 20px 24px; }
-
     .counters { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
-    .counter { background: #1e293b; border-radius: 10px; padding: 14px; border: 1px solid #334155; }
+    .counter { background: var(--surface); border-radius: 10px; padding: 14px; border: 1px solid var(--border); transition: background .2s; }
     .counter .num { font-size: 26px; font-weight: 700; line-height: 1; }
-    .counter .label { font-size: 11px; color: #64748b; margin-top: 4px; }
-    .counter.monitoring .num { color: #38bdf8; }
-    .counter.waiting .num { color: #fbbf24; }
-    .counter.decision .num { color: #4ade80; }
-    .counter.enforced .num { color: #a78bfa; }
-    .counter.error .num { color: #f87171; }
-
+    .counter .label { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+    .counter.monitoring .num { color: var(--primary); }
+    .counter.waiting .num { color: var(--warning); }
+    .counter.decision .num { color: var(--success); }
+    .counter.enforced .num { color: var(--purple); }
     .toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 8px; }
-    .toolbar .actions { display: flex; gap: 8px; }
-    .btn { padding: 7px 14px; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 5px; }
-    .btn-primary { background: linear-gradient(135deg, #38bdf8, #6366f1); color: #fff; }
-    .btn-primary:hover { opacity: .9; }
-    .btn-secondary { background: #334155; color: #e2e8f0; }
-    .btn-secondary:hover { background: #475569; }
-    .btn-danger { background: #3a1a1a; color: #f87171; }
-    .btn-danger:hover { background: #5a2a2a; }
-    .btn-sm { padding: 4px 10px; font-size: 12px; }
-    .btn:disabled { opacity: .5; cursor: default; }
-
-    .filter-tabs { display: flex; gap: 4px; margin-bottom: 16px; flex-wrap: wrap; }
-    .filter-tabs .chip { padding: 5px 12px; border-radius: 16px; font-size: 12px; background: #1e293b; border: 1px solid #334155; cursor: pointer; color: #94a3b8; }
-    .filter-tabs .chip.active { background: #1e3a5f; border-color: #38bdf8; color: #38bdf8; }
-    .filter-tabs .chip .count { font-size: 10px; opacity: .6; margin-left: 2px; }
-
-    table { width: 100%; border-collapse: collapse; font-size: 13px; background: #1e293b; border-radius: 10px; overflow: hidden; }
-    th { text-align: left; padding: 10px 12px; background: #0f172a; color: #94a3b8; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; border-bottom: 2px solid #334155; }
-    td { padding: 8px 12px; border-bottom: 1px solid #334155; }
-    tr:hover td { background: #0f172a; }
-    .badge { display: inline-block; padding: 2px 7px; border-radius: 5px; font-size: 11px; font-weight: 600; }
-    .badge-monitoring { background: #1e3a5f; color: #60a5fa; }
-    .badge-decision { background: #1a3a1a; color: #4ade80; }
-    .badge-enforced { background: #2a1a3a; color: #c084fc; }
-    .badge-waiting { background: #3a2a1a; color: #fbbf24; }
-    .badge-error { background: #3a1a1a; color: #f87171; }
-    .badge-archived { background: #1e293b; color: #64748b; }
+    .toolbar .actions { display: flex; gap: 8px; align-items: center; }
+    .toolbar input[type="search"] { width: 220px; margin-bottom: 0; padding: 5px 10px; }
     .action-btns { display: flex; gap: 4px; }
-    .icon-btn { padding: 3px 6px; border: none; border-radius: 4px; cursor: pointer; background: transparent; color: #64748b; font-size: 14px; }
-    .icon-btn:hover { background: #334155; color: #e2e8f0; }
-    .icon-btn.danger:hover { color: #f87171; }
-
-    .notifications { background: #1e293b; border-radius: 10px; border: 1px solid #334155; margin-top: 24px; }
-    .notifications h3 { font-size: 13px; padding: 12px 16px; border-bottom: 1px solid #334155; color: #94a3b8; text-transform: uppercase; letter-spacing: .04em; }
-    .notif-item { padding: 10px 16px; border-bottom: 1px solid #0f172a; display: flex; align-items: center; gap: 10px; }
+    .icon-btn { padding: 3px 6px; border: none; border-radius: 4px; cursor: pointer; background: transparent; color: var(--text-dim); font-size: 14px; }
+    .icon-btn:hover { background: var(--surface-2); color: var(--text); }
+    .icon-btn.danger:hover { color: var(--danger); }
+    .notifications { background: var(--surface); border-radius: 10px; border: 1px solid var(--border); margin-top: 24px; transition: background .2s; }
+    .notif-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; border-bottom: 1px solid var(--border); }
+    .notif-header h3 { font-size: 13px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; }
+    .notif-item { padding: 10px 16px; border-bottom: 1px solid var(--bg); display: flex; align-items: center; gap: 10px; }
     .notif-item:last-child { border-bottom: none; }
     .notif-item .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-    .notif-item .dot.found { background: #38bdf8; }
-    .notif-item .dot.decision { background: #4ade80; }
-    .notif-item .dot.enforced { background: #a78bfa; }
+    .notif-item .dot.found { background: var(--primary); }
+    .notif-item .dot.decision { background: var(--success); }
+    .notif-item .dot.enforced { background: var(--purple); }
     .notif-item .read { opacity: .5; }
     .notif-item .msg { flex: 1; font-size: 13px; }
-    .notif-item .time { font-size: 11px; color: #64748b; white-space: nowrap; }
-
-    .detail { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 100; align-items: center; justify-content: center; }
-    .detail.open { display: flex; }
-    .detail-card { background: #1e293b; border-radius: 12px; width: 680px; max-width: 90vw; max-height: 85vh; overflow-y: auto; padding: 24px; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
-    .detail-card h2 { font-size: 16px; margin-bottom: 4px; color: #38bdf8; }
-    .detail-card .case-num { font-size: 12px; color: #64748b; margin-bottom: 16px; word-break: break-all; }
-    .detail-card .close-btn { float: right; background: none; border: none; color: #64748b; font-size: 20px; cursor: pointer; }
+    .notif-item .time { font-size: 11px; color: var(--text-dim); white-space: nowrap; }
+    .detail-card .case-num { font-size: 12px; color: var(--text-dim); margin-bottom: 16px; word-break: break-all; }
     .detail-card .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; margin-bottom: 20px; }
-    .detail-card .info-item { font-size: 13px; }
-    .detail-card .info-item .key { color: #94a3b8; font-size: 11px; text-transform: uppercase; }
-    .detail-card .info-item .val { color: #e2e8f0; margin-top: 2px; }
-    .detail-card .timeline { border-left: 2px solid #334155; padding-left: 16px; }
+    .detail-card .info-item .key { color: var(--text-muted); font-size: 11px; text-transform: uppercase; }
+    .detail-card .info-item .val { color: var(--text); margin-top: 2px; }
+    .detail-card .timeline { border-left: 2px solid var(--border); padding-left: 16px; }
     .detail-card .timeline-item { position: relative; padding: 8px 0; }
-    .detail-card .timeline-item::before { content: ''; position: absolute; left: -20px; top: 14px; width: 8px; height: 8px; border-radius: 50%; background: #38bdf8; }
-    .detail-card .timeline-item .ev-type { font-size: 12px; font-weight: 600; color: #38bdf8; }
-    .detail-card .timeline-item .ev-msg { font-size: 13px; color: #e2e8f0; margin-top: 2px; }
-    .detail-card .timeline-item .ev-time { font-size: 11px; color: #64748b; margin-top: 2px; }
-
-    .empty { text-align: center; padding: 40px 20px; color: #475569; }
-    .empty h3 { font-size: 16px; margin-bottom: 4px; }
-
-    .toast { position: fixed; bottom: 20px; right: 20px; padding: 12px 18px; border-radius: 8px; font-size: 13px; font-weight: 600; z-index: 200; opacity: 0; transition: opacity .3s; pointer-events: none; }
-    .toast.show { opacity: 1; }
-    .toast.success { background: #1a3a1a; color: #4ade80; border: 1px solid #2a5a2a; }
-    .toast.error { background: #3a1a1a; color: #f87171; border: 1px solid #5a2a2a; }
-
-    .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #38bdf8; border-top-color: transparent; border-radius: 50%; animation: spin .6s linear infinite; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-
-    @media (max-width: 640px) { .counters { grid-template-columns: repeat(2, 1fr); } }
+    .detail-card .timeline-item::before { content: ''; position: absolute; left: -21px; top: 14px; width: 9px; height: 9px; border-radius: 50%; background: var(--primary); }
+    .detail-card .ev-type { font-size: 12px; font-weight: 600; color: var(--primary); }
+    .detail-card .ev-msg { font-size: 13px; color: var(--text); margin-top: 2px; }
+    .detail-card .ev-time { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+    @media (max-width: 640px) { .counters { grid-template-columns: repeat(2, 1fr); } .toolbar input[type="search"] { width: 100%; } }
   </style>
 </head>
 <body>
 <header>
   <h1><span>CourtDesk</span> 🏛️</h1>
   <nav>
-    <a href="/" style="color:#38bdf8">📊 Дашборд</a>
+    <button id="themeToggle" class="theme-toggle" onclick="toggleTheme()">☀️</button>
+    <a href="/" style="color:var(--primary)">📊 Дашборд</a>
     <a href="/search.html">🔍 Поиск</a>
   </nav>
 </header>
@@ -123,16 +71,21 @@
       <span class="chip" data-status="archived" onclick="setFilter('archived',this)">Архив <span class="count" id="cnt-archived"></span></span>
     </div>
     <div class="actions">
-      <button class="btn btn-primary btn-sm" onclick="runMonitor()" id="runBtn">▶ Запустить мониторинг</button>
-      <a href="/search.html" class="btn btn-primary btn-sm">+ Новое дело</a>
-      <button class="btn btn-secondary btn-sm" onclick="loadAll()">🔄</button>
+      <input type="search" id="caseSearch" placeholder="Поиск по номеру/суду..." oninput="onSearchInput(this.value)">
+      <button class="btn btn-primary btn-sm" onclick="runMonitor()" id="runBtn">▶ Мониторинг</button>
+      <a href="/search.html" class="btn btn-primary btn-sm">+ Дело</a>
+      <button class="btn btn-secondary btn-sm" onclick="loadDashboard()" title="Обновить">🔄</button>
     </div>
   </div>
 
   <div id="casesTable"><div class="empty"><h3>Загрузка...</h3></div></div>
+  <div id="pagination"></div>
 
   <div class="notifications">
-    <h3>🔔 Уведомления</h3>
+    <div class="notif-header">
+      <h3>🔔 Уведомления</h3>
+      <button class="btn btn-secondary btn-sm" onclick="markAllRead()" id="markReadBtn">✓ Прочитать все</button>
+    </div>
     <div id="notifList"><div class="empty"><h3>Нет уведомлений</h3></div></div>
   </div>
 </div>
@@ -146,23 +99,122 @@
 
 <div class="toast" id="toast"></div>
 
+<script src="/app.js"></script>
 <script>
 let allCases = [];
 let currentFilter = '';
+let searchQuery = '';
+let currentPage = 1;
+let sortCol = 'updatedAt';
+let sortDir = 'desc';
+const PAGE_SIZE = 20;
+const STATUS_LABELS = { monitoring:'Мониторинг', waiting:'Ожидание', decision:'Решение', enforced:'Вступило', error:'Ошибка', archived:'Архив' };
 
-function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-function showToast(msg, type) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.className = 'toast show ' + (type || 'success');
-  setTimeout(() => t.classList.remove('show'), 3000);
+function onSearchInput(val) { searchQuery = val.trim().toLowerCase(); currentPage = 1; renderTable(); }
+
+function setFilter(status, el) {
+  currentFilter = status;
+  currentPage = 1;
+  document.querySelectorAll('.filter-tabs .chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  renderTable();
 }
-function formatTime(iso) {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+
+function toggleSort(col) {
+  if (sortCol === col) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+  else { sortCol = col; sortDir = 'asc'; }
+  renderTable();
 }
-const STATUS_LABELS = { monitoring: 'Мониторинг', waiting: 'Ожидание', decision: 'Решение', enforced: 'Вступило', error: 'Ошибка', archived: 'Архив' };
+
+function getFilteredCases() {
+  let cases = currentFilter ? allCases.filter(c => c.status === currentFilter) : [...allCases];
+  if (searchQuery) {
+    cases = cases.filter(c =>
+      (c.number || '').toLowerCase().includes(searchQuery) ||
+      (c.courtId || '').toLowerCase().includes(searchQuery)
+    );
+  }
+  cases.sort((a, b) => {
+    let av = a[sortCol] ?? '', bv = b[sortCol] ?? '';
+    if (typeof av === 'string') av = av.toLowerCase();
+    if (typeof bv === 'string') bv = bv.toLowerCase();
+    if (av < bv) return sortDir === 'asc' ? -1 : 1;
+    if (av > bv) return sortDir === 'asc' ? 1 : -1;
+    return 0;
+  });
+  return cases;
+}
+
+function updateCounts() {
+  const counts = {};
+  allCases.forEach(c => { counts[c.status] = (counts[c.status] || 0) + 1; });
+  document.getElementById('cnt-').textContent = allCases.length;
+  ['monitoring','waiting','decision','enforced','error','archived'].forEach(st =>
+    document.getElementById('cnt-' + st).textContent = counts[st] || 0
+  );
+}
+
+function renderTable() {
+  const filtered = getFilteredCases();
+  const total = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  if (currentPage > totalPages) currentPage = totalPages;
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const pageCases = filtered.slice(start, start + PAGE_SIZE);
+
+  if (total === 0) {
+    document.getElementById('casesTable').innerHTML = '<div class="empty"><h3>Нет дел</h3><p>Добавьте первое дело через поиск</p></div>';
+    document.getElementById('pagination').innerHTML = '';
+    return;
+  }
+
+  const sortInd = (col) => sortCol === col ? `<span class="sort-ind">${sortDir === 'asc' ? '▲' : '▼'}</span>` : '';
+
+  const rows = pageCases.map(c => `
+    <tr>
+      <td><a href="#" onclick="openDetail('${esc(c.uid)}');return false" style="color:var(--primary);text-decoration:none;font-weight:600">${esc(c.number || '—')}</a></td>
+      <td><span class="badge badge-${esc(c.status)}">${esc(STATUS_LABELS[c.status] || c.status)}</span></td>
+      <td>${esc(c.courtId || '—')}</td>
+      <td>${esc(c.result ? c.result.substring(0, 30) : '—')}</td>
+      <td>${esc(c.legalForceDate || '—')}</td>
+      <td style="font-size:11px;color:var(--text-dim)">${formatTime(c.updatedAt)}</td>
+      <td class="action-btns">
+        <span class="icon-btn" title="Детали" onclick="openDetail('${esc(c.uid)}')">👁</span>
+        ${c.status !== 'archived'
+          ? `<span class="icon-btn" title="Архивировать" onclick="archiveCase('${esc(c.uid)}')">📦</span>`
+          : `<span class="icon-btn" title="Вернуть" onclick="unarchiveCase('${esc(c.uid)}')">↩</span>`}
+        <span class="icon-btn danger" title="Удалить" onclick="deleteCase('${esc(c.uid)}')">🗑</span>
+      </td>
+    </tr>`).join('');
+
+  document.getElementById('casesTable').innerHTML = `
+    <table>
+      <thead><tr>
+        <th class="sortable" onclick="toggleSort('number')">Номер ${sortInd('number')}</th>
+        <th class="sortable" onclick="toggleSort('status')">Статус ${sortInd('status')}</th>
+        <th class="sortable" onclick="toggleSort('courtId')">Суд ${sortInd('courtId')}</th>
+        <th>Результат</th>
+        <th>Вступление</th>
+        <th class="sortable" onclick="toggleSort('updatedAt')">Обновлено ${sortInd('updatedAt')}</th>
+        <th></th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+
+  if (totalPages > 1) {
+    const end = Math.min(start + PAGE_SIZE, total);
+    document.getElementById('pagination').innerHTML = `
+      <div class="pagination">
+        <button class="btn btn-secondary btn-sm" onclick="goPage(${currentPage-1})" ${currentPage<=1?'disabled':''}>← Назад</button>
+        <span class="page-info">${start+1}–${end} из ${total}</span>
+        <button class="btn btn-secondary btn-sm" onclick="goPage(${currentPage+1})" ${currentPage>=totalPages?'disabled':''}>Вперёд →</button>
+      </div>`;
+  } else {
+    document.getElementById('pagination').innerHTML = '';
+  }
+}
+
+function goPage(p) { currentPage = p; renderTable(); }
 
 async function loadDashboard() {
   try {
@@ -171,78 +223,27 @@ async function loadDashboard() {
       fetch('/api/cases').then(r => r.json()),
       fetch('/api/notifications').then(r => r.json()),
     ]);
-
-    // Counters
     const s = statusRes.data || {};
     document.getElementById('counters').innerHTML = `
       <div class="counter monitoring"><div class="num">${s.monitoring ?? '?'}</div><div class="label">В мониторинге</div></div>
       <div class="counter waiting"><div class="num">${s.waiting ?? '?'}</div><div class="label">Ожидают появления</div></div>
       <div class="counter decision"><div class="num">${s.decision ?? '?'}</div><div class="label">Решение вынесено</div></div>
       <div class="counter enforced"><div class="num">${s.enforcedToday ?? '?'}</div><div class="label">Вступило сегодня</div></div>`;
-
-    // Cases
     allCases = casesRes.data || [];
     renderTable();
     updateCounts();
-
-    // Notifications
     const notifs = (notifRes.data || []).slice(-15).reverse();
-    if (notifs.length === 0) {
-      document.getElementById('notifList').innerHTML = '<div class="empty"><h3>Нет уведомлений</h3></div>';
-    } else {
-      document.getElementById('notifList').innerHTML = notifs.map(n => `
+    document.getElementById('notifList').innerHTML = notifs.length === 0
+      ? '<div class="empty"><h3>Нет уведомлений</h3></div>'
+      : notifs.map(n => `
         <div class="notif-item${n.read ? ' read' : ''}">
           <span class="dot ${n.type}"></span>
           <span class="msg">${esc(n.message)}</span>
           <span class="time">${formatTime(n.createdAt)}</span>
         </div>`).join('');
-    }
   } catch {
     document.getElementById('casesTable').innerHTML = '<div class="empty"><h3>❌ Ошибка соединения</h3><p>Проверьте, что сервер запущен</p></div>';
   }
-}
-
-function updateCounts() {
-  const counts = {};
-  allCases.forEach(c => { counts[c.status] = (counts[c.status] || 0) + 1; });
-  document.getElementById('cnt-').textContent = allCases.length;
-  ['monitoring','waiting','decision','enforced','error','archived'].forEach(st => {
-    document.getElementById('cnt-' + st).textContent = counts[st] || 0;
-  });
-}
-
-function setFilter(status, el) {
-  currentFilter = status;
-  document.querySelectorAll('.filter-tabs .chip').forEach(c => c.classList.remove('active'));
-  el.classList.add('active');
-  renderTable();
-}
-
-function renderTable() {
-  const cases = currentFilter ? allCases.filter(c => c.status === currentFilter) : allCases;
-  if (cases.length === 0) {
-    document.getElementById('casesTable').innerHTML = '<div class="empty"><h3>Нет дел</h3><p>Добавьте первое дело через поиск</p></div>';
-    return;
-  }
-  const rows = cases.map(c => `
-    <tr data-uid="${esc(c.uid)}">
-      <td><a href="#" onclick="openDetail('${esc(c.uid)}');return false" style="color:#38bdf8;text-decoration:none;font-weight:600">${esc(c.number || '—')}</a></td>
-      <td><span class="badge badge-${esc(c.status)}">${esc(STATUS_LABELS[c.status] || c.status)}</span></td>
-      <td>${esc(c.courtId || '—')}</td>
-      <td>${esc(c.result ? c.result.substring(0, 30) : '—')}</td>
-      <td>${esc(c.legalForceDate || '—')}</td>
-      <td style="font-size:11px;color:#64748b">${formatTime(c.updatedAt)}</td>
-      <td class="action-btns">
-        <button class="icon-btn" title="Детали" onclick="openDetail('${esc(c.uid)}')">👁</button>
-        ${c.status !== 'archived' ? `<button class="icon-btn" title="Архивировать" onclick="archiveCase('${esc(c.uid)}')">📦</button>` : `<button class="icon-btn" title="Вернуть" onclick="unarchiveCase('${esc(c.uid)}')">↩</button>`}
-        <button class="icon-btn danger" title="Удалить" onclick="deleteCase('${esc(c.uid)}')">🗑</button>
-      </td>
-    </tr>`).join('');
-  document.getElementById('casesTable').innerHTML = `
-    <table>
-      <thead><tr><th>Номер</th><th>Статус</th><th>Суд</th><th>Результат</th><th>Вступление</th><th>Обновлено</th><th></th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>`;
 }
 
 async function openDetail(uid) {
@@ -253,13 +254,12 @@ async function openDetail(uid) {
     ]);
     const c = caseRes.data || caseRes;
     const events = eventsRes.data || [];
-
     const eventsHtml = events.length > 0 ? events.slice().reverse().map(e => `
       <div class="timeline-item">
         <div class="ev-type">${esc(e.type)}</div>
         <div class="ev-msg">${esc(e.message)}</div>
         <div class="ev-time">${formatTime(e.createdAt)}</div>
-      </div>`).join('') : '<div style="color:#64748b;font-size:13px;padding:8px 0">Нет событий</div>';
+      </div>`).join('') : '<div style="color:var(--text-dim);font-size:13px;padding:8px 0">Нет событий</div>';
 
     document.getElementById('detailContent').innerHTML = `
       <h2>${esc(c.number || 'Без номера')}</h2>
@@ -269,44 +269,40 @@ async function openDetail(uid) {
         <div class="info-item"><div class="key">Тип суда</div><div class="val">${esc(c.courtType)}</div></div>
         <div class="info-item"><div class="key">Суд</div><div class="val">${esc(c.courtId)}</div></div>
         <div class="info-item"><div class="key">Результат</div><div class="val">${esc(c.result || '—')}</div></div>
-        <div class="info-item"><div class="key">Вступление в силу</div><div class="val" style="color:#4ade80;font-weight:600">${esc(c.legalForceDate || '—')}</div></div>
+        <div class="info-item"><div class="key">Вступление в силу</div><div class="val" style="color:var(--success);font-weight:600">${esc(c.legalForceDate || '—')}</div></div>
         <div class="info-item"><div class="key">Последняя проверка</div><div class="val">${formatTime(c.lastChecked)}</div></div>
       </div>
       <div class="timeline">${eventsHtml}</div>
       <div style="margin-top:16px;display:flex;gap:8px">
         ${c.status !== 'archived' ? `<button class="btn btn-secondary btn-sm" onclick="archiveCase('${esc(c.uid)}');closeDetail()">📦 Архивировать</button>` : `<button class="btn btn-secondary btn-sm" onclick="unarchiveCase('${esc(c.uid)}');closeDetail()">↩ Вернуть</button>`}
         <button class="btn btn-danger btn-sm" onclick="deleteCase('${esc(c.uid)}');closeDetail()">🗑 Удалить</button>
+        <button class="btn btn-secondary btn-sm" onclick="window.print()">🖨 Печать</button>
       </div>`;
     document.getElementById('detailOverlay').classList.add('open');
-  } catch {
-    showToast('Ошибка загрузки дела', 'error');
-  }
+  } catch { showToast('Ошибка загрузки дела', 'error'); }
 }
 function closeDetail() { document.getElementById('detailOverlay').classList.remove('open'); }
 
 async function archiveCase(uid) {
   try {
-    const res = await fetch('/api/cases/' + encodeURIComponent(uid), { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'archived' }) });
-    if (!res.ok) throw new Error('Ошибка');
-    showToast('Дело заархивировано', 'success');
-    loadDashboard();
+    const res = await fetch('/api/cases/' + encodeURIComponent(uid), { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:'archived'}) });
+    if (!res.ok) throw new Error();
+    showToast('Дело заархивировано', 'success'); loadDashboard();
   } catch { showToast('Ошибка архивирования', 'error'); }
 }
 async function unarchiveCase(uid) {
   try {
-    const res = await fetch('/api/cases/' + encodeURIComponent(uid), { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'monitoring' }) });
-    if (!res.ok) throw new Error('Ошибка');
-    showToast('Дело возвращено в мониторинг', 'success');
-    loadDashboard();
+    const res = await fetch('/api/cases/' + encodeURIComponent(uid), { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:'monitoring'}) });
+    if (!res.ok) throw new Error();
+    showToast('Дело возвращено в мониторинг', 'success'); loadDashboard();
   } catch { showToast('Ошибка', 'error'); }
 }
 async function deleteCase(uid) {
   if (!confirm('Удалить дело безвозвратно?')) return;
   try {
-    const res = await fetch('/api/cases/' + encodeURIComponent(uid), { method: 'DELETE' });
-    if (!res.ok) throw new Error('Ошибка');
-    showToast('Дело удалено', 'success');
-    loadDashboard();
+    const res = await fetch('/api/cases/' + encodeURIComponent(uid), { method:'DELETE' });
+    if (!res.ok) throw new Error();
+    showToast('Дело удалено', 'success'); loadDashboard();
   } catch { showToast('Ошибка удаления', 'error'); }
 }
 
@@ -315,29 +311,31 @@ async function runMonitor() {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Запущен...';
   try {
-    const res = await fetch('/api/parse/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'full' }) });
+    const res = await fetch('/api/parse/run', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({mode:'full'}) });
     const json = await res.json();
-    if (res.status === 409) {
-      showToast('Прогон уже выполняется', 'error');
-    } else if (!res.ok) {
-      throw new Error(json.error || 'Ошибка');
-    } else {
+    if (res.status === 409) { showToast('Прогон уже выполняется', 'error'); }
+    else if (!res.ok) { throw new Error(json.error || 'Ошибка'); }
+    else {
       showToast('Мониторинг запущен', 'success');
-      // Poll for status updates
-      let pollCount = 0;
-      const poll = setInterval(() => {
-        loadDashboard();
-        pollCount++;
-        if (pollCount > 30) { clearInterval(poll); btn.disabled = false; btn.innerHTML = '▶ Запустить мониторинг'; }
-      }, 5000);
+      let polls = 0;
+      const poll = setInterval(() => { loadDashboard(); if (++polls > 24) { clearInterval(poll); } }, 5000);
     }
-  } catch (err) {
-    showToast(err.message, 'error');
-  }
-  setTimeout(() => { btn.disabled = false; btn.innerHTML = '▶ Запустить мониторинг'; }, 5000);
+  } catch (err) { showToast(err.message, 'error'); }
+  setTimeout(() => { btn.disabled = false; btn.innerHTML = '▶ Мониторинг'; }, 5000);
 }
 
-function loadAll() { loadDashboard(); }
+async function markAllRead() {
+  try {
+    const notifs = await (await fetch('/api/notifications')).json();
+    const unread = (notifs.data || []).filter(n => !n.read);
+    await Promise.all(unread.map(n =>
+      fetch('/api/notifications/' + encodeURIComponent(n.uid) + '/read', { method:'PATCH' })
+    ));
+    if (unread.length) showToast('Все уведомления отмечены', 'success');
+    loadDashboard();
+  } catch { showToast('Ошибка', 'error'); }
+}
+
 loadDashboard();
 setInterval(loadDashboard, 30000);
 </script>
