@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Интеграция CourtDesk с 1С CRM</title>
+<style>
+  @page { size: A4; margin: 2cm 2.5cm 2cm 2cm; }
+  body { font-family: 'Segoe UI', Calibri, sans-serif; font-size: 11pt; line-height: 1.5; color: #1e293b; }
+  h1 { font-size: 18pt; color: #1e293b; border-bottom: 2px solid #38bdf8; padding-bottom: 4px; margin-top: 28px; }
+  h2 { font-size: 14pt; color: #1e293b; margin-top: 22px; }
+  h3 { font-size: 12pt; color: #475569; margin-top: 16px; }
+  h4 { font-size: 11pt; color: #64748b; margin-top: 12px; }
+  p { margin: 4px 0 8px; }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 9.5pt; }
+  th { background: #1e293b; color: white; padding: 5px 8px; text-align: left; font-weight: 600; }
+  td { padding: 4px 8px; border: 1px solid #cbd5e1; }
+  tr:nth-child(even) td { background: #f8fafc; }
+  code { font-family: 'Consolas', 'Cascadia Code', monospace; font-size: 9pt; background: #f1f5f9; padding: 1px 4px; border-radius: 3px; color: #e53e3e; }
+  pre { background: #f1f5f9; padding: 10px 14px; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 9pt; overflow-x: auto; }
+  pre code { background: none; padding: 0; color: #1e293b; }
+  ul, ol { margin: 4px 0 8px; padding-left: 24px; }
+  li { margin: 2px 0; }
+  hr { border: none; border-top: 2px solid #e2e8f0; margin: 16px 0; }
+  a { color: #2563eb; text-decoration: none; }
+  strong { color: #0f172a; }
+  .cover { text-align: center; padding-top: 180px; }
+  .cover h1 { font-size: 24pt; border: none; color: #0f172a; margin-bottom: 8px; }
+  .cover .sub { font-size: 13pt; color: #64748b; }
+  .cover .date { font-size: 11pt; color: #94a3b8; margin-top: 16px; }
+</style>
+</head>
+<body>
+<div class="cover">
+  <h1>Интеграция CourtDesk с 1С CRM</h1>
+  <p class="sub">CourtDesk — CRM-оркестратор поиска и мониторинга судебных дел РФ</p>
+  <p class="date">2026-07-24</p>
+</div>
+<div style="page-break-before: always;"></div>
+<h1>Интеграция CourtDesk с 1С CRM — функционал, вопросы, предложения</h1>
+<p>&gt; Дата: 2026-07-24</p>
+<p>&gt; Аудитория: программист 1С, разрабатывающий CRM-модуль судебных дел</p>
+<p>&gt; Версия приложения: v0.4.0 (HEAD 8774d95)</p>
+<hr>
+<h2>1. Текущий API — что уже можно использовать</h2>
+<h3>1.1 Базовые сведения</h3>
+<table>
+<tr><th>Свойство</th><th>Значение</th></tr>
+<tr><td>----------</td><td>----------</td></tr>
+<tr><td>Протокол</td><td>HTTP/1.1, REST</td></tr>
+<tr><td>Формат</td><td>JSON (Content-Type: application/json)</td></tr>
+<tr><td>Ответ (успех)</td><td>`{ success: true, data: &lt;T&gt; }`</td></tr>
+<tr><td>Ответ (ошибка)</td><td>`{ success: false, error: "&lt;msg&gt;", code: "&lt;CODE&gt;" }`</td></tr>
+<tr><td>Порт по умолчанию</td><td>8767</td></tr>
+<tr><td>Bind по умолчанию</td><td>127.0.0.1 (локальная сеть / reverse-proxy)</td></tr>
+<tr><td>Rate limit</td><td>1500ms между запросами к одному хосту sudrf.ru</td></tr>
+<tr><td>Аутентификация</td><td>Отсутствует (только loopback или VPN)</td></tr>
+<tr><td>CORS</td><td>`Access-Control-Allow-Origin: *` (без Authorization)</td></tr>
+</table>
+<h3>1.2 Эндпоинты — таблица для 1С</h3>
+<table>
+<tr><th>#</th><th>Метод</th><th>Путь</th><th>Назначение</th><th>Статус</th></tr>
+<tr><td>---</td><td>-------</td><td>------</td><td>-----------</td><td>--------</td></tr>
+<tr><td>1</td><td>`GET`</td><td>`/api/health`</td><td>Liveness probe</td><td>✅</td></tr>
+<tr><td>2</td><td>`GET`</td><td>`/api/status`</td><td>Счётчики + здоровье системы</td><td>✅</td></tr>
+<tr><td>3</td><td>`GET`</td><td>`/api/notifications`</td><td>Уведомления о событиях по делам</td><td>✅</td></tr>
+<tr><td>4</td><td>`GET`</td><td>`/api/cases`</td><td>Список дел с фильтрацией</td><td>✅</td></tr>
+<tr><td>5</td><td>`GET`</td><td>`/api/cases/stats`</td><td>Детальная статистика</td><td>✅</td></tr>
+<tr><td>6</td><td>`GET`</td><td>`/api/cases/:uid`</td><td>Карточка дела</td><td>✅</td></tr>
+<tr><td>7</td><td>`POST`</td><td>`/api/cases`</td><td>Добавить дело в мониторинг</td><td>✅</td></tr>
+<tr><td>8</td><td>`PATCH`</td><td>`/api/cases/:uid`</td><td>Обновить поля дела</td><td>✅</td></tr>
+<tr><td>9</td><td>`DELETE`</td><td>`/api/cases/:uid`</td><td>Удалить дело</td><td>✅</td></tr>
+<tr><td>10</td><td>`POST`</td><td>`/api/cases/wait`</td><td>Отслеживать появление дела</td><td>✅</td></tr>
+<tr><td>11</td><td>`POST`</td><td>`/api/search/by-number`</td><td>Поиск по номеру дела</td><td>✅</td></tr>
+<tr><td>12</td><td>`POST`</td><td>`/api/search/by-party`</td><td>Поиск по участникам</td><td>✅</td></tr>
+<tr><td>13</td><td>`POST`</td><td>`/api/parse/url`</td><td>Парсинг карточки дела по URL</td><td>✅</td></tr>
+<tr><td>14</td><td>`POST`</td><td>`/api/parse/run`</td><td>Запуск циклического мониторинга</td><td>✅</td></tr>
+<tr><td>15</td><td>`POST`</td><td>`/api/resolve`</td><td>Суд + номер → ссылка на карточку</td><td>✅</td></tr>
+<tr><td>16</td><td>`GET`</td><td>`/api/courts?q=`</td><td>Поиск судов по названию</td><td>✅</td></tr>
+<tr><td>17</td><td>`GET`</td><td>`/api/courts/:id`</td><td>Информация о конкретном суде</td><td>✅</td></tr>
+<tr><td>18</td><td>`POST`</td><td>`/api/intake`</td><td>Классификация входного текста</td><td>✅</td></tr>
+</table>
+<h3>1.3 Ключевые контракты — что важно для 1С</h3>
+<h4>WatchedCase (основной объект)</h4>
+<pre><code>
+{
+
+  "uid": "550e8400-e29b-41d4-a716-446655440000",
+
+  "url": "https://leninsky--perm.sudrf.ru/modules.php?name=sud_delo&amp;srv_num=1&amp;name_op=case&amp;case_id=12345",
+
+  "courtId": "leninsky--perm",
+
+  "courtCode": "59RS0007",
+
+  "courtType": "district",
+
+  "number": "2-1234/2024",
+
+  "status": "monitoring",
+
+  "result": null,
+
+  "legalForceDate": null,
+
+  "legalForceNotified": false,
+
+  "userId": "1c-001",
+
+  "lastChecked": "2026-07-24T09:00:00.000Z",
+
+  "createdAt": "2026-07-20T12:00:00.000Z",
+
+  "updatedAt": "2026-07-24T09:00:00.000Z"
+
+}
+
+</code></pre>
+<p><strong>Жизненный цикл статуса:</strong></p>
+<pre><code>
+waiting → monitoring → decision → enforced → archived
+
+                          ↓
+
+                       error (из любого статуса)
+
+</code></pre>
+<h4>Назначение status-ов для CRM</h4>
+<table>
+<tr><th>Статус</th><th>Когда</th><th>Что происходит</th></tr>
+<tr><td>--------</td><td>-------</td><td>---------------</td></tr>
+<tr><td>`waiting`</td><td>Дело ещё не появилось на сайте суда</td><td>Scheduler периодически ищет по ФИО + дате</td></tr>
+<tr><td>`monitoring`</td><td>Дело найдено, отслеживаем изменения</td><td>Scheduler парсит карточку, фиксирует события</td></tr>
+<tr><td>`decision`</td><td>В карточке появился результат</td><td>Отслеживаем дату вступления в силу</td></tr>
+<tr><td>`enforced`</td><td>Решение вступило в законную силу</td><td>Финальная стадия мониторинга</td></tr>
+<tr><td>`archived`</td><td>Пользователь завершил работу</td><td>Дело больше не обрабатывается</td></tr>
+<tr><td>`error`</td><td>Последний прогон упал</td><td>Автоматически повторяется при следующих прогонах</td></tr>
+</table>
+<h4>Что можно менять через PATCH (whitelist)</h4>
+<p><code>status</code>, <code>result</code>, <code>legalForceDate</code>, <code>legalForceNotified</code>, <code>userId</code>, <code>url</code></p>
+<p><strong>Нельзя менять:</strong> <code>uid</code>, <code>createdAt</code>, <code>courtId</code>, <code>courtType</code>, <code>number</code></p>
+<h4>Пул уведомлений (Notification)</h4>
+<pre><code>
+{
+
+  "uid": "uuid",
+
+  "caseUid": "uuid дела",
+
+  "type": "found|decision|enforced",
+
+  "message": "По делу 2-1234/2024 вынесено решение: Иск удовлетворён",
+
+  "read": false,
+
+  "createdAt": "2026-07-24T10:00:00.000Z"
+
+}
+
+</code></pre>
+<hr>
+<h2>2. Вопросы к программисту 1С</h2>
+<h3>2.1 Интеграция (Critical)</h3>
+<ol>
+<li>**Как 1С будет вызывать API?**</li>
+</ul>
+<ul>
+<li>HTTP-запросы из встроенного языка (HTTPСоединение / ОтправкаHTTPЗапроса)?</li>
+<li>Через внешнюю компоненту?</li>
+<li>Нужна ли поддержка SOAP или только REST?</li>
+</ul>
+<ol>
+<li>**Сценарий использования — какой workflow?**</li>
+</ul>
+<ul>
+<li>Юрист в 1С нажимает «Найти дело» → CourtDesk → результат обратно в 1С?</li>
+<li>Или 1С просто запускает мониторинг, а юрист смотрит в Web UI?</li>
+<li>Нужен ли экспорт данных из CourtDesk обратно в 1С (статусы, даты, события)?</li>
+</ul>
+<ol>
+<li>**Требуется ли аутентификация между 1С и CourtDesk?**</li>
+</ul>
+<ul>
+<li>Сейчас API открытый (CORS \*, без авторизации)</li>
+<li>Нужен shared-token, Basic Auth или IP-белый список?</li>
+<li>Как к этому привыкла 1С-команда?</li>
+</ul>
+<ol>
+<li>**Как часто 1С будет дёргать API?**</li>
+</ul>
+<ul>
+<li>При каждом открытии карточки дела юристом (pull)?</li>
+<li>Нужен push-механизм (вебхуки)? CourtDesk → 1С при смене статуса дела?</li>
+</ul>
+<h3>2.2 Функциональные вопросы</h3>
+<ol>
+<li>**Поле `userId` — какой идентификатор передавать?**</li>
+</ul>
+<ul>
+<li>GUID пользователя из 1С? Табельный номер? ФИО?</li>
+<li>Нужна ли привязка к ролям?</li>
+</ul>
+<ol>
+<li>**Нужен ли импорт данных из 1С в CourtDesk?**</li>
+</ul>
+<ul>
+<li>Например: список уже известных дел (номер + суд) для массового запуска мониторинга</li>
+<li>Загрузка справочника судов (у нас есть 10 287 записей)</li>
+</ul>
+<ol>
+<li>**Как 1С хочет получать `legalForceDate`?**</li>
+</ul>
+<ul>
+<li>Отдельный реквизит в карточке дела 1С?</li>
+<li>Событие/уведомление при наступлении даты?</li>
+<li>Нужен ли расчёт оставшихся дней до вступления?</li>
+</ul>
+<ol>
+<li>**Как обрабатывать ошибки интеграции?**</li>
+</ul>
+<ul>
+<li>Timeout? Retry-политика?</li>
+<li>Нужен ли эндпоинт `/api/cases/batch` для массовой загрузки?</li>
+</ul>
+<h3>2.3 UI/UX для юриста</h3>
+<ol>
+<li>**Нужен ли наш Web UI юристам или весь функционал идёт через 1С?**</li>
+</ul>
+<ul>
+<li>Если только 1С — тогда API должен покрывать 100% потребностей поиска и мониторинга</li>
+<li>Если Web UI тоже нужен — какие экраны критичны?</li>
+</ul>
+<ol>
+<li>**Есть ли у 1С свои механизмы уведомлений?**</li>
+</ul>
+<ul>
+<li>Нужны ли наши уведомления (type: found/decision/enforced) в 1С?</li>
+<li>Или 1С сама опрашивает `/api/status` и `/api/notifications`?</li>
+</ul>
+<hr>
+<h2>3. Предложения со стороны разработки</h2>
+<h3>3.1 API — что стоит добавить (предлагаем)</h3>
+<table>
+<tr><th>Предложение</th><th>Приоритет</th><th>Суть</th></tr>
+<tr><td>------------</td><td>-----------</td><td>------</td></tr>
+<tr><td>**Batch API**</td><td>HIGH</td><td>`POST /api/cases/batch` — добавление 10–100 дел за 1 запрос; `GET /api/cases/batch-status` — статус массовой загрузки</td></tr>
+<tr><td>**Webhooks**</td><td>HIGH</td><td>CourtDesk → 1С: POST на URL 1С при `decision`, `enforced`, `found` (настраивается через `.env` или `PATCH /api/settings`)</td></tr>
+<tr><td>**API Token**</td><td>HIGH</td><td>`X-API-Key` header, простой shared-secret. Если `TOKEN=...` в .env — все запросы без токена возвращают 401. Если не задан — доступ открыт (обратная совместимость)</td></tr>
+<tr><td>**Пагинация списка дел**</td><td>MEDIUM</td><td>`?offset=&amp;limit=&amp;sort=updatedAt:desc` — `/api/cases` сейчас возвращает все дела сразу</td></tr>
+<tr><td>**Фильтры для /api/cases**</td><td>MEDIUM</td><td>`?legalForceDateFrom=&amp;legalForceDateTo=&amp;createdAtFrom=&amp;hasResult=true`</td></tr>
+<tr><td>**Расширенный поиск /api/search**</td><td>MEDIUM</td><td>`?mode=strict` — точное совпадение номера дела (сейчас results[0] без скоринга)</td></tr>
+<tr><td>**Экспорт результатов поиска**</td><td>MEDIUM</td><td>`GET /api/search/export?format=csv` — для 1С: загрузка найденных дел таблицей</td></tr>
+<tr><td>**HTTP/2 + keep-alive**</td><td>LOW</td><td>Для prod: настроить reverse-proxy (nginx/Caddy) перед CourtDesk</td></tr>
+</table>
+<h3>3.2 Безопасность (предлагаем)</h3>
+<table>
+<tr><th>Предложение</th><th>Приоритет</th><th>Суть</th></tr>
+<tr><td>------------</td><td>-----------</td><td>------</td></tr>
+<tr><td>**SSRF-защита**</td><td>CRITICAL</td><td>`POST /api/parse/url` принимает любой URL → fetch без allowlist. Нужен `assertCourtUrl()` — только `*.sudrf.ru`, `*.msudrf.ru`, https-only</td></tr>
+<tr><td>**Валидация URL при добавлении дела**</td><td>HIGH</td><td>`POST /api/cases`, `POST /api/cases/wait` — проверять, что `url` (если передан) ведёт на sudrf.ru</td></tr>
+<tr><td>**Rate-limit на уровне API**</td><td>MEDIUM</td><td>Защита от случайного/намеренного спама: N запросов/минуту на IP</td></tr>
+<tr><td>**Логирование запросов 1С**</td><td>MEDIUM</td><td>`X-Request-Id` + `X-User-Id` кастомные заголовки для трейсинга</td></tr>
+</table>
+<h3>3.3 Инфраструктура (предлагаем)</h3>
+<table>
+<tr><th>Предложение</th><th>Приоритет</th><th>Суть</th></tr>
+<tr><td>------------</td><td>-----------</td><td>------</td></tr>
+<tr><td>**Docker-контейнер**</td><td>MEDIUM</td><td>Готовый `Dockerfile` + `docker-compose.yml` для единообразного деплоя на сервере заказчика</td></tr>
+<tr><td>**SQLite вместо JSON**</td><td>MEDIUM</td><td>При &gt;10 000 дел — миграция на SQLite для атомарности, конкурентности и производительности. JSON-хранилище не имеет proper locking</td></tr>
+<tr><td>**Pino structured logging**</td><td>LOW</td><td>Замена `console.log` на pino с JSON-выводом — при появлении prod-мониторинга</td></tr>
+<tr><td>**Health check с зависимостями**</td><td>LOW</td><td>`/api/health` сейчас всегда `ok`. Добавить: проверка JSON-файлов (битые?), RuCaptcha API (доступен?), диск (место?)</td></tr>
+</table>
+<h3>3.4 Уведомления и мониторинг (предлагаем)</h3>
+<table>
+<tr><th>Предложение</th><th>Приоритет</th><th>Суть</th></tr>
+<tr><td>------------</td><td>-----------</td><td>------</td></tr>
+<tr><td>**Telegram-уведомления**</td><td>MEDIUM</td><td>Опциональный канал: бот шлёт `found`/`decision`/`enforced` в чат юриста</td></tr>
+<tr><td>**Email-уведомления**</td><td>LOW</td><td>При достижении `enforced` — письмо на почту юриста</td></tr>
+<tr><td>**Scheduler cron из коробки**</td><td>MEDIUM</td><td>Сейчас `runFull()` запускается вручную через `POST /api/parse/run` или извне (cron/systemd timer). Добавить встроенный cron (node-cron: `0 8 * * 1,3,5`)</td></tr>
+<tr><td>**Прогресс выполнения runFull**</td><td>LOW</td><td>SSE-эндпоинт `GET /api/parse/run/progress` — отдаёт `{ done: 5, total: 50 }` во время прогона</td></tr>
+</table>
+<hr>
+<h2>4. Примеры HTTP-запросов для 1С</h2>
+<h3>4.1 Поиск дела по номеру</h3>
+<pre><code>
+POST /api/search/by-number HTTP/1.1
+
+Content-Type: application/json
+
+
+
+{
+
+  "courtId": "59RS0007",
+
+  "caseNumber": "2-1234/2024"
+
+}
+
+
+
+→ 200
+
+{
+
+  "success": true,
+
+  "data": {
+
+    "found": true,
+
+    "count": 1,
+
+    "results": [{
+
+      "caseNumber": "2-1234/2024",
+
+      "caseUrl": "https://leninsky--perm.sudrf.ru/modules.php?name=sud_delo&amp;srv_num=1&amp;name_op=case&amp;case_id=12345&amp;delo_id=1540005",
+
+      "uid": "uuid",
+
+      "judge": "Иванова А.С.",
+
+      "result": "Иск удовлетворён частично",
+
+      "legalForceDate": "2026-08-15",
+
+      "filingDate": "2024-03-10",
+
+      "courtType": "district"
+
+    }],
+
+    "court": {
+
+      "code": "59RS0007",
+
+      "name": "Ленинский районный суд г. Перми"
+
+    }
+
+  }
+
+}
+
+</code></pre>
+<h3>4.2 Добавление дела в мониторинг</h3>
+<pre><code>
+POST /api/cases HTTP/1.1
+
+Content-Type: application/json
+
+
+
+{
+
+  "url": "https://leninsky--perm.sudrf.ru/modules.php?name=sud_delo&amp;srv_num=1&amp;name_op=case&amp;case_id=12345",
+
+  "courtId": "59RS0007",
+
+  "courtType": "district",
+
+  "caseNumber": "2-1234/2024",
+
+  "userId": "1c-001"
+
+}
+
+
+
+→ 200
+
+{
+
+  "success": true,
+
+  "data": {
+
+    "uid": "550e8400-e29b-41d4-a716-446655440000",
+
+    "url": "https://...",
+
+    "courtId": "leninsky--perm",
+
+    "courtType": "district",
+
+    "number": "2-1234/2024",
+
+    "status": "monitoring",
+
+    "result": null,
+
+    "legalForceDate": null,
+
+    "userId": "1c-001",
+
+    "createdAt": "2026-07-24T10:00:00.000Z",
+
+    "updatedAt": "2026-07-24T10:00:00.000Z"
+
+  }
+
+}
+
+</code></pre>
+<h3>4.3 Получение дел со статусом "решение вынесено"</h3>
+<pre><code>
+GET /api/cases?status=decision&amp;userId=1c-001 HTTP/1.1
+
+</code></pre>
+<h3>4.4 Получение вступивших сегодня</h3>
+<pre><code>
+GET /api/status HTTP/1.1
+
+
+
+→ 200
+
+{
+
+  "success": true,
+
+  "data": {
+
+    "monitoring": 45,
+
+    "waiting": 12,
+
+    "decision": 8,
+
+    "enforcedToday": 2,
+
+    "health": "ok"
+
+  }
+
+}
+
+</code></pre>
+<h3>4.5 Запуск проверки</h3>
+<pre><code>
+POST /api/parse/run HTTP/1.1
+
+Content-Type: application/json
+
+
+
+{ "mode": "full" }
+
+
+
+→ 202
+
+{
+
+  "success": true,
+
+  "data": { "status": "started", "mode": "full" }
+
+}
+
+
+
+(повторный запрос пока прогон идёт → 409 Conflict)
+
+</code></pre>
+<hr>
+<h2>5. Интеграционные риски (осознанные)</h2>
+<table>
+<tr><th>Риск</th><th>Вероятность</th><th>Комментарий</th></tr>
+<tr><td>------</td><td>------------</td><td>-------------</td></tr>
+<tr><td>sudrf.ru/msudrf.ru меняют HTML</td><td>Высокая</td><td>Адаптеры парсинга могут сломаться при редизайне ГАС «Правосудие». Нужен автоматический smoke-тест раз в сутки для каждого типа суда</td></tr>
+<tr><td>RuCaptcha timeout/недоступность</td><td>Средняя</td><td>Мировые суды без капчи не работают. Нужен fallback на 2captcha (уже в конфиге) или ручное решение</td></tr>
+<tr><td>Rate-limit блокировка sudrf.ru</td><td>Низкая</td><td>При 1500ms между запросами ~57 запросов/минуту. Рекомендуем не превышать 60/мин</td></tr>
+<tr><td>Изменение формата судебных номеров</td><td>Низкая</td><td>Паттерн в `intake/classify.ts` — нужно периодически сверять с реальными делами</td></tr>
+<tr><td>JSON-хранилище `cases.json` — потеря данных при битом файле</td><td>Средняя</td><td>Сейчас при битом JSON — тихий fallback на `{}`. Нужно: backup битого файла + алерт. **CRITICAL по CR6**</td></tr>
+</table>
+<hr>
+<h2>6. План ближайших доработок (предлагаемый порядок)</h2>
+<ol>
+<li>**SSRF-защита** (`assertCourtUrl`) + **API Token** — чтобы продукт можно было выкатить за периметр локалхоста</li>
+<li>**Целостность store** — backup битого JSON, alert</li>
+<li>**Webhooks** (found/decision/enforced → POST на URL 1С)</li>
+<li>**Batch API** для массового добавления дел</li>
+<li>**Пагинация + фильтры** на `/api/cases`</li>
+<li>**Dockerfile** для контейнеризации</li>
+<li>**Scheduler cron** (встроенный, без внешнего crond)</li>
+</ul>
+<hr>
+<p>*Документ подготовлен для обсуждения с командой 1С. Все пункты открыты к дискуссии.*</p>
+</body>
+</html>
