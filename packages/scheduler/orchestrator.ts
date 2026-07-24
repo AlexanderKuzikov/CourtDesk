@@ -3,7 +3,7 @@ import iconv from 'iconv-lite'; // статический импорт — BUG-0
 import { listCases, updateCase, addEvent, getCase, getEvents, addNotification } from '../store/index.js';
 import { getParseAdapter } from '../parse/index.js';
 import { getSearchAdapter } from '../search/index.js';
-import { assertCourtUrl } from '../core/errors.js';
+import { assertCourtUrl, CourtUrlError } from '../core/errors.js';
 import type { WatchedCase, CaseHistoryEvent, Notification } from '../core/types.js';
 
 const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000;
@@ -66,8 +66,15 @@ async function processBatch(cases: WatchedCase[]): Promise<{ ok: number; fail: n
       ok++;
     } catch (err) {
       fail++;
-      console.error(`[scheduler] fail ${c.uid} (${c.number}):`, err);
-      updateCase(c.uid, { status: 'error', lastChecked: now() });
+      if (err instanceof CourtUrlError) {
+        // Перманентная ошибка — архивируем, чтобы не крутилось в error-цикле
+        console.warn(`[scheduler] archive ${c.uid} (${c.number}): invalid URL`);
+        updateCase(c.uid, { status: 'archived', lastChecked: now() });
+        addEvent(c.uid, makeEvent(c.uid, 'archived', 'Заархивировано: URL не принадлежит судовой системе РФ'));
+      } else {
+        console.error(`[scheduler] fail ${c.uid} (${c.number}):`, err);
+        updateCase(c.uid, { status: 'error', lastChecked: now() });
+      }
     }
     // RATE-001: пауза между запросами (не после последнего)
     if (i < cases.length - 1) await sleep(RATE_DELAY_MS);

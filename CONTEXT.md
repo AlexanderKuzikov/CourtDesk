@@ -20,14 +20,14 @@
 | Search | ✅ Готово | CourtSniffer |
 | Parse | ✅ Исправлено | BUG-003, BUG-008 |
 | Intake | ✅ Исправлено | CR5-005 |
-| Scheduler | ✅ Исправлено — archived race, error recovery | CR6-004, CR6-006 |
+| Scheduler | ✅ Исправлено — archived race, error recovery, CourtUrlError auto-archive | CR6-004, CR6-006 |
 | Store | ✅ Каскадное удаление | CR6-016 |
 | API | ✅ Нет дублей роутов | CR6-008, CR6-009 |
 | Tests | ✅ 57/57 зелёных | Vitest |
 | tsconfig | ✅ moduleResolution: Node16 | INFRA-001 |
 | CI | ✅ tsc --noEmit, 57 тестов | .github/workflows/ci.yml |
-| Viewer (Dashboard) | ✅ Фильтры, детали, управление, запуск | CR6-007 + UX |
-| Viewer (Search) | ✅ Рабочий, + мониторинг, + waiting | CR6-007 + UX |
+| Viewer (Dashboard) | ✅ Фильтры, пагинация, сортировка, поиск, печать, темы | CR6-007 + UX v2 |
+| Viewer (Search) | ✅ Рабочий, + мониторинг, + waiting, темы | CR6-007 + UX v2 |
 | CODE_REVIEW6 | ✅ Применён | 2026-07-24 |
 
 ---
@@ -131,6 +131,7 @@
 | 2026-07-22 | NEW-001..011, CR4-001..008, CR5-001..012 (50 багов закрыто) |
 | 2026-07-23 | CR6 — CODE_REVIEW6.md от Cursor Agent (20 замечаний) |
 | 2026-07-24 | CR6 применён: security, store integrity, route dups, archived race, error recovery. UX/UI: dashboard с управлением, search с мониторингом. Dead code cleanup. Documentation. |
+| 2026-07-25 | UX/UI v2: смена тем (dark/light), пагинация, сортировка, поиск по таблице, печать, mark-all-read, Esc-close. theme.css + app.js shared. CourtUrlError → автоархивация (разрыв error-цикла). |
 
 ---
 
@@ -149,7 +150,7 @@ courtdesk/
 │   ├── api/
 │   │   ├── routes/   — 16 эндпоинтов (CR6-002, CR6-008, CR6-009, CR6-013)
 │   │   └── middleware/
-│   └── viewer/       — дашборд + search.html (UX MVP)
+│   └── viewer/       — дашборд + search.html (UX v2: темы, пагинация, сортировка)
 ├── .env.example
 ├── .gitattributes
 ├── package.json
