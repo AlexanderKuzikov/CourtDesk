@@ -40,3 +40,10 @@ export function clearNotifications(): void {
   _cache = null;
   save([]);
 }
+
+export function deleteNotificationsByCase(caseUid: string): void {
+  const list = load();
+  const filtered = list.filter(n => n.caseUid !== caseUid);
+  if (filtered.length === list.length) return; // не писать файл если ничего не изменилось
+  save(filtered);
+}

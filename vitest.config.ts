@@ -4,8 +4,6 @@ export default defineConfig({
   test: {
     environment: 'node',
     pool: 'forks',
-    poolOptions: {
-      forks: { singleFork: false },
-    },
+    forks: { singleFork: false },
   },
 });

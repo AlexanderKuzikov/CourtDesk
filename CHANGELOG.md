@@ -4,71 +4,89 @@
 
 ---
 
-## [Unreleased]
+## [0.4.0] — 2026-07-24
 
-### Fixed (CR5 — 2026-07-22, коммит `849fdb4`)
-- **CR5-001**: `await sleep(RATE_DELAY_MS)` добавлен перед `searchByCaseNumber` внутри `processOne` — устранён двойной запрос к sudrf.ru без rate-limit на `decision`-делах (`orchestrator.ts`)
-- **CR5-002**: Удалён `prev.status === 'deleted' as unknown` — несуществующий статус с подавлением TypeScript (`orchestrator.ts`)
-- **CR5-003**: `r.legalForceDate.slice(0, 10)` при записи — `enforcedToday` в `getStats()` теперь корректен (`orchestrator.ts`, `store/cases.ts`)
-- **CR5-004**: Убран `Authorization` из `Access-Control-Allow-Headers` при wildcard origin — нерабочая комбинация по спецификации CORS (`api/server.ts`)
-- **CR5-005**: `CASE_NUMBER_RE` и `CYRILLIC_WORD_RE` переведены с `/i` на `/iu` — корректный Unicode case-insensitive для кириллицы (`intake/classify.ts`)
-- **CR5-006**: Retry-цикл в `pollResult` до `NETWORK_RETRY_LIMIT=2` при `fetch`-исключении — captcha-сессия выживает при кратковременных сбоях сети (`captcha/rucaptcha.ts`)
-- **CR5-007**: `listCases` принимает `status: CaseStatus | CaseStatus[]` через `Set` — один проход по Map вместо 3× в `runFull`/`runRetry` (`store/cases.ts`, `orchestrator.ts`)
-- **CR5-010**: `HOST = process.env['HOST'] ?? '127.0.0.1'` — bind-адрес из env, не захардкожен (`api/server.ts`)
-- **CR5-012**: `_isRunning` guard + `409 Conflict { code: 'RUN_IN_PROGRESS' }` в `POST /api/parse/run` — защита от параллельных запусков (`api/routes/parse.ts`)
+### CR6 — Security & Data Integrity (20 замечаний)
 
-### Documented as trade-offs (CR5 — 2026-07-22)
-- **CR5-008**: tmp/rename без fsync — задокументировано в ARCHITECTURE.md §7.2 и DECISIONS.md как осознанный trade-off для single-process
-- **CR5-009**: `lint` = type-check, eslint отсутствует — tech-debt, зафиксирован в DECISIONS.md
-- **CR5-011**: `console.log` вместо structured logging — tech-debt, зафиксирован в DECISIONS.md
+#### Fixed (CRITICAL)
+
+- **CR6-001**: `readJson` при коррупции файла бэкапит в `.corrupt.<ts>` и бросает ошибку вместо silent-wipe (`store/json-store.ts`)
+- **CR6-002**: `assertCourtUrl()` — allowlist `*.sudrf.ru` / `*.msudrf.ru`, https-only. Применён в `/api/parse/url` и `orchestrator.fetchHtml`. Блок SSRF (`file://`, `localhost`, cloud metadata) (`core/errors.ts`, `api/routes/parse.ts`, `scheduler/orchestrator.ts`)
+- **CR6-004**: Re-check `archived` перед финальным `updateCase` — если дело заархивировано во время async-обработки, пишется только `lastChecked`, изменения статуса отбрасываются (`scheduler/orchestrator.ts`)
+- **CR6-006**: `status: 'error'` сбрасывается в `'monitoring'` при успешном `processOne` — error-дела больше не крутятся вечно (`scheduler/orchestrator.ts`)
+
+#### Fixed (HIGH)
+
+- **CR6-007**: `search.html` — исправлены API-пути (`/api/search/by-number`, `/api/search/by-party`) и unwrap (`data.data.results`). Страница поиска восстановлена (`viewer/public/search.html`)
+- **CR6-008**: Удалён дублирующий `GET /api/status` из `health.ts` — `status.ts` больше не тенится (`api/routes/health.ts`)
+- **CR6-009**: Удалён дублирующий `POST /api/resolve` из `search.ts` — `resolve.ts` (URL builder) работает корректно (`api/routes/search.ts`)
+- **CR6-013**: `_isRunning = true` перемещён до `res.status(202)` — устранён TOCTOU в guard (`api/routes/parse.ts`)
+- **CR6-016**: `DELETE /api/cases/:uid` теперь каскадно чистит events и notifications (`api/routes/cases.ts`, `store/notifications.ts`)
+
+#### UX/UI — Dashboard
+
+- Дашборд: фильтры по статусу (Все / Мониторинг / Ожидание / Решение / Вступило / Ошибка / Архив) с счётчиками
+- Дашборд: кнопка «Запустить мониторинг» (`POST /api/parse/run`) с polling обновления
+- Дашборд: детали дела в modal — карточка + timeline событий (`GET /api/cases/:uid` + `GET /api/cases/:uid/events`)
+- Дашборд: архивирование (PATCH → `archived`), возврат из архива, удаление (с confirm)
+- Дашборд: авто-обновление каждые 30с, обработка ошибок соединения
+
+#### UX/UI — Search
+
+- Поиск: исправлены API-пути и unwrap (CR6-007)
+- Поиск: кнопка «В мониторинг» (+📋) в каждой строке результатов → `POST /api/cases`
+- Поиск: форма «Отслеживать появление» → `POST /api/cases/wait`
+- Поиск: `<input type="date">` вместо text с placeholder
+- Поиск: убраны тестовые данные (Кислицин, 59RS0007, быстрые тесты)
+- Поиск: брендинг изменён с "CourtSniffer" на "CourtDesk"
+- Поиск: toast-уведомления вместо alert
+
+#### Cleanup
+
+- Magistrate search adapter: удалены мёртвые `createMagistrateSession()` и `solveCaptchaOnPage()` — дубликаты `captcha/session.ts`
+- `GET /api/cases/:uid/events` — новый эндпоинт для timeline событий в UI
+- `version` синхронизирована: package.json / health = 0.4.0
+
+### Tech-debt (перенесено)
+
+| ID | Описание | Заметка |
+|----|----------|---------|
+| CR6-003 | Zero authentication | `COURTDESK_API_TOKEN` в .env.example — реализация в отдельном sprint |
+| CR6-005 | waiting → `results[0]` без матчинга | Нужен score/party matching |
+| CR6-010 | TLS `rejectUnauthorized: false` | Осознанный trade-off для sudrf.ru wildcard |
+| CR6-009 | eslint — tech-debt | Отложен с CR5-009 |
+| CR6-011 | Structured logging | Отложен с CR5-011 |
 
 ---
 
 ## [0.3.0] — 2026-07-22
 
 ### Added
-- **CORS middleware**: разблокирован dev-режим с Vite (:5173 → API :8767)
-- **Graceful shutdown**: SIGTERM/SIGINT → корректное завершение (`packages/api/server.ts`)
-- **GET /api/courts** без `q=` возвращает полный список судов
-- **Shared fetchHtml/parseResults**: дублированный код вынесен в `packages/search/shared.ts`
-- **Batch updateCase**: `processOne()` делает один `updateCase` в конце
-- **Persistent notifications**: `store/notifications.ts` с JSON-хранилищем, `PATCH /api/notifications/:uid/read`
-- **Magistrate search refactor**: делегирование парсинга в `parse/adapters/magistrate.ts`
-- **Viewer dashboard**: `packages/viewer/public/index.html` — дашборд UC-0
-- **SEARCH_PARAMS constants**: hardcoded `delo_id`/`case_type` вынесены в `packages/search/constants.ts`
-- **CODE_REVIEW4.md, CODE_REVIEW5.md**: документация всех раундов ревью
-- **BUG_REPORT.md**: 50/50 закрыто
+- CORS middleware, graceful shutdown, GET /api/courts без q=, shared fetchHtml/parseResults
+- Batch updateCase, persistent notifications, magistrate search refactor
+- Viewer dashboard (UC-0), SEARCH_PARAMS constants
+- CODE_REVIEW4.md, CODE_REVIEW5.md, BUG_REPORT.md
 
 ### Fixed
-- CR4-001..008: дублирование адаптеров, CORS, batch updateCase, graceful shutdown, notifications, magistrate, delo_id, GET /api/courts
-- NEW-001..011: makeEvent caseUid, race condition, /api/status, /api/notifications, error-ретрай, lastChecked, types, courts, config, classify
+- CR4-001..008, NEW-001..011, CR5-001..012
 
 ---
 
 ## [0.2.0] — 2026-07-22
 
 ### Added
-- Дашборд UC-0 (viewer/public/index.html)
-- /api/status, /api/notifications эндпоинты
-- Persistent notifications (store/notifications.ts)
-- POST /api/resolve
+- Дашборд UC-0, /api/status, /api/notifications, persistent notifications, POST /api/resolve
 
 ### Fixed
-- NEW-001..011 (scheduler race conditions, types, intake, courts, config)
-- INFRA-001..004 (tsconfig, CI, vitest, createApp)
+- NEW-001..011, INFRA-001..004
 
 ---
 
 ## [0.1.0] — 2026-07-21
 
 ### Added
-- Модульная структура `packages/`: api, core, store, scheduler, search, parse, captcha, intake, viewer
-- REST API: все 15 эндпоинтов
-- JSON-хранилище с атомарной записью (tmp + rename)
-- In-memory кэш в store/cases.ts
-- PATCH-whitelist, deleteCase guard
-- runNew через searchByParty
-- 202 Accepted для parse/run
-- Статический import iconv, rate limit
-- Полный набор unit/smoke тестов (57)
-- Apache 2.0 лицензия
+- Модульная структура packages/: api, core, store, scheduler, search, parse, captcha, intake, viewer
+- REST API: 15 эндпоинтов, JSON-хранилище с tmp+rename, in-memory кэш
+- PATCH-whitelist, deleteCase guard, runNew через searchByParty
+- 202 Accepted для parse/run, статический import iconv, rate limit
+- 57 unit/smoke тестов, Apache 2.0

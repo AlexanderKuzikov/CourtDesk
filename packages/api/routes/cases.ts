@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express';
-import { getCase, listCases, addCase, updateCase, deleteCase, getStats } from '../../store/index.js';
-import { addEvent as addHistoryEvent } from '../../store/events.js';
+import { getCase, listCases, addCase, updateCase, deleteCase, getStats, deleteNotificationsByCase } from '../../store/index.js';
+import { addEvent as addHistoryEvent, getEvents as getCaseEvents, clearEvents } from '../../store/events.js';
 import type { WatchedCase, CaseStatus } from '../../core/types.js';
 
 const router = Router();
@@ -118,7 +118,19 @@ router.delete('/api/cases/:uid', (req: Request, res: Response) => {
   try {
     const deleted = deleteCase(String(req.params['uid']));
     if (!deleted) return fail(res, 'NOT_FOUND', 'Дело не найдено', 404);
+    clearEvents(String(req.params['uid']));
+    deleteNotificationsByCase(String(req.params['uid']));
     ok(res, null);
+  } catch (e) { fail(res, 'STORE_ERROR', errMsg(e), 500); }
+});
+
+// События дела (для дашборда)
+router.get('/api/cases/:uid/events', (req: Request, res: Response) => {
+  try {
+    const c = getCase(String(req.params['uid']));
+    if (!c) return fail(res, 'NOT_FOUND', 'Дело не найдено', 404);
+    const events = getCaseEvents(String(req.params['uid']));
+    ok(res, events);
   } catch (e) { fail(res, 'STORE_ERROR', errMsg(e), 500); }
 });
 

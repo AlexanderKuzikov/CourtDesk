@@ -12,11 +12,15 @@ function ensureDataDir(): void {
 
 function readJson<T>(filename: string, fallback: T): T {
   const path = resolve(DATA_DIR, filename);
-  if (!existsSync(path)) return fallback;
   try {
     return JSON.parse(readFileSync(path, 'utf-8')) as T;
-  } catch {
-    return fallback;
+  } catch (err) {
+    // Файла нет — норма, отдаём fallback (CR6-001)
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return fallback;
+    // Файл есть, но повреждён — бэкапим и падаем
+    const corrupt = `${path}.corrupt.${Date.now()}`;
+    renameSync(path, corrupt);
+    throw new Error(`Corrupt JSON in ${filename}, backed up to ${corrupt}`);
   }
 }
 

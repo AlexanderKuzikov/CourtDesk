@@ -3,39 +3,44 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CourtDesk — дашборд</title>
+  <title>CourtDesk — Дашборд</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: system-ui, -apple-system, sans-serif; font-size: 14px; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
     header { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border-bottom: 2px solid #334155; padding: 14px 24px; display: flex; align-items: center; gap: 14px; }
-    header h1 { font-size: 20px; font-weight: 700; color: #e2e8f0; }
+    header h1 { font-size: 20px; font-weight: 700; }
     header h1 span { background: linear-gradient(90deg, #38bdf8, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
     header nav { margin-left: auto; display: flex; gap: 10px; }
     header nav a { color: #94a3b8; text-decoration: none; font-size: 13px; padding: 4px 10px; border-radius: 6px; }
     header nav a:hover { background: #334155; color: #e2e8f0; }
     .container { max-width: 1200px; margin: 0 auto; padding: 20px 24px; }
 
-    /* Counters */
-    .counters { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 24px; }
-    .counter { background: #1e293b; border-radius: 10px; padding: 16px; border: 1px solid #334155; }
-    .counter .num { font-size: 28px; font-weight: 700; line-height: 1; }
-    .counter .label { font-size: 12px; color: #64748b; margin-top: 4px; }
-    .counter .health { font-size: 11px; margin-top: 4px; }
+    .counters { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
+    .counter { background: #1e293b; border-radius: 10px; padding: 14px; border: 1px solid #334155; }
+    .counter .num { font-size: 26px; font-weight: 700; line-height: 1; }
+    .counter .label { font-size: 11px; color: #64748b; margin-top: 4px; }
     .counter.monitoring .num { color: #38bdf8; }
     .counter.waiting .num { color: #fbbf24; }
     .counter.decision .num { color: #4ade80; }
     .counter.enforced .num { color: #a78bfa; }
+    .counter.error .num { color: #f87171; }
 
-    /* Cases table */
-    .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-    .section-header h2 { font-size: 15px; font-weight: 600; }
-    .section-header .actions { display: flex; gap: 8px; }
-    .btn { padding: 7px 14px; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-block; }
+    .toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 8px; }
+    .toolbar .actions { display: flex; gap: 8px; }
+    .btn { padding: 7px 14px; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 5px; }
     .btn-primary { background: linear-gradient(135deg, #38bdf8, #6366f1); color: #fff; }
     .btn-primary:hover { opacity: .9; }
     .btn-secondary { background: #334155; color: #e2e8f0; }
     .btn-secondary:hover { background: #475569; }
+    .btn-danger { background: #3a1a1a; color: #f87171; }
+    .btn-danger:hover { background: #5a2a2a; }
     .btn-sm { padding: 4px 10px; font-size: 12px; }
+    .btn:disabled { opacity: .5; cursor: default; }
+
+    .filter-tabs { display: flex; gap: 4px; margin-bottom: 16px; flex-wrap: wrap; }
+    .filter-tabs .chip { padding: 5px 12px; border-radius: 16px; font-size: 12px; background: #1e293b; border: 1px solid #334155; cursor: pointer; color: #94a3b8; }
+    .filter-tabs .chip.active { background: #1e3a5f; border-color: #38bdf8; color: #38bdf8; }
+    .filter-tabs .chip .count { font-size: 10px; opacity: .6; margin-left: 2px; }
 
     table { width: 100%; border-collapse: collapse; font-size: 13px; background: #1e293b; border-radius: 10px; overflow: hidden; }
     th { text-align: left; padding: 10px 12px; background: #0f172a; color: #94a3b8; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; border-bottom: 2px solid #334155; }
@@ -48,8 +53,11 @@
     .badge-waiting { background: #3a2a1a; color: #fbbf24; }
     .badge-error { background: #3a1a1a; color: #f87171; }
     .badge-archived { background: #1e293b; color: #64748b; }
+    .action-btns { display: flex; gap: 4px; }
+    .icon-btn { padding: 3px 6px; border: none; border-radius: 4px; cursor: pointer; background: transparent; color: #64748b; font-size: 14px; }
+    .icon-btn:hover { background: #334155; color: #e2e8f0; }
+    .icon-btn.danger:hover { color: #f87171; }
 
-    /* Notifications */
     .notifications { background: #1e293b; border-radius: 10px; border: 1px solid #334155; margin-top: 24px; }
     .notifications h3 { font-size: 13px; padding: 12px 16px; border-bottom: 1px solid #334155; color: #94a3b8; text-transform: uppercase; letter-spacing: .04em; }
     .notif-item { padding: 10px 16px; border-bottom: 1px solid #0f172a; display: flex; align-items: center; gap: 10px; }
@@ -62,138 +70,276 @@
     .notif-item .msg { flex: 1; font-size: 13px; }
     .notif-item .time { font-size: 11px; color: #64748b; white-space: nowrap; }
 
-    /* Tabs */
-    .tabs { display: flex; gap: 0; margin-bottom: 16px; background: #1e293b; border-radius: 8px; overflow: hidden; border: 1px solid #334155; }
-    .tabs button { flex: 1; padding: 8px; border: none; background: transparent; color: #64748b; font-size: 13px; cursor: pointer; border-right: 1px solid #334155; }
-    .tabs button:last-child { border-right: none; }
-    .tabs button.active { background: #334155; color: #e2e8f0; font-weight: 600; }
-    .panel { display: none; }
-    .panel.active { display: block; }
+    .detail { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 100; align-items: center; justify-content: center; }
+    .detail.open { display: flex; }
+    .detail-card { background: #1e293b; border-radius: 12px; width: 680px; max-width: 90vw; max-height: 85vh; overflow-y: auto; padding: 24px; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+    .detail-card h2 { font-size: 16px; margin-bottom: 4px; color: #38bdf8; }
+    .detail-card .case-num { font-size: 12px; color: #64748b; margin-bottom: 16px; word-break: break-all; }
+    .detail-card .close-btn { float: right; background: none; border: none; color: #64748b; font-size: 20px; cursor: pointer; }
+    .detail-card .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; margin-bottom: 20px; }
+    .detail-card .info-item { font-size: 13px; }
+    .detail-card .info-item .key { color: #94a3b8; font-size: 11px; text-transform: uppercase; }
+    .detail-card .info-item .val { color: #e2e8f0; margin-top: 2px; }
+    .detail-card .timeline { border-left: 2px solid #334155; padding-left: 16px; }
+    .detail-card .timeline-item { position: relative; padding: 8px 0; }
+    .detail-card .timeline-item::before { content: ''; position: absolute; left: -20px; top: 14px; width: 8px; height: 8px; border-radius: 50%; background: #38bdf8; }
+    .detail-card .timeline-item .ev-type { font-size: 12px; font-weight: 600; color: #38bdf8; }
+    .detail-card .timeline-item .ev-msg { font-size: 13px; color: #e2e8f0; margin-top: 2px; }
+    .detail-card .timeline-item .ev-time { font-size: 11px; color: #64748b; margin-top: 2px; }
 
     .empty { text-align: center; padding: 40px 20px; color: #475569; }
     .empty h3 { font-size: 16px; margin-bottom: 4px; }
 
-    @media (max-width: 640px) {
-      .counters { grid-template-columns: repeat(2, 1fr); }
-      .section-header { flex-direction: column; gap: 8px; align-items: flex-start; }
-    }
+    .toast { position: fixed; bottom: 20px; right: 20px; padding: 12px 18px; border-radius: 8px; font-size: 13px; font-weight: 600; z-index: 200; opacity: 0; transition: opacity .3s; pointer-events: none; }
+    .toast.show { opacity: 1; }
+    .toast.success { background: #1a3a1a; color: #4ade80; border: 1px solid #2a5a2a; }
+    .toast.error { background: #3a1a1a; color: #f87171; border: 1px solid #5a2a2a; }
+
+    .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #38bdf8; border-top-color: transparent; border-radius: 50%; animation: spin .6s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @media (max-width: 640px) { .counters { grid-template-columns: repeat(2, 1fr); } }
   </style>
 </head>
 <body>
 <header>
-  <h1><span>CourtDesk</span></h1>
+  <h1><span>CourtDesk</span> 🏛️</h1>
   <nav>
+    <a href="/" style="color:#38bdf8">📊 Дашборд</a>
     <a href="/search.html">🔍 Поиск</a>
   </nav>
 </header>
 <div class="container">
-  <!-- Counters -->
   <div class="counters" id="counters"></div>
 
-  <!-- Tabs -->
-  <div class="tabs">
-    <button class="active" onclick="switchTab('cases', this)">📋 Дела</button>
-    <button onclick="switchTab('notifications', this)">🔔 Уведомления</button>
+  <div class="toolbar">
+    <div class="filter-tabs" id="filterTabs">
+      <span class="chip active" data-status="" onclick="setFilter('',this)">Все <span class="count" id="cnt-"></span></span>
+      <span class="chip" data-status="monitoring" onclick="setFilter('monitoring',this)">Мониторинг <span class="count" id="cnt-monitoring"></span></span>
+      <span class="chip" data-status="waiting" onclick="setFilter('waiting',this)">Ожидание <span class="count" id="cnt-waiting"></span></span>
+      <span class="chip" data-status="decision" onclick="setFilter('decision',this)">Решение <span class="count" id="cnt-decision"></span></span>
+      <span class="chip" data-status="enforced" onclick="setFilter('enforced',this)">Вступило <span class="count" id="cnt-enforced"></span></span>
+      <span class="chip" data-status="error" onclick="setFilter('error',this)">Ошибка <span class="count" id="cnt-error"></span></span>
+      <span class="chip" data-status="archived" onclick="setFilter('archived',this)">Архив <span class="count" id="cnt-archived"></span></span>
+    </div>
+    <div class="actions">
+      <button class="btn btn-primary btn-sm" onclick="runMonitor()" id="runBtn">▶ Запустить мониторинг</button>
+      <a href="/search.html" class="btn btn-primary btn-sm">+ Новое дело</a>
+      <button class="btn btn-secondary btn-sm" onclick="loadAll()">🔄</button>
+    </div>
   </div>
 
-  <!-- Cases panel -->
-  <div class="panel active" id="panel-cases">
-    <div class="section-header">
-      <h2>Дела в мониторинге</h2>
-      <div class="actions">
-        <a href="/search.html" class="btn btn-primary btn-sm">+ Новое дело</a>
-        <button class="btn btn-secondary btn-sm" onclick="refresh()">🔄 Обновить</button>
-      </div>
-    </div>
-    <div id="casesTable"><div class="empty"><h3>Загрузка...</h3></div></div>
-  </div>
+  <div id="casesTable"><div class="empty"><h3>Загрузка...</h3></div></div>
 
-  <!-- Notifications panel -->
-  <div class="panel" id="panel-notifications">
-    <div class="notifications">
-      <h3>Последние уведомления</h3>
-      <div id="notifList"><div class="empty"><h3>Нет уведомлений</h3></div></div>
-    </div>
+  <div class="notifications">
+    <h3>🔔 Уведомления</h3>
+    <div id="notifList"><div class="empty"><h3>Нет уведомлений</h3></div></div>
   </div>
 </div>
 
+<div class="detail" id="detailOverlay" onclick="if(event.target===this)closeDetail()">
+  <div class="detail-card">
+    <button class="close-btn" onclick="closeDetail()">&times;</button>
+    <div id="detailContent"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
 <script>
-function esc(s) {
-  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
+let allCases = [];
+let currentFilter = '';
 
-function switchTab(name, btn) {
-  document.querySelectorAll('.tabs button').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-  btn.classList.add('active');
-  document.getElementById('panel-' + name).classList.add('active');
+function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function showToast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + (type || 'success');
+  setTimeout(() => t.classList.remove('show'), 3000);
 }
-
 function formatTime(iso) {
-  if (!iso) return '';
+  if (!iso) return '—';
   const d = new Date(iso);
   return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
+const STATUS_LABELS = { monitoring: 'Мониторинг', waiting: 'Ожидание', decision: 'Решение', enforced: 'Вступило', error: 'Ошибка', archived: 'Архив' };
 
 async function loadDashboard() {
-  // Status counters
-  const statusRes = await fetch('/api/status');
-  const statusData = await statusRes.json();
-  const s = statusData.data || {};
-  document.getElementById('counters').innerHTML = `
-    <div class="counter monitoring"><div class="num">${s.monitoring ?? '?'}</div><div class="label">В мониторинге</div></div>
-    <div class="counter waiting"><div class="num">${s.waiting ?? '?'}</div><div class="label">Ожидают появления</div></div>
-    <div class="counter decision"><div class="num">${s.decision ?? '?'}</div><div class="label">Решение вынесено</div></div>
-    <div class="counter enforced"><div class="num">${s.enforcedToday ?? '?'}</div><div class="label">Вступило сегодня</div></div>
-  `;
+  try {
+    const [statusRes, casesRes, notifRes] = await Promise.all([
+      fetch('/api/status').then(r => r.json()),
+      fetch('/api/cases').then(r => r.json()),
+      fetch('/api/notifications').then(r => r.json()),
+    ]);
 
-  // Cases list
-  const casesRes = await fetch('/api/cases');
-  const casesData = await casesRes.json();
-  const cases = casesData.data || [];
+    // Counters
+    const s = statusRes.data || {};
+    document.getElementById('counters').innerHTML = `
+      <div class="counter monitoring"><div class="num">${s.monitoring ?? '?'}</div><div class="label">В мониторинге</div></div>
+      <div class="counter waiting"><div class="num">${s.waiting ?? '?'}</div><div class="label">Ожидают появления</div></div>
+      <div class="counter decision"><div class="num">${s.decision ?? '?'}</div><div class="label">Решение вынесено</div></div>
+      <div class="counter enforced"><div class="num">${s.enforcedToday ?? '?'}</div><div class="label">Вступило сегодня</div></div>`;
+
+    // Cases
+    allCases = casesRes.data || [];
+    renderTable();
+    updateCounts();
+
+    // Notifications
+    const notifs = (notifRes.data || []).slice(-15).reverse();
+    if (notifs.length === 0) {
+      document.getElementById('notifList').innerHTML = '<div class="empty"><h3>Нет уведомлений</h3></div>';
+    } else {
+      document.getElementById('notifList').innerHTML = notifs.map(n => `
+        <div class="notif-item${n.read ? ' read' : ''}">
+          <span class="dot ${n.type}"></span>
+          <span class="msg">${esc(n.message)}</span>
+          <span class="time">${formatTime(n.createdAt)}</span>
+        </div>`).join('');
+    }
+  } catch {
+    document.getElementById('casesTable').innerHTML = '<div class="empty"><h3>❌ Ошибка соединения</h3><p>Проверьте, что сервер запущен</p></div>';
+  }
+}
+
+function updateCounts() {
+  const counts = {};
+  allCases.forEach(c => { counts[c.status] = (counts[c.status] || 0) + 1; });
+  document.getElementById('cnt-').textContent = allCases.length;
+  ['monitoring','waiting','decision','enforced','error','archived'].forEach(st => {
+    document.getElementById('cnt-' + st).textContent = counts[st] || 0;
+  });
+}
+
+function setFilter(status, el) {
+  currentFilter = status;
+  document.querySelectorAll('.filter-tabs .chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  renderTable();
+}
+
+function renderTable() {
+  const cases = currentFilter ? allCases.filter(c => c.status === currentFilter) : allCases;
   if (cases.length === 0) {
     document.getElementById('casesTable').innerHTML = '<div class="empty"><h3>Нет дел</h3><p>Добавьте первое дело через поиск</p></div>';
-  } else {
-    const rows = cases.map(c => `
-      <tr>
-        <td><a href="/search.html" style="color:#38bdf8;text-decoration:none;font-weight:600">${esc(c.number || '—')}</a></td>
-        <td><span class="badge badge-${esc(c.status)}">${esc(c.status)}</span></td>
-        <td>${esc(c.courtId || '—')}</td>
-        <td>${esc(c.result ? c.result.substring(0, 30) : '—')}</td>
-        <td>${esc(c.legalForceDate || '—')}</td>
-        <td style="font-size:11px;color:#64748b">${formatTime(c.updatedAt)}</td>
-      </tr>
-    `).join('');
-    document.getElementById('casesTable').innerHTML = `
-      <table>
-        <thead><tr><th>Номер</th><th>Статус</th><th>Суд</th><th>Результат</th><th>Вступление</th><th>Обновлено</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>`;
+    return;
   }
+  const rows = cases.map(c => `
+    <tr data-uid="${esc(c.uid)}">
+      <td><a href="#" onclick="openDetail('${esc(c.uid)}');return false" style="color:#38bdf8;text-decoration:none;font-weight:600">${esc(c.number || '—')}</a></td>
+      <td><span class="badge badge-${esc(c.status)}">${esc(STATUS_LABELS[c.status] || c.status)}</span></td>
+      <td>${esc(c.courtId || '—')}</td>
+      <td>${esc(c.result ? c.result.substring(0, 30) : '—')}</td>
+      <td>${esc(c.legalForceDate || '—')}</td>
+      <td style="font-size:11px;color:#64748b">${formatTime(c.updatedAt)}</td>
+      <td class="action-btns">
+        <button class="icon-btn" title="Детали" onclick="openDetail('${esc(c.uid)}')">👁</button>
+        ${c.status !== 'archived' ? `<button class="icon-btn" title="Архивировать" onclick="archiveCase('${esc(c.uid)}')">📦</button>` : `<button class="icon-btn" title="Вернуть" onclick="unarchiveCase('${esc(c.uid)}')">↩</button>`}
+        <button class="icon-btn danger" title="Удалить" onclick="deleteCase('${esc(c.uid)}')">🗑</button>
+      </td>
+    </tr>`).join('');
+  document.getElementById('casesTable').innerHTML = `
+    <table>
+      <thead><tr><th>Номер</th><th>Статус</th><th>Суд</th><th>Результат</th><th>Вступление</th><th>Обновлено</th><th></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
 
-  // Notifications
-  const notifRes = await fetch('/api/notifications');
-  const notifData = await notifRes.json();
-  const notifs = notifData.data || [];
-  if (notifs.length === 0) {
-    document.getElementById('notifList').innerHTML = '<div class="empty"><h3>Нет уведомлений</h3></div>';
-  } else {
-    const items = notifs.slice(-20).reverse().map(n => `
-      <div class="notif-item${n.read ? ' read' : ''}">
-        <span class="dot ${n.type}"></span>
-        <span class="msg">${esc(n.message)}</span>
-        <span class="time">${formatTime(n.createdAt)}</span>
+async function openDetail(uid) {
+  try {
+    const [caseRes, eventsRes] = await Promise.all([
+      fetch('/api/cases/' + encodeURIComponent(uid)).then(r => r.json()),
+      fetch('/api/cases/' + encodeURIComponent(uid) + '/events').then(r => r.json()),
+    ]);
+    const c = caseRes.data || caseRes;
+    const events = eventsRes.data || [];
+
+    const eventsHtml = events.length > 0 ? events.slice().reverse().map(e => `
+      <div class="timeline-item">
+        <div class="ev-type">${esc(e.type)}</div>
+        <div class="ev-msg">${esc(e.message)}</div>
+        <div class="ev-time">${formatTime(e.createdAt)}</div>
+      </div>`).join('') : '<div style="color:#64748b;font-size:13px;padding:8px 0">Нет событий</div>';
+
+    document.getElementById('detailContent').innerHTML = `
+      <h2>${esc(c.number || 'Без номера')}</h2>
+      <div class="case-num">${esc(c.url || '—')}</div>
+      <div class="info-grid">
+        <div class="info-item"><div class="key">Статус</div><div class="val"><span class="badge badge-${esc(c.status)}">${esc(STATUS_LABELS[c.status] || c.status)}</span></div></div>
+        <div class="info-item"><div class="key">Тип суда</div><div class="val">${esc(c.courtType)}</div></div>
+        <div class="info-item"><div class="key">Суд</div><div class="val">${esc(c.courtId)}</div></div>
+        <div class="info-item"><div class="key">Результат</div><div class="val">${esc(c.result || '—')}</div></div>
+        <div class="info-item"><div class="key">Вступление в силу</div><div class="val" style="color:#4ade80;font-weight:600">${esc(c.legalForceDate || '—')}</div></div>
+        <div class="info-item"><div class="key">Последняя проверка</div><div class="val">${formatTime(c.lastChecked)}</div></div>
       </div>
-    `).join('');
-    document.getElementById('notifList').innerHTML = items;
+      <div class="timeline">${eventsHtml}</div>
+      <div style="margin-top:16px;display:flex;gap:8px">
+        ${c.status !== 'archived' ? `<button class="btn btn-secondary btn-sm" onclick="archiveCase('${esc(c.uid)}');closeDetail()">📦 Архивировать</button>` : `<button class="btn btn-secondary btn-sm" onclick="unarchiveCase('${esc(c.uid)}');closeDetail()">↩ Вернуть</button>`}
+        <button class="btn btn-danger btn-sm" onclick="deleteCase('${esc(c.uid)}');closeDetail()">🗑 Удалить</button>
+      </div>`;
+    document.getElementById('detailOverlay').classList.add('open');
+  } catch {
+    showToast('Ошибка загрузки дела', 'error');
   }
 }
+function closeDetail() { document.getElementById('detailOverlay').classList.remove('open'); }
 
-function refresh() {
-  loadDashboard();
+async function archiveCase(uid) {
+  try {
+    const res = await fetch('/api/cases/' + encodeURIComponent(uid), { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'archived' }) });
+    if (!res.ok) throw new Error('Ошибка');
+    showToast('Дело заархивировано', 'success');
+    loadDashboard();
+  } catch { showToast('Ошибка архивирования', 'error'); }
+}
+async function unarchiveCase(uid) {
+  try {
+    const res = await fetch('/api/cases/' + encodeURIComponent(uid), { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'monitoring' }) });
+    if (!res.ok) throw new Error('Ошибка');
+    showToast('Дело возвращено в мониторинг', 'success');
+    loadDashboard();
+  } catch { showToast('Ошибка', 'error'); }
+}
+async function deleteCase(uid) {
+  if (!confirm('Удалить дело безвозвратно?')) return;
+  try {
+    const res = await fetch('/api/cases/' + encodeURIComponent(uid), { method: 'DELETE' });
+    if (!res.ok) throw new Error('Ошибка');
+    showToast('Дело удалено', 'success');
+    loadDashboard();
+  } catch { showToast('Ошибка удаления', 'error'); }
 }
 
+async function runMonitor() {
+  const btn = document.getElementById('runBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Запущен...';
+  try {
+    const res = await fetch('/api/parse/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'full' }) });
+    const json = await res.json();
+    if (res.status === 409) {
+      showToast('Прогон уже выполняется', 'error');
+    } else if (!res.ok) {
+      throw new Error(json.error || 'Ошибка');
+    } else {
+      showToast('Мониторинг запущен', 'success');
+      // Poll for status updates
+      let pollCount = 0;
+      const poll = setInterval(() => {
+        loadDashboard();
+        pollCount++;
+        if (pollCount > 30) { clearInterval(poll); btn.disabled = false; btn.innerHTML = '▶ Запустить мониторинг'; }
+      }, 5000);
+    }
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+  setTimeout(() => { btn.disabled = false; btn.innerHTML = '▶ Запустить мониторинг'; }, 5000);
+}
+
+function loadAll() { loadDashboard(); }
 loadDashboard();
+setInterval(loadDashboard, 30000);
 </script>
 </body>
 </html>

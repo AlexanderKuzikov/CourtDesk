@@ -1,7 +1,7 @@
 // Мировые суды (*.msudrf.ru) — с капчей через Puppeteer+RuCaptcha
 //
 // msudrf ставит капчу на любой запрос к modules.php.
-// Стратегия: решаем капчу один раз на op=hl (список дел),
+// Стратегия: решаем капчу на op=hl (список дел),
 // затем в той же сессии делаем page.goto с поисковыми параметрами.
 //
 // Параметры поиска — те же, что в district (CP1251 encoding):
@@ -24,7 +24,6 @@ function parseResults(html: string, req: SearchRequest): SearchResult[] {
   const $ = cheerio.load(html);
   const results: SearchResult[] = [];
 
-  // Ищем таблицу результатов — обычно содержит "№ дела"
   const table = $('table').filter((_, t) => $(t).text().includes('№ дела')).first();
   if (!table.length) return results;
 
@@ -53,54 +52,6 @@ function parseResults(html: string, req: SearchRequest): SearchResult[] {
   return results;
 }
 
-/**
- * Сессионный браузер для msudrf — решает капчу один раз,
- * затем выполняет поисковые запросы в той же сессии.
- */
-async function createMagistrateSession(apiKey: string) {
-  const { default: puppeteer } = await import('puppeteer');
-  const { RuCaptchaClient } = await import('../../captcha/rucaptcha.js');
-
-  const browser = await puppeteer.launch({
-    headless: (process.env['PUPPETEER_HEADLESS'] === 'false' ? false : 'shell') as boolean | 'shell',
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--ignore-certificate-errors'],
-  });
-  const page = await browser.newPage();
-  page.setDefaultTimeout(30000);
-
-  // Решаем капчу на странице списка дел (op=hl)
-  await page.goto(`https://${page.url().includes('msudrf') ? '' : '35.perm'}.msudrf.ru`, { waitUntil: 'domcontentloaded' }).catch(() => {});
-  // На самом деле, просто переходим на нужный URL
-  return { browser, page };
-}
-
-async function solveCaptchaOnPage(page: any, apiKey: string): Promise<void> {
-  const { RuCaptchaClient } = await import('../../captcha/rucaptcha.js');
-
-  const src = await page.$eval(
-    'form#kcaptchaForm img',
-    (img: HTMLImageElement) => img.getAttribute('src'),
-  );
-  const imageBase64 = await page.evaluate(async (imgSrc: string) => {
-    const controller = new AbortController();
-    setTimeout(() => controller.abort(), 60000);
-    const res = await fetch(imgSrc, { credentials: 'include', signal: controller.signal });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const buf = await res.arrayBuffer();
-    let binary = '';
-    const bytes = new Uint8Array(buf);
-    for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
-    return btoa(binary);
-  }, src);
-
-  const client = new RuCaptchaClient({ apiKey, pollingIntervalMs: 5000, timeoutMs: 120000 });
-  const captchaText = await client.solveImage(imageBase64);
-
-  await page.locator('input[name="captcha-response"]').fill(captchaText);
-  await page.locator('form#kcaptchaForm button[type="submit"]').click();
-  await page.waitForNetworkIdle({ timeout: 60000 }).catch(() => {});
-}
-
 export class MagistrateSearchAdapter implements SearchAdapter {
   buildSearchUrl(req: SearchRequest): string {
     const p = SEARCH_PARAMS.magistrate;
@@ -124,7 +75,7 @@ export class MagistrateSearchAdapter implements SearchAdapter {
     // Парсинг по URL дела — делегируем parse-адаптеру
     if (req.caseNumber && req.caseNumber.startsWith('http')) {
       const { fetchMagistrateHtml } = await import('../../captcha/session.js');
-      const html = await fetchMagistrateHtml({ url: req.caseNumber, apiKey, debugDir: 'captcha-debug' });
+      const html = await fetchMagistrateHtml({ url: req.caseNumber, apiKey });
       if (isCaptchaPage(html)) {
         throw new Error('Captcha loop: не удалось загрузить страницу дела');
       }
@@ -148,44 +99,15 @@ export class MagistrateSearchAdapter implements SearchAdapter {
     }
 
     // Поиск по номеру — через браузерную сессию (капча решается один раз)
-    const { default: puppeteer } = await import('puppeteer');
-    const { RuCaptchaClient } = await import('../../captcha/rucaptcha.js');
-    const browser = await puppeteer.launch({
-      headless: (process.env['PUPPETEER_HEADLESS'] === 'false' ? false : 'shell') as boolean | 'shell',
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--ignore-certificate-errors'],
-    });
-    const page = await browser.newPage();
-    page.setDefaultTimeout(30000);
+    const { fetchMagistrateHtml } = await import('../../captcha/session.js');
+    const searchUrl = this.buildSearchUrl(req);
+    const html = await fetchMagistrateHtml({ url: searchUrl, apiKey });
 
-    try {
-      // Шаг 1: Открываем страницу списка дел (может потребовать капчу)
-      await page.goto(`https://${req.courtId}.msudrf.ru/modules.php?name=sud_delo&op=hl`, {
-        waitUntil: 'domcontentloaded', timeout: 30000,
-      });
-      let html = await page.content();
-      if (isCaptchaPage(html)) {
-        await solveCaptchaOnPage(page, apiKey);
-        html = await page.content();
-      }
-
-      // Шаг 2: Переходим на URL поиска (та же сессия, куки сохраняются)
-      const searchUrl = this.buildSearchUrl(req);
-      console.error(`[magistrate] поиск: ${searchUrl.slice(0, 150)}...`);
-      await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-      await new Promise(r => setTimeout(r, 2000));
-
-      html = await page.content();
-      if (isCaptchaPage(html)) {
-        // Если снова капча — решаем ещё раз
-        await solveCaptchaOnPage(page, apiKey);
-        html = await page.content();
-      }
-
-      return parseResults(html, req);
-    } finally {
-      await page.close().catch(() => {});
-      await browser.close().catch(() => {});
+    if (isCaptchaPage(html)) {
+      throw new Error('Captcha loop: не удалось получить результаты поиска');
     }
+
+    return parseResults(html, req);
   }
 
   async searchByParty(req: SearchRequest): Promise<SearchResult[]> {

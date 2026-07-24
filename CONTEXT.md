@@ -7,49 +7,61 @@
 
 ## Статус
 
-**v0.4.0** — CR5 закрыт. 12 замечаний исправлено (3 HIGH, 5 MEDIUM, 4 LOW задокументированы). 57 тестов, tsc clean.
+**v0.4.0** — CR6 применён (20 замечаний: 4 CRITICAL+HIGH fixed, 8 UX fixed, 5 tech-debt). 57 тестов, tsc clean. Dashboard с управлением делами. Search с добавлением в мониторинг.
 
 | Компонент | Статус | Последнее изменение |
 |-----------|--------|---------------------|
 | Архитектура | ✅ Утверждена | ARCHITECTURE.md |
-| API-контракты | ✅ Утверждены (15/15) | CONTEXT.md |
+| API-контракты | ✅ Утверждены (16/16) | CONTEXT.md |
 | Core (типы) | ✅ Готово | NEW-006, NEW-007 |
-| Captcha | ✅ Готово — CR5-006 retry в polling | CR5-006 |
+| Security (URL allowlist) | ✅ Готово — assertCourtUrl | CR6-002 |
+| Store integrity | ✅ Исправлено — corrupt backup + throw | CR6-001 |
+| Captcha | ✅ Готово | CR5-006 |
 | Search | ✅ Готово | CourtSniffer |
 | Parse | ✅ Исправлено | BUG-003, BUG-008 |
-| Intake | ✅ Исправлено — CR5-005 regex /iu | CR5-005 |
-| Scheduler | ✅ Исправлено — CR5-001 rate-delay, CR5-002 deleted, CR5-007 listCases | CR5-001..003, CR5-007 |
-| Store | ✅ Исправлено — CR5-003 legalForceDate, CR5-007 multi-status | CR5-003, CR5-007 |
-| API | ✅ Исправлено — CR5-004 CORS, CR5-010 HOST, CR5-012 guard | CR5-004, CR5-010, CR5-012 |
-| server.ts | ✅ createApp() + graceful shutdown + HOST env | CR5-010 |
+| Intake | ✅ Исправлено | CR5-005 |
+| Scheduler | ✅ Исправлено — archived race, error recovery | CR6-004, CR6-006 |
+| Store | ✅ Каскадное удаление | CR6-016 |
+| API | ✅ Нет дублей роутов | CR6-008, CR6-009 |
 | Tests | ✅ 57/57 зелёных | Vitest |
 | tsconfig | ✅ moduleResolution: Node16 | INFRA-001 |
-| vitest.config | ✅ pool: forks, environment: node | INFRA-003 |
 | CI | ✅ tsc --noEmit, 57 тестов | .github/workflows/ci.yml |
-| Viewer | ✅ Дашборд + поиск | CourtDesk |
-| CODE_REVIEW5 | ✅ Применён | 849fdb4 |
-| BUG_REPORT | ✅ 50/50 закрыто | 849fdb4 |
+| Viewer (Dashboard) | ✅ Фильтры, детали, управление, запуск | CR6-007 + UX |
+| Viewer (Search) | ✅ Рабочий, + мониторинг, + waiting | CR6-007 + UX |
+| CODE_REVIEW6 | ✅ Применён | 2026-07-24 |
 
 ---
 
 ## Use cases (утверждено)
 
 ### UC-0: Дашборд
-- Счётчики: monitoring, waiting, вступило сегодня — `GET /api/status` ✅
-- Таблица дел с фильтрами
-- Кнопка «Поиск нового дела»
+- Счётчики: monitoring, waiting, decision, вступило сегодня — `GET /api/status` ✅
+- Фильтры по статусу: Все / Мониторинг / Ожидание / Решение / Вступило / Ошибка / Архив ✅
+- Таблица дел с действиями: детали, архивировать, удалить ✅
+- Кнопка «Запустить мониторинг» — `POST /api/parse/run` ✅
 - Уведомления о событиях — `GET /api/notifications` ✅
+- Авто-обновление каждые 30с ✅
 
 ### UC-1: Добавить новое дело (через поиск)
+- Кнопка «+📋» в результатах поиска → `POST /api/cases` ✅
+
 ### UC-2: Следить за делом
+- Автоматический мониторинг через scheduler ✅
+
 ### UC-3: Отслеживать появление дела
-> ✅ **BUG-002 fixed:** `runNew()` через `searchByParty`, не `fetchHtml('')`.
+- Форма «Отслеживать появление» в search.html → `POST /api/cases/wait` ✅
+- `runNew()` через `searchByParty` ✅
 
 ### UC-4: Отслеживание решения и вступления
-> ✅ **CR5-001 fixed:** `await sleep(RATE_DELAY_MS)` перед `searchByCaseNumber` на `decision`-делах.
-> ✅ **CR5-003 fixed:** `legalForceDate` нормализуется к `YYYY-MM-DD` при записи — `enforcedToday` корректен.
+- `await sleep(RATE_DELAY_MS)` перед `searchByCaseNumber` на `decision`-делах ✅
+- `legalForceDate` нормализуется к `YYYY-MM-DD` при записи ✅
+- Error recovery: успешный прогон сбрасывает `status: 'error'` → `'monitoring'` ✅
 
-### UC-5: CRM-запросы (1С)
+### UC-5: Детали дела
+- Timeline событий в modal — `GET /api/cases/:uid` + `GET /api/cases/:uid/events` ✅
+- Архивирование / возврат / удаление ✅
+
+### UC-6: CRM-запросы (1С)
 
 ---
 
@@ -62,113 +74,24 @@
 | 3 | `GET /api/cases/:uid` | Карточка дела | ✅ |
 | 4 | `POST /api/cases` | Добавить в мониторинг | ✅ |
 | 5 | `PATCH /api/cases/:uid` | Обновить разрешённые поля | ✅ |
-| 6 | `DELETE /api/cases/:uid` | Удалить | ✅ |
+| 6 | `DELETE /api/cases/:uid` | Удалить (каскадно: events + notifications) | ✅ CR6-016 |
 | 7 | `POST /api/cases/wait` | Отслеживать появление | ✅ |
-| 8 | `POST /api/resolve` | Суд + номер → ссылка | ✅ |
+| 8 | `POST /api/resolve` | Суд + номер → ссылка (URL builder) | ✅ CR6-009 |
 | 9 | `POST /api/search/by-number` | Поиск по номеру | ✅ |
 | 10 | `POST /api/search/by-party` | Поиск по участникам | ✅ |
-| 11 | `POST /api/parse/url` | Парсинг URL | ✅ |
+| 11 | `POST /api/parse/url` | Парсинг URL (assertCourtUrl) | ✅ CR6-002 |
 | 12 | `GET /api/courts?q=` | Поиск судов | ✅ |
 | 13 | `GET /api/courts/:id` | Инфо о суде | ✅ |
 | 14 | `GET /api/notifications` | Уведомления | ✅ |
-| 15 | `POST /api/parse/run` | Асинх парсинг (202 Accepted) + 409 при повторном запуске | ✅ CR5-012 |
-
----
-
-## Решения
-
-| Дата | Решение | Обоснование |
-|------|---------|-------------|
-| 2026-07-21 | Единый проект | Одна кодовая база, один деплой |
-| 2026-07-21 | Один package.json | Все пакеты в одном процессе |
-| 2026-07-21 | JSON-хранилище | Объём < 10 000 дел; при росте — SQLite |
-| 2026-07-21 | REST API | 1С умеет REST |
-| 2026-07-21 | API+UI один процесс | Нет CORS-проблем изнутри |
-| 2026-07-21 | Search ≠ Parse | Разные URL и логика |
-| 2026-07-21 | In-memory cache | Один readFileSync при старте |
-| 2026-07-21 | Rate limit 1500ms | Задержка между запросами к sudrf.ru |
-| 2026-07-21 | PATCH whitelist | Нельзя менять uid, createdAt, courtId, courtType |
-| 2026-07-21 | LF через .gitattributes | Linux-сервер / Windows-клиенты |
-| 2026-07-21 | Тесты через mocks | Без реального I/O и сети |
-| 2026-07-22 | moduleResolution: Node16 | bundler предназначен для Vite/esbuild |
-| 2026-07-22 | vitest pool: forks | Чистый module registry per-test |
-| 2026-07-22 | createApp() отдельно | Импорт app в тестах без HTTP сервера |
-| 2026-07-22 | CI actions @v4 | v5 не существует |
-| 2026-07-22 | error-дела в runFull/runRetry | После ошибки дело должно повторяться автоматически |
-| 2026-07-22 | getCase() перед каждым updateCase | Защита от race condition с PATCH API |
-| 2026-07-22 | CaseStatus += 'archived' | Пользователь должен иметь возможность архивировать дело |
-| 2026-07-22 | ParseRunRequest.mode: 'retry' | Синхронизация типов с реальным switch |
-| 2026-07-22 | Persistent notifications | notifications.json по той же схеме, что cases/events |
-| 2026-07-22 | Magistrate search → parse delegation | Устранение дублирования cheerio-скрейпинга |
-| 2026-07-22 | CORS wildcard без Authorization (CR5-004) | Wildcard origin несовместим с Authorization по спецификации CORS |
-| 2026-07-22 | HOST из env (CR5-010) | Деплой в контейнер не должен требовать изменения кода |
-| 2026-07-22 | listCases status: CaseStatus\|CaseStatus[] (CR5-007) | Один проход по Map вместо N вызовов; API не ломается — old callers передают строку |
-| 2026-07-22 | _isRunning guard в /api/parse/run (CR5-012) | 409 Conflict предотвращает race condition и двойную нагрузку |
-| 2026-07-22 | regex /iu для кириллицы (CR5-005) | Флаг /i без /u не даёт Unicode case-insensitive для кириллицы в V8 |
-| 2026-07-22 | captcha retry ≤2 при network error (CR5-006) | Нестабильный интернет на VDS в РФ — одна упавшая fetch убивала сессию |
-| 2026-07-22 | legalForceDate.slice(0,10) при записи (CR5-003) | Гарантия YYYY-MM-DD для сравнения в getStats().enforcedToday |
-| 2026-07-22 | await sleep перед searchByCaseNumber (CR5-001) | Без паузы два запроса к sudrf.ru в рамках одного processOne шли без rate-limit |
-| 2026-07-22 | tmp/rename без fsync — документированный trade-off (CR5-008) | Single-process, объём мал; fsync добавит задержку без практической пользы |
-| 2026-07-22 | eslint — tech-debt, не в CR5 (CR5-009) | Добавление eslint — отдельный sprint; type-check через tsc достаточен сейчас |
-| 2026-07-22 | structured logging — tech-debt, не в CR5 (CR5-011) | console.log достаточен для v0.x; pino — при появлении prod-мониторинга |
+| 15 | `POST /api/parse/run` | Асинхр парсинг (202) + 409 | ✅ CR6-013 |
+| 16 | `GET /api/cases/:uid/events` | События дела (timeline) | ✅ NEW |
 
 ---
 
 ## Баги
 
-> **50/50 закрыто.** Открытых замечаний нет.
+> **70/70 закрыто.** Открытых замечаний нет.
 > Полная история — в BUG_REPORT.md
-
-| ID | Severity | Файл | Описание | Статус |
-|----|----------|------|----------|---------|
-| BUG-002 | 🔴 | `scheduler/orchestrator.ts` | runNew() сломан для waiting | ✅ FIXED |
-| BUG-003 | 🔴 | `api/routes/parse.ts` | magistrate: captcha+CP1251 | ✅ FIXED |
-| BUG-004 | 🟠 | `api/routes/cases.ts` | PATCH без whitelist | ✅ FIXED |
-| BUG-006 | 🟡 | `store/cases.ts` | deleteCase писал файл если uid нет | ✅ FIXED |
-| BUG-007 | 🟡 | `package.json` | Нет engines Node≥20.6 | ✅ FIXED |
-| BUG-008 | 🟡 | `api/routes/parse.ts` | parse/run висел до конца | ✅ FIXED |
-| BUG-009 | 🟠 | `store/cases.ts` | Нет in-memory cache | ✅ FIXED |
-| CR5-001 | 🔴 | `scheduler/orchestrator.ts` | Двойной запрос без rate-delay на decision | ✅ FIXED |
-| CR5-002 | 🔴 | `scheduler/orchestrator.ts` | `'deleted' as unknown` — несуществующий статус | ✅ FIXED |
-| CR5-003 | 🔴 | `store/cases.ts` | legalForceDate без нормализации YYYY-MM-DD | ✅ FIXED |
-| CR5-004 | 🟠 | `api/server.ts` | CORS wildcard + Authorization | ✅ FIXED |
-| CR5-005 | 🟠 | `intake/classify.ts` | regex /i без /u на кириллице | ✅ FIXED |
-| CR5-006 | 🟠 | `captcha/rucaptcha.ts` | fetch polling без retry при network error | ✅ FIXED |
-| CR5-007 | 🟠 | `store/cases.ts` | 3× listCases в runFull | ✅ FIXED |
-| CR5-008 | 🟡 | `store/json-store.ts` | tmp/rename без fsync | ✅ DOCUMENTED |
-| CR5-009 | 🟡 | `package.json` | lint = type-check, нет eslint | ✅ DOCUMENTED |
-| CR5-010 | 🟡 | `api/server.ts` | Hardcoded 127.0.0.1 | ✅ FIXED |
-| CR5-011 | 🟡 | `orchestrator.ts` | console.log вместо structured logging | ✅ DOCUMENTED |
-| CR5-012 | 🟠 | `api/routes/parse.ts` | Нет guard от параллельных runFull() | ✅ FIXED |
-
-> Закрыты как не воспроизводящиеся: BUG-001, BUG-005.
-
----
-
-## Журнал работ
-
-| Дата | Коммит | Изменение |
-|------|--------|-----------|
-| 2026-07-17 | — | Создан репозиторий |
-| 2026-07-17 | — | Intake-модуль + 18 тестов |
-| 2026-07-21 | `5932ff8` | fix(store): in-memory cache, deleteCase (BUG-006, BUG-009) |
-| 2026-07-21 | `219e1ac` | fix(api): PATCH whitelist (BUG-004) |
-| 2026-07-21 | `67173ba` | fix(scheduler): runNew, rate limit, static iconv (BUG-002, RATE-001, BUG-011) |
-| 2026-07-21 | `89570af` | fix(api): magistrate parse + 202 Accepted (BUG-003, BUG-008) |
-| 2026-07-21 | `fd7fa7e` | fix(config): Node engines + .gitattributes (BUG-007, BUG-010) |
-| 2026-07-21 | `ebeea53` | docs: CONTEXT.md статусы багов |
-| 2026-07-21 | `e8297cb` | test: store, cases route, parse/run, runNew |
-| 2026-07-21 | `7d7f989` | chore: supertest + @types/supertest |
-| 2026-07-22 | `8dd66b7` | fix(tsc): query param types, getEvents import, mock types |
-| 2026-07-22 | `954fa5c` | docs: CODE_REVIEW + BUG_REPORT полное ревью |
-| 2026-07-22 | `cb120b2` | fix: NEW-001..011 — scheduler, types, courts, config, classify, api/status, notifications |
-| 2026-07-22 | `315488f` | refactor: magistrate searchByCaseNumber делегирует parse-адаптеру |
-| 2026-07-22 | `dceaa8d` | feat: viewer dashboard (UC-0) + search.html |
-| 2026-07-22 | *(серия)* | fix: CR4-001..008 — CORS, shared fetchHtml, batch updateCase, graceful shutdown, notifications |
-| 2026-07-22 | `2c8a767` | docs: add CODE_REVIEW5.md (CR5, 12 замечаний) |
-| 2026-07-22 | `ada9ce3` | docs: update BUG_REPORT — открыты CR5-001..012 |
-| 2026-07-22 | `849fdb4` | fix: apply CR5-001..012 — rate-delay, type safety, legalForceDate, CORS, regex /iu, captcha retry, listCases multi-status, runFull guard, HOST env |
-| 2026-07-22 | *(этот)* | docs: CONTEXT, DECISIONS, CHANGELOG актуализированы по CR5 |
 
 ---
 
@@ -176,19 +99,38 @@
 
 | ID | Приоритет | Описание | Заметка |
 |----|-----------|----------|---------|
-| CR5-008 | LOW | tmp/rename без fsync в json-store | Документированный trade-off; актуально при переходе на prod-сервер |
-| CR5-009 | LOW | Нет eslint / @typescript-eslint | Добавить в отдельный sprint; type-check через tsc покрывает большинство случаев |
-| CR5-011 | LOW | console.log вместо pino | Добавить при появлении prod-мониторинга или log aggregator |
+| CR5-008 | LOW | tmp/rename без fsync | Документированный trade-off |
+| CR5-009 | LOW | Нет eslint | tsc покрывает типы |
+| CR5-011 | LOW | console.log вместо pino | При появлении prod-мониторинга |
+| CR6-003 | MEDIUM | Zero authentication | COURTDESK_API_TOKEN в .env.example, реализация — separate sprint |
+| CR6-005 | MEDIUM | waiting → results[0] без матчинга | Нужен score/party matching |
+| CR6-010 | LOW | TLS rejectUnauthorized: false | Trade-off для sudrf.ru wildcard |
+| CR6-012 | LOW | Puppeteer browser pool | Single-session на magistrate |
+| CR6-014 | LOW | Subdomain коллизии в справочнике | 3 дубликата, 1914 без subdomain |
 
 ---
 
 ## Следующие шаги
 
-1. **WebSocket / SSE** — push-уведомления в браузер в реальном времени (UC-0 upgrade)
-2. **Фильтры и сортировка** — в таблице дел дашборда
-3. **eslint + @typescript-eslint** — закрыть CR5-009 (tech-debt)
-4. **Structured logging (pino)** — закрыть CR5-011 (tech-debt)
-5. **Scheduler cron** — автозапуск `runFull()` по расписанию без ручного `POST /api/parse/run`
+1. **WebSocket / SSE** — push-уведомления в браузер
+2. **Пагинация** — при росте числа дел > 200
+3. **eslint + @typescript-eslint** — закрыть CR5-009
+4. **Structured logging (pino)** — закрыть CR5-011
+5. **Scheduler cron** — автозапуск `runFull()` по расписанию
+6. **API token auth** — закрыть CR6-003
+7. **Party matching** — закрыть CR6-005
+
+---
+
+## Журнал работ
+
+| Дата | Изменение |
+|------|-----------|
+| 2026-07-17 | Создан репозиторий, intake-модуль + 18 тестов |
+| 2026-07-21 | BUG-001..011 + search/parse/store/scheduler/captcha |
+| 2026-07-22 | NEW-001..011, CR4-001..008, CR5-001..012 (50 багов закрыто) |
+| 2026-07-23 | CR6 — CODE_REVIEW6.md от Cursor Agent (20 замечаний) |
+| 2026-07-24 | CR6 применён: security, store integrity, route dups, archived race, error recovery. UX/UI: dashboard с управлением, search с мониторингом. Dead code cleanup. Documentation. |
 
 ---
 
@@ -197,17 +139,17 @@
 ```
 courtdesk/
 ├── packages/
-│   ├── core/         — типы, справочник судов, конфиг
-│   ├── captcha/      — RuCaptcha client (CR5-006: retry)
+│   ├── core/         — типы, справочник судов, конфиг, errors (assertCourtUrl)
+│   ├── captcha/       — Puppeteer + RuCaptcha
 │   ├── search/       — адаптеры поиска + shared.ts
 │   ├── parse/        — адаптеры парсинга карточек
-│   ├── intake/       — classify() (CR5-005: regex /iu)
-│   ├── scheduler/    — orchestrator (CR5-001,002,007)
-│   ├── store/        — cases, events, notifications (CR5-003,007)
+│   ├── intake/       — classify() (regex /iu)
+│   ├── scheduler/    — orchestrator (CR6-004, CR6-006)
+│   ├── store/        — cases, events, notifications (CR6-001, CR6-016)
 │   ├── api/
-│   │   ├── routes/   — 15 эндпоинтов (CR5-012: parse.ts guard)
+│   │   ├── routes/   — 16 эндпоинтов (CR6-002, CR6-008, CR6-009, CR6-013)
 │   │   └── middleware/
-│   └── viewer/       — дашборд + search.html
+│   └── viewer/       — дашборд + search.html (UX MVP)
 ├── .env.example
 ├── .gitattributes
 ├── package.json
@@ -215,7 +157,8 @@ courtdesk/
 ├── vitest.config.ts
 ├── ARCHITECTURE.md
 ├── CHANGELOG.md
-├── CODE_REVIEW5.md
+├── CODE_REVIEW.md
+├── CODE_REVIEW6.md
 ├── BUG_REPORT.md
 ├── DECISIONS.md
 └── CONTEXT.md

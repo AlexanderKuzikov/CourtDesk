@@ -1,6 +1,6 @@
 {
   "name": "courtdesk",
-  "version": "0.1.0",
+  "version": "0.4.0",
   "description": "CRM-оркестратор поиска и мониторинга судебных дел РФ.",
   "keywords": ["court", "sudrf", "msudrf", "legal", "monitoring", "crm", "russian-courts"],
   "homepage": "https://github.com/AlexanderKuzikov/CourtDesk#readme",

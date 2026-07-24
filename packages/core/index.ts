@@ -17,3 +17,4 @@ export {
 export {
   encodeParam,
 } from './encoding.js';
+export { assertCourtUrl, CourtUrlError } from './errors.js';

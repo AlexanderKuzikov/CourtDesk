@@ -4,6 +4,7 @@ import { getParseAdapter } from '../../parse/index.js';
 import { findCourtByCodeOrSubdomain } from '../../core/index.js';
 import { fetchMagistrateHtml } from '../../captcha/session.js';
 import { getRuCaptchaKey } from '../../core/config.js';
+import { assertCourtUrl } from '../../core/errors.js';
 import { runFull, runRetry, runNew } from '../../scheduler/index.js';
 
 const router = Router();
@@ -34,6 +35,11 @@ router.post('/api/parse/url', async (req: Request, res: Response) => {
     const { url, courtId, courtType } = req.body ?? {};
     if (!url) {
       return res.status(400).json({ success: false, error: 'url обязателен', code: 'BAD_REQUEST' });
+    }
+    try {
+      assertCourtUrl(url);
+    } catch {
+      return res.status(400).json({ success: false, error: 'URL должен принадлежать судовой системе РФ (*.sudrf.ru или *.msudrf.ru)', code: 'INVALID_URL' });
     }
     const courtInfo = courtId ? findCourtByCodeOrSubdomain(courtId) : null;
     const type = courtType ?? courtInfo?.courtType ?? 'district';
@@ -79,9 +85,9 @@ router.post('/api/parse/run', (req: Request, res: Response) => {
     default:       runner = runFull;  break;
   }
 
+  _isRunning = true;
   res.status(202).json({ success: true, data: { status: 'started', mode: mode ?? 'full' } });
 
-  _isRunning = true;
   runner()
     .then(result => {
       console.info(`[parse/run] mode=${mode ?? 'full'} done:`, result);

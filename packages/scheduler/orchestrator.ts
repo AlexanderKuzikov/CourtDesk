@@ -3,6 +3,7 @@ import iconv from 'iconv-lite'; // статический импорт — BUG-0
 import { listCases, updateCase, addEvent, getCase, getEvents, addNotification } from '../store/index.js';
 import { getParseAdapter } from '../parse/index.js';
 import { getSearchAdapter } from '../search/index.js';
+import { assertCourtUrl } from '../core/errors.js';
 import type { WatchedCase, CaseHistoryEvent, Notification } from '../core/types.js';
 
 const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000;
@@ -158,24 +159,26 @@ async function processOne(c: WatchedCase): Promise<void> {
 
   const updates: Partial<WatchedCase> = {};
 
-  if (card.card.result && !prev.result) {
-    const latest = getCase(c.uid);
-    if (latest && latest.result === null) {
-      updates.status = 'decision';
-      updates.result = card.card.result;
-      addEvent(c.uid, makeEvent(c.uid, 'decision', `Вынесено решение: ${card.card.result}`));
-      addNotification({
-        uid: crypto.randomUUID(),
-        caseUid: c.uid,
-        type: 'decision',
-        message: `По делу ${c.number} вынесено решение: ${card.card.result}`,
-        read: false,
-        createdAt: now(),
-      });
-    }
+  // CR6-006: Recover from error status on successful parse
+  if (prev.status === 'error') {
+    updates.status = 'monitoring';
   }
 
-  if (prev.status === 'decision' && !prev.legalForceDate) {
+  if (card.card.result && card.card.result !== prev.result) {
+    updates.status = 'decision';
+    updates.result = card.card.result;
+    addEvent(c.uid, makeEvent(c.uid, 'decision', `Вынесено решение: ${card.card.result}`));
+    addNotification({
+      uid: crypto.randomUUID(),
+      caseUid: c.uid,
+      type: 'decision',
+      message: `По делу ${c.number} вынесено решение: ${card.card.result}`,
+      read: false,
+      createdAt: now(),
+    });
+  }
+
+  if ((prev.status === 'decision' || updates.status === 'decision') && !prev.legalForceDate) {
     // CR5-001 FIXED: rate-delay перед вторым запросом к sudrf.ru внутри processOne
     await sleep(RATE_DELAY_MS);
     try {
@@ -188,40 +191,42 @@ async function processOne(c: WatchedCase): Promise<void> {
       });
       const r = results.find(r => r.uid === c.uid || r.caseNumber === c.number);
       if (r?.legalForceDate) {
-        const latest = getCase(c.uid);
-        if (latest && !latest.legalForceDate) {
-          updates.status = 'enforced';
-          // CR5-003 FIXED: нормализуем дату к YYYY-MM-DD при сохранении
-          updates.legalForceDate = r.legalForceDate.slice(0, 10);
-          addEvent(
-            c.uid,
-            makeEvent(c.uid, 'enforced', `Решение вступило в силу ${updates.legalForceDate}`, {
-              legalForceDate: updates.legalForceDate,
-            }),
-          );
-          addNotification({
-            uid: crypto.randomUUID(),
-            caseUid: c.uid,
-            type: 'enforced',
-            message: `Решение по делу ${c.number} вступило в законную силу`,
-            read: false,
-            createdAt: now(),
-          });
-        }
+        updates.status = 'enforced';
+        // CR5-003 FIXED: нормализуем дату к YYYY-MM-DD при сохранении
+        updates.legalForceDate = r.legalForceDate.slice(0, 10);
+        addEvent(
+          c.uid,
+          makeEvent(c.uid, 'enforced', `Решение вступило в силу ${updates.legalForceDate}`, {
+            legalForceDate: updates.legalForceDate,
+          }),
+        );
+        addNotification({
+          uid: crypto.randomUUID(),
+          caseUid: c.uid,
+          type: 'enforced',
+          message: `Решение по делу ${c.number} вступило в законную силу`,
+          read: false,
+          createdAt: now(),
+        });
       }
     } catch {
       // Поиск может быть недоступен — не фатально
     }
   }
 
+  // CR6-004: Re-check archived before writing (race with PATCH API)
   const finalState = getCase(c.uid);
-  if (finalState) {
-    updates.lastChecked = now();
-    updateCase(c.uid, updates);
+  if (!finalState) return;
+  if (finalState.status === 'archived') {
+    updateCase(c.uid, { lastChecked: now() });
+    return;
   }
+  updates.lastChecked = now();
+  updateCase(c.uid, updates);
 }
 
 async function fetchHtml(url: string): Promise<string> {
+  assertCourtUrl(url);
   const res = await fetch(url, {
     headers: { 'User-Agent': 'CourtDesk/0.1' },
     signal: AbortSignal.timeout(60000),

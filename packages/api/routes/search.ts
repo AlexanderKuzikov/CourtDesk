@@ -82,39 +82,4 @@ router.post('/api/search/by-party', async (req, res) => {
   }
 });
 
-// Resolve: суд + номер → ссылка на карточку
-router.post('/api/resolve', async (req, res) => {
-  try {
-    const { courtId, caseNumber } = req.body ?? {};
-    if (!courtId || !caseNumber) {
-      return res.status(400).json({ success: false, error: 'courtId и caseNumber обязательны', code: 'BAD_REQUEST' });
-    }
-    const courtInfo = findCourtByCodeOrSubdomain(courtId);
-    if (!courtInfo) {
-      return res.status(404).json({ success: false, error: `Суд "${courtId}" не найден`, code: 'COURT_NOT_FOUND' });
-    }
-    // Ищем дело — получаем url из результатов
-    const adapter = getSearchAdapter(courtInfo.courtType);
-    const results = await adapter.searchByCaseNumber({
-      courtId: courtInfo.subdomain,
-      courtCode: courtInfo.code,
-      courtType: courtInfo.courtType,
-      caseNumber,
-    });
-    const url = results.length > 0 ? results[0].caseUrl : '';
-    res.json({
-      success: true,
-      data: {
-        url,
-        courtId: courtInfo.subdomain,
-        courtCode: courtInfo.code,
-        found: results.length > 0,
-      },
-    });
-  } catch (err) {
-    console.error('[resolve]', err);
-    res.status(500).json({ success: false, error: errMsg(err), code: 'SEARCH_ERROR' });
-  }
-});
-
 export default router;

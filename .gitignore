@@ -46,4 +46,7 @@ Thumbs.db
 # Runtime data (хранилище мониторинга, логи)
 /data/
 
+# Captcha debug
+captcha-debug/
+
 /.goose

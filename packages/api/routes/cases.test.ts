@@ -27,10 +27,13 @@ const storeMock = {
   updateCase: vi.fn((uid: string, updates: Partial<WatchedCase>): WatchedCase | null => null),
   deleteCase: vi.fn((uid: string): boolean => false),
   getStats: vi.fn(() => ({ monitoring: 0, waiting: 0, decision: 0, enforcedToday: 0 })),
+  deleteNotificationsByCase: vi.fn((): void => undefined),
 };
 
 const eventsMock = {
   addEvent: vi.fn((caseUid: string, event: CaseHistoryEvent): void => undefined),
+  getEvents: vi.fn((): CaseHistoryEvent[] => []),
+  clearEvents: vi.fn((): void => undefined),
 };
 
 vi.mock('../../store/index.js', () => storeMock);
