@@ -12,9 +12,13 @@ export interface FetchWithCaptchaOptions {
   apiKey: string;
   softId?: string;
   debugDir?: string;
+  /** URL формы поиска (name_op=sf) для preflight captcha */
+  formUrl?: string;
 }
 
 type CaptchaMode = 'msudrf' | 'sudrf';
+
+const CAPTCHA_ERROR = 'Неверно указан проверочный код';
 
 function detectMode(html: string): CaptchaMode | null {
   if (html.includes('kcaptchaForm')) return 'msudrf';
@@ -52,7 +56,7 @@ async function readCaptchaImageBase64(page: Page, mode: CaptchaMode): Promise<st
     const img = row.querySelector('img');
     if (!img) return null;
     const src = img.getAttribute('src') || '';
-    const m = src.match(/^data:image\/[^;]+;base64,(.+)$/i);
+    const m = src.match(/^data:\s*image\/[^;]+;base64,(.+)$/i);
     return m ? m[1] : null;
   });
   if (!base64) throw new Error('Captcha image base64 not found in sudrf page');
@@ -69,6 +73,34 @@ async function fillCaptcha(page: Page, text: string, mode: CaptchaMode): Promise
     await page.locator('input[name="Submit"]').click();
     await page.waitForNetworkIdle({ timeout: 60000 }).catch(err => console.warn('[captcha] waitForNetworkIdle:', err));
   }
+}
+/** Решить капчу, заполнить поля поиска и отправить форму через JS */
+async function solveCaptchaAndSubmitSearch(page: Page, searchUrl: string, captchaText: string): Promise<void> {
+  // Заполняем капчу
+  await page.locator('#captcha').fill(captchaText);
+
+  // Извлекаем параметры поиска из URL
+  const qs = new URL(searchUrl).searchParams;
+
+  // Заполняем поля поиска — пробуем оба префикса
+  for (const prefix of ['G2', 'G1']) {
+    const p = prefix.toLowerCase();
+    const fields = [
+      [`${prefix}_PARTS__NAMESS`, qs.get(`${prefix}_PARTS__NAMESS`)],
+      [`${p}_case__CASE_NUMBERSS`, qs.get(`${p}_case__CASE_NUMBERSS`)],
+      [`${p}_case__ENTRY_DATE1D`, qs.get(`${p}_case__ENTRY_DATE1D`)],
+      [`${p}_case__ENTRY_DATE2D`, qs.get(`${p}_case__ENTRY_DATE2D`)],
+    ];
+    for (const [name, val] of fields) {
+      if (val) {
+        await page.locator(`input[name="${name}"]`).fill(val).catch(() => {});
+      }
+    }
+  }
+
+  // Кликаем кнопку «Найти» — это вызовет checkForm(event) и отправит форму
+  await page.locator('input[name="Submit"]').click();
+  await page.waitForNetworkIdle({ timeout: 60000 }).catch(err => console.warn('[captcha] waitForNetworkIdle:', err));
 }
 
 export async function fetchWithCaptcha(options: FetchWithCaptchaOptions): Promise<string> {
@@ -89,7 +121,16 @@ export async function fetchWithCaptcha(options: FetchWithCaptchaOptions): Promis
     await page.goto(options.url, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
     let html = await page.content();
-    const mode = detectMode(html);
+    let mode = detectMode(html);
+
+    // Если капчи нет — возможно, sudrf вернул ошибку. Пробуем форму.
+    if (!mode && (options.formUrl || html.includes(CAPTCHA_ERROR))) {
+      const formUrl = options.formUrl ?? buildFormUrl(options.url);
+      await page.goto(formUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+      html = await page.content();
+      mode = detectMode(html);
+    }
+
     if (!mode) return html;
 
     if (options.debugDir) ensureDir(options.debugDir);
@@ -98,7 +139,14 @@ export async function fetchWithCaptcha(options: FetchWithCaptchaOptions): Promis
     const imageBase64 = await readCaptchaImageBase64(page, mode);
     const captchaText = await client.solveImage(imageBase64);
 
-    await fillCaptcha(page, captchaText, mode);
+    if (mode === 'msudrf') {
+      await fillCaptcha(page, captchaText, mode);
+    } else if (options.formUrl) {
+      // sudrf: решаем капчу, заполняем поля поиска, сабмитим через JS
+      await solveCaptchaAndSubmitSearch(page, options.url, captchaText);
+    } else {
+      await fillCaptcha(page, captchaText, mode);
+    }
 
     html = await page.content();
 
@@ -117,8 +165,14 @@ export async function fetchWithCaptcha(options: FetchWithCaptchaOptions): Promis
   }
 }
 
-// Совместимость: старое имя для обратной совместимости
-export { fetchWithCaptcha as fetchMagistrateHtml };
+/** Построить URL формы поиска (name_op=sf) из URL поиска (name_op=r) */
+function buildFormUrl(searchUrl: string): string {
+  const u = new URL(searchUrl);
+  const deloId = u.searchParams.get('delo_id') || '1540005';
+  const caseType = u.searchParams.get('case_type') || '0';
+  // Чистая форма поиска — только идентификаторы, без полей поиска
+  return `https://${u.hostname}/modules.php?name=sud_delo&srv_num=1&name_op=sf&delo_id=${deloId}&case_type=${caseType}&new=0`;
+}
 
 function ensureDir(dir: string): void {
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });

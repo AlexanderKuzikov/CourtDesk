@@ -51,8 +51,10 @@
       <div class="court-results" id="courtResults"></div>
     </div>
     <label>Код суда</label>
-    <input id="courtCode" placeholder="59RS0007" onchange="loadCourtInfo(this.value)">
-    <div id="courtInfo" class="court-info"></div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <input id="courtCode" placeholder="59RS0007" onchange="selectCourt(this.value)" style="flex:1">
+      <span id="courtDisplay" style="font-size:12px;color:var(--text-dim);flex:1"></span>
+    </div>
 
     <h2>🔍 Режим</h2>
     <div class="tabs" id="modeTabs">
@@ -124,22 +126,33 @@ function searchCourts(q) {
     el.style.display = list.length ? 'block' : 'none';
   }, 300);
 }
+document.getElementById('courtSearch').addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    const first = document.querySelector('#courtResults [data-code]');
+    if (first) { selectCourt(first.dataset.code); document.getElementById('courtResults').style.display = 'none'; }
+  }
+});
+document.getElementById('courtSearch').addEventListener('blur', () => {
+  setTimeout(() => document.getElementById('courtResults').style.display = 'none', 200);
+});
 document.getElementById('courtResults').addEventListener('click', e => {
   const item = e.target.closest('[data-code]');
   if (!item) return;
-  document.getElementById('courtCode').value = item.dataset.code;
   document.getElementById('courtResults').style.display = 'none';
-  loadCourtInfo(item.dataset.code);
+  selectCourt(item.dataset.code);
 });
-async function loadCourtInfo(id) {
-  const el = document.getElementById('courtInfo');
+async function selectCourt(id) {
+  document.getElementById('courtCode').value = id;
+  const el = document.getElementById('courtDisplay');
   try {
     const r = await fetch('/api/courts/' + encodeURIComponent(id));
     const data = await r.json();
     const c = data.data || data;
-    if (!c || !c.name) { el.textContent = ''; return; }
-    el.textContent = c.name + ' | регион ' + (c.region || '—');
-  } catch { el.textContent = ''; }
+    if (!c || !c.name) { el.textContent = id; return; }
+    // Заполняем поисковое поле названием суда
+    document.getElementById('courtSearch').value = c.name;
+    el.innerHTML = `${esc(c.name)} <span style="font-size:11px;color:var(--text-dim)">${esc(c.code)}</span>`;
+  } catch { el.textContent = id; }
 }
 
 function switchMode(mode, btn) {

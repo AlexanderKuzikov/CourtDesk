@@ -11,9 +11,9 @@
 import * as cheerio from 'cheerio';
 import { isCaptchaPage } from '../../core/errors.js';
 import { getRuCaptchaKey } from '../../core/config.js';
-import { encodeParam } from '../../core/encoding.js';
 import type { SearchRequest, SearchResult } from '../../core/types.js';
 import type { SearchAdapter } from './types.js';
+import { buildSearchUrl } from '../shared.js';
 import { SEARCH_PARAMS } from '../constants.js';
 
 /**
@@ -54,17 +54,8 @@ function parseResults(html: string, req: SearchRequest): SearchResult[] {
 
 export class MagistrateSearchAdapter implements SearchAdapter {
   buildSearchUrl(req: SearchRequest): string {
-    const p = SEARCH_PARAMS.magistrate;
-    const base = `https://${req.courtId}.msudrf.ru/modules.php`;
-    const q = [
-      'name=sud_delo', 'srv_num=1',
-      'name_op=r', `delo_id=${p.delo_id}`, `case_type=${p.case_type}`, 'new=0',
-      'G1_PARTS__NAMESS=' + encodeParam(req.defendant || req.plaintiff || ''),
-      'g1_case__CASE_NUMBERSS=' + encodeURIComponent(req.caseNumber || ''),
-      'g1_case__JUDICIAL_UIDSS=' + encodeURIComponent(req.caseUid ?? ''),
-      'Submit=%CD%E0%E9%F2%E8',
-    ];
-    return base + '?' + q.join('&');
+    // msudrf использует те же параметры, что и district
+    return buildSearchUrl(req, SEARCH_PARAMS.magistrate);
   }
 
   async searchByCaseNumber(req: SearchRequest): Promise<SearchResult[]> {
@@ -75,8 +66,8 @@ export class MagistrateSearchAdapter implements SearchAdapter {
 
     // Парсинг по URL дела — делегируем parse-адаптеру
     if (req.caseNumber && req.caseNumber.startsWith('http')) {
-      const { fetchMagistrateHtml } = await import('../../captcha/session.js');
-      const html = await fetchMagistrateHtml({ url: req.caseNumber, apiKey });
+      const { fetchWithCaptcha } = await import('../../captcha/session.js');
+      const html = await fetchWithCaptcha({ url: req.caseNumber, apiKey });
       if (isCaptchaPage(html)) {
         throw new Error('Captcha loop: не удалось загрузить страницу дела');
       }
@@ -100,9 +91,9 @@ export class MagistrateSearchAdapter implements SearchAdapter {
     }
 
     // Поиск по номеру — через браузерную сессию (капча решается один раз)
-    const { fetchMagistrateHtml } = await import('../../captcha/session.js');
+    const { fetchWithCaptcha } = await import('../../captcha/session.js');
     const searchUrl = this.buildSearchUrl(req);
-    const html = await fetchMagistrateHtml({ url: searchUrl, apiKey });
+    const html = await fetchWithCaptcha({ url: searchUrl, apiKey });
 
     if (isCaptchaPage(html)) {
       throw new Error('Captcha loop: не удалось получить результаты поиска');
@@ -120,9 +111,9 @@ export class MagistrateSearchAdapter implements SearchAdapter {
     const apiKey = getRuCaptchaKey();
     if (!apiKey) throw new Error('Для мировых судов нужен ключ RuCaptcha в .env');
 
-    const { fetchWithCaptcha } = await import('../../captcha/session.js');
+    const { fetchWithCaptcha: fwc } = await import('../../captcha/session.js');
     const searchUrl = this.buildSearchUrl(req);
-    const html = await fetchWithCaptcha({ url: searchUrl, apiKey });
+    const html = await fwc({ url: searchUrl, apiKey });
 
     if (isCaptchaPage(html)) {
       throw new Error('Captcha loop: не удалось получить результаты поиска');

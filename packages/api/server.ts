@@ -11,6 +11,7 @@ import statusRouter from './routes/status.js';
 import notificationsRouter from './routes/notifications.js';
 import resolveRouter from './routes/resolve.js';
 import { errorHandler } from './middleware/error.js';
+import { logRequest } from '../core/logger.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = resolve(__dirname, '..', 'viewer', 'public');
@@ -31,6 +32,11 @@ function corsMiddleware(_req: express.Request, res: express.Response, next: expr
 export function createApp() {
   const app = express();
   app.use(corsMiddleware);
+  app.use((req, res, next) => {
+    const start = Date.now();
+    res.on('finish', () => logRequest(req.method, req.originalUrl, res.statusCode, Date.now() - start));
+    next();
+  });
   app.use(express.json({ limit: '1mb' }));
   app.use(healthRouter);
   app.use(casesRouter);
