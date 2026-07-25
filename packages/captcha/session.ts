@@ -67,7 +67,7 @@ async function fillCaptcha(page: Page, text: string, mode: CaptchaMode): Promise
   } else {
     await page.locator('#captcha').fill(text);
     await page.locator('input[name="Submit"]').click();
-    await page.waitForNetworkIdle({ timeout: 60000 }).catch(() => {});
+    await page.waitForNetworkIdle({ timeout: 60000 }).catch(err => console.warn('[captcha] waitForNetworkIdle:', err));
   }
 }
 

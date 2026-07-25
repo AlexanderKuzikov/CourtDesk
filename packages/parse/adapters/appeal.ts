@@ -60,7 +60,7 @@ export class AppealAdapter implements CourtAdapter {
 
     const category = (rawCard['Категория дела'] ?? '')
       .split(/<br\s*\/?>/i)
-      .map(s => cheerio.load(s).text().replace(/&rarr;/g, '').trim())
+      .map(s => cheerio.load(s).text().replace(/&rarr;/g, ' → ').trim())
       .filter(Boolean);
 
     // Движение дела (#cont3 — НЕ #cont2!)

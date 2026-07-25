@@ -15,10 +15,10 @@
 | CR4 | 2026-07-22 | Perplexity (CR3→4) | 8 | 8 | 0 |
 | CR5 | 2026-07-22 | Perplexity | 12 | 9 fix + 3 doc | 0 |
 | CR6 | 2026-07-23 | Cursor Agent | 20 | 13 fix + 5 UX + 5 tech-debt | 0 |
-| CR7 | 2026-07-25 | OpenCode Go | 10 | 10 doc | 0 |
-| **Итого** | | | **80** | **63 fix + 15 doc** | **2** |
+| CR7 | 2026-07-25 | OpenCode Go | 10 | 9 fix + 1 doc | 0 |
+| **Итого** | | | **80** | **72 fix + 6 doc** | **2** |
 
-**Открытых критичных замечаний нет.** 15 tech-debt задокументировано.
+**Открытых критичных замечаний нет.** 6 tech-debt задокументировано.
 
 | Метрика | Значение |
 |---------|----------|
@@ -68,20 +68,20 @@ Rate-delay, type safety, legalForceDate normalization, CORS, regex /iu, captcha 
 
 ## CR7 — OpenCode Go Deep Audit (10 замечаний) — 2026-07-25
 
-**Результат:** 10 замечаний (8 MEDIUM, 2 LOW), все задокументированы как tech-debt.
+**Результат:** 10 замечаний (8 MEDIUM, 2 LOW), 9 исправлено, 1 задокументировано (CR7-008: Node-version trade-off).
 
 | ID | Severity | Описание | Статус |
 |----|----------|----------|--------|
-| CR7-001 | MEDIUM | `success: true` при HTTP 500 в `/api/status` | ✅ DOCUMENTED |
-| CR7-002 | MEDIUM | `toIso()` — битая ISO дата (двойные `:00`) | ✅ DOCUMENTED |
-| CR7-003 | MEDIUM | Dead code: `err.message === 'timeout'` | ✅ DOCUMENTED |
-| CR7-004 | MEDIUM | `listNotifications()` — живая ссылка на кэш | ✅ DOCUMENTED |
-| CR7-005 | MEDIUM | `findCourtsByRegion` без лимита | ✅ DOCUMENTED |
-| CR7-006 | MEDIUM | Матчинг `r.uid === c.uid` никогда не сработает | ✅ DOCUMENTED |
-| CR7-007 | MEDIUM | `waitForNetworkIdle().catch(() => {})` глотает ошибки | ✅ DOCUMENTED |
+| CR7-001 | MEDIUM | `success: true` при HTTP 500 в `/api/status` | ✅ FIXED |
+| CR7-002 | MEDIUM | `toIso()` — битая ISO дата (двойные `:00`) | ✅ FIXED |
+| CR7-003 | MEDIUM | Dead code: `err.message === 'timeout'` | ✅ FIXED |
+| CR7-004 | MEDIUM | `listNotifications()` — живая ссылка на кэш | ✅ FIXED |
+| CR7-005 | MEDIUM | `findCourtsByRegion` без лимита | ✅ FIXED |
+| CR7-006 | MEDIUM | Матчинг `r.uid === c.uid` никогда не сработает | ✅ FIXED |
+| CR7-007 | MEDIUM | `waitForNetworkIdle().catch(() => {})` глотает ошибки | ✅ FIXED |
 | CR7-008 | MEDIUM | `process.loadEnvFile()` требует Node ≥21 | ✅ DOCUMENTED |
-| CR7-009 | LOW | `&rarr;` обрабатывается по-разному в адаптерах | ✅ DOCUMENTED |
-| CR7-010 | LOW | `setInterval` не чистится при уходе со страницы | ✅ DOCUMENTED |
+| CR7-009 | LOW | `&rarr;` обрабатывается по-разному в адаптерах | ✅ FIXED |
+| CR7-010 | LOW | `setInterval` не чистится при уходе со страницы | ✅ FIXED |
 
 ---
 

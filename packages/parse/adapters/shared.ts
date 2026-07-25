@@ -24,7 +24,12 @@ export function parsePublishInfo(text: string): { publishedAt: string | null; mo
   const toIso = (s: string) => {
     const [date, time] = s.trim().split(/\s+/);
     const d = parseDate(date);
-    return d ? `${d}T${time ?? '00:00'}:00` : null;
+    if (!d) return null;
+    if (!time) return `${d}T00:00:00`;
+    // time может быть HH:MM или HH:MM:SS
+    const parts = time.split(':');
+    if (parts.length === 2) return `${d}T${time}:00`;
+    return `${d}T${time}`;
   };
   return {
     publishedAt: pubM ? toIso(pubM[1]) : null,

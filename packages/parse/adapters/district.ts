@@ -37,7 +37,7 @@ export class DistrictAdapter implements CourtAdapter {
     const categoryRaw = rawCard['Категория дела'] ?? '';
     const category = categoryRaw
       .split(/<br\s*\/?>/i)
-      .map(s => cheerio.load(s).text().replace(/&rarr;/g, '').trim())
+      .map(s => cheerio.load(s).text().replace(/&rarr;/g, ' → ').trim())
       .filter(Boolean);
 
     // Движение дела

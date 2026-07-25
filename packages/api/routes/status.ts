@@ -18,8 +18,9 @@ router.get('/api/status', (_req: Request, res: Response) => {
     res.json({ success: true, data: status });
   } catch (e) {
     res.status(500).json({
-      success: true,
-      data: { monitoring: 0, waiting: 0, decision: 0, enforcedToday: 0, health: 'error' } satisfies DashboardStatus,
+      success: false,
+      error: 'Ошибка получения статуса',
+      code: 'STORE_ERROR',
     });
   }
 });

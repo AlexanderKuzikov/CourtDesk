@@ -200,7 +200,7 @@ async function processOne(c: WatchedCase): Promise<void> {
         courtType: c.courtType,
         caseNumber: c.number,
       });
-      const r = results.find(r => r.uid === c.uid || r.caseNumber === c.number);
+      const r = results.find(r => r.caseNumber === c.number);
       if (r?.legalForceDate) {
         updates.status = 'enforced';
         // CR5-003 FIXED: нормализуем дату к YYYY-MM-DD при сохранении

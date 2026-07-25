@@ -32,11 +32,7 @@ export function fetchHtml(url: string): Promise<string> {
         catch { resolve(Buffer.concat(chunks).toString('utf8')); }
       });
     }).on('error', (err: Error) => {
-      if ((err as NodeJS.ErrnoException).code === 'ETIMEOUT') {
-        reject(new Error('sudrf.ru временно недоступен (таймаут). Попробуйте позже.'));
-      } else {
-        reject(new Error(`Ошибка соединения с sudrf.ru: ${err.message}`));
-      }
+      reject(new Error(`Ошибка соединения с sudrf.ru: ${err.message}`));
     }).on('timeout', function (this: any) { this.destroy(); reject(new Error('sudrf.ru временно недоступен (таймаут). Попробуйте позже.')); });
   });
 }

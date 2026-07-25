@@ -46,12 +46,13 @@ describe('GET /api/status (NEW-003)', () => {
     });
   });
 
-  it('возвращает health: error при ошибке хранилища', async () => {
+  it('возвращает ошибку при ошибке хранилища', async () => {
     storeMock.getStats.mockImplementation(() => { throw new Error('store error'); });
     const { default: supertest } = await import('supertest');
     const res = await (supertest(app) as any).get('/api/status');
     expect(res.status).toBe(500);
-    expect(res.body.data.health).toBe('error');
+    expect(res.body.success).toBe(false);
+    expect(res.body.error).toBeTruthy();
   });
 });
 

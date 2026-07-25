@@ -49,7 +49,7 @@ export class CassationAdapter implements CourtAdapter {
 
     const category = (rawCard['Категория дела'] ?? '')
       .split(/<br\s*\/?>/i)
-      .map(s => cheerio.load(s).text().replace(/&rarr;/g, '→').trim())
+      .map(s => cheerio.load(s).text().replace(/&rarr;/g, ' → ').trim())
       .filter(Boolean);
 
     // СЛУШАНИЯ — #cont3 (НЕ #cont2!)

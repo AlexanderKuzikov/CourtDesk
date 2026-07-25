@@ -397,7 +397,11 @@ async function markAllRead() {
 }
 
 loadDashboard();
-setInterval(loadDashboard, 30000);
+let _autoRefresh = setInterval(loadDashboard, 30000);
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { clearInterval(_autoRefresh); _autoRefresh = 0; }
+  else if (!_autoRefresh) _autoRefresh = setInterval(loadDashboard, 30000);
+});
 </script>
 </body>
 </html>

@@ -112,7 +112,7 @@ export function findCourtsByName(query: string): CourtInfo[] {
 }
 
 export function findCourtsByRegion(region: string): CourtInfo[] {
-  return entries.filter(e => e.code.startsWith(region)).map(toCourtInfo);
+  return entries.filter(e => e.code.startsWith(region)).slice(0, 50).map(toCourtInfo);
 }
 
 export function getTotalCourts(): number {

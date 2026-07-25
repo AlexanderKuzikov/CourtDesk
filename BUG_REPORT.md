@@ -15,16 +15,16 @@
 
 | ID | Severity | Файл | Описание | Статус |
 |----|----------|------|----------|--------|
-| CR7-001 | MEDIUM | `api/routes/status.ts` | `success: true` при HTTP 500 — клиент не видит ошибку, несоответствие паттерну ApiError | ✅ DOCUMENTED |
-| CR7-002 | MEDIUM | `parse/adapters/shared.ts` | `toIso()` добавляет `:00` к времени с секундами → невалидный ISO 8601 (`YYYY-MM-DDT12:34:56:00`) | ✅ DOCUMENTED |
-| CR7-003 | MEDIUM | `search/shared.ts` | Dead code: `err.message === 'timeout'` никогда не совпадёт с английским сообщением Node.js | ✅ DOCUMENTED |
-| CR7-004 | MEDIUM | `store/notifications.ts` | `listNotifications()` возвращает живую ссылку на `_cache` — внешняя мутация мимо `save()` | ✅ DOCUMENTED |
-| CR7-005 | MEDIUM | `core/courts.ts` | `findCourtsByRegion` без `.slice(0, 50)` — может вернуть >1000 объектов, аллокация без лимита | ✅ DOCUMENTED |
-| CR7-006 | MEDIUM | `scheduler/orchestrator.ts` | Матчинг `r.uid === c.uid` никогда не сработает (SearchResult.uid это GUID записи sudrf, а не WatchedCase.uid) | ✅ DOCUMENTED |
-| CR7-007 | MEDIUM | `captcha/session.ts` | `waitForNetworkIdle().catch(() => {})` молча глотает ошибки — HTML возвращается даже если капча не разгадана | ✅ DOCUMENTED |
+| CR7-001 | MEDIUM | `api/routes/status.ts` | `success: true` при HTTP 500 — клиент не видит ошибку, несоответствие паттерну ApiError | ✅ FIXED |
+| CR7-002 | MEDIUM | `parse/adapters/shared.ts` | `toIso()` добавляет `:00` к времени с секундами → невалидный ISO 8601 (`YYYY-MM-DDT12:34:56:00`) | ✅ FIXED |
+| CR7-003 | MEDIUM | `search/shared.ts` | Dead code: `err.message === 'timeout'` никогда не совпадёт с английским сообщением Node.js | ✅ FIXED |
+| CR7-004 | MEDIUM | `store/notifications.ts` | `listNotifications()` возвращает живую ссылку на `_cache` — внешняя мутация мимо `save()` | ✅ FIXED |
+| CR7-005 | MEDIUM | `core/courts.ts` | `findCourtsByRegion` без `.slice(0, 50)` — может вернуть >1000 объектов, аллокация без лимита | ✅ FIXED |
+| CR7-006 | MEDIUM | `scheduler/orchestrator.ts` | Матчинг `r.uid === c.uid` никогда не сработает (SearchResult.uid это GUID записи sudrf, а не WatchedCase.uid) | ✅ FIXED |
+| CR7-007 | MEDIUM | `captcha/session.ts` | `waitForNetworkIdle().catch(() => {})` молча глотает ошибки — HTML возвращается даже если капча не разгадана | ✅ FIXED |
 | CR7-008 | MEDIUM | `core/config.ts` | `process.loadEnvFile()` требует Node ≥21; на 18–20 упадёт с TypeError, но `package.json` декларирует `>=20.6.0` | ✅ DOCUMENTED |
-| CR7-009 | LOW | `parse/adapters/cassation.ts` | `&rarr;` заменяется на `→`, а в district/appeal удаляется (`''`) — несогласованная обработка сущности | ✅ DOCUMENTED |
-| CR7-010 | LOW | `viewer/public/index.html` | `setInterval(poll, 5000)` не сохраняется в переменную, не чистится при уходе со страницы (накопление таймеров) | ✅ DOCUMENTED |
+| CR7-009 | LOW | `parse/adapters/{district,appeal,cassation}.ts` | `&rarr;` обрабатывается по-разному — унифицировано на ` → ` | ✅ FIXED |
+| CR7-010 | LOW | `viewer/public/index.html` | `setInterval(poll, 5000)` не сохраняется в переменную, не чистится при уходе со страницы | ✅ FIXED |
 
 ---
 
@@ -64,6 +64,6 @@
 | CR3 (Perplexity) | 8 | ✅ 8 fixed |
 | CR4 (CR3 impl) | 8 | ✅ 8 fixed |
 | CR5 (CR5-001..012) | 12 | ✅ 9 fixed, 3 documented |
-| CR7 (CR7-001..010) | 10 | ✅ 10 documented |
+| CR7 (CR7-001..010) | 10 | ✅ 9 fixed, 1 documented |
 
 **Итого: 80 замечаний, 80 закрыто.**

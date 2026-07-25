@@ -24,7 +24,7 @@ export function addNotification(notif: Notification): void {
 }
 
 export function listNotifications(): Notification[] {
-  return load();
+  return [...load()];
 }
 
 export function markAsRead(uid: string): boolean {
