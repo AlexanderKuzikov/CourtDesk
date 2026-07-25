@@ -38,27 +38,27 @@ export function fetchHtml(url: string): Promise<string> {
   });
 }
 
-/** Построить URL формы (name_op=sf) из URL поиска (name_op=r) */
-function buildFormUrl(searchUrl: string): string {
-  return searchUrl.replace(/name_op=r/, 'name_op=sf').replace(/&new=\d+/, '&new=0');
-}
-
-const CAPTCHA_ERROR = 'Неверно указан проверочный код';
-
 /** fetchHtml с fallback на captcha-resolution при детекте капчи */
 export async function smartFetch(url: string, alwaysCaptcha = false): Promise<string> {
   if (alwaysCaptcha) {
     const apiKey = getRuCaptchaKey();
     if (!apiKey) throw new Error('Для этого типа суда требуется ключ RuCaptcha в .env');
     const { fetchWithCaptcha } = await import('../captcha/session.js');
-    return fetchWithCaptcha({ url, apiKey, formUrl: buildFormUrl(url) });
+    return fetchWithCaptcha({ url, apiKey });
   }
   let html = await fetchHtml(url);
-  if (!isCaptchaPage(html) && !html.includes(CAPTCHA_ERROR)) return html;
+  // После plain fetch проверяем, нет ли капчи или ошибки капчи
+  if (html.includes('Неверно указан проверочный код')) {
+    const apiKey = getRuCaptchaKey();
+    if (!apiKey) throw new Error('Сервер требует проверочный код, но RUCAPTCHA_API_KEY не задан');
+    const { fetchWithCaptcha } = await import('../captcha/session.js');
+    return fetchWithCaptcha({ url, apiKey });
+  }
+  if (!isCaptchaPage(html)) return html;
   const apiKey = getRuCaptchaKey();
   if (!apiKey) return html;
   const { fetchWithCaptcha } = await import('../captcha/session.js');
-  return fetchWithCaptcha({ url, apiKey, formUrl: buildFormUrl(url) });
+  return fetchWithCaptcha({ url, apiKey });
 }
 
 /** Построить URL поиска ГАС «Правосудие» с префиксом полей */
@@ -99,9 +99,24 @@ export function buildSearchUrl(req: SearchRequest, params: { delo_id: string; ca
   return base + '?' + q.join('&');
 }
 
+/** Извлечь сообщение об ошибке из HTML sudrf */
+function extractError(html: string): string | null {
+  const m = html.match(/<div[^>]*id="error"[^>]*>([\s\S]*?)<\/div>/i);
+  if (m) {
+    const text = m[1].replace(/<[^>]+>/g, '').trim();
+    if (text) return text;
+  }
+  return null;
+}
+
 export function parseResults(html: string, req: SearchRequest): SearchResult[] {
   const $ = cheerio.load(html);
   const results: SearchResult[] = [];
+
+  // Если есть сообщение об ошибке — выбрасываем
+  const errText = extractError(html);
+  if (errText) throw new Error(errText);
+
   const table = $('table').filter((_, t) => $(t).text().includes('№ дела')).first();
   if (!table.length) return results;
 

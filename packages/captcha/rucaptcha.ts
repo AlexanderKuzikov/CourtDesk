@@ -39,11 +39,6 @@ export class RuCaptchaClient {
         task: {
           type: 'ImageToTextTask',
           body: imageBase64,
-          numeric: 4,
-          minLength: 4,
-          maxLength: 6,
-          case: false,
-          languagePool: 'rn',
           ...(this.softId ? { softId: this.softId } : {}),
         },
       }),

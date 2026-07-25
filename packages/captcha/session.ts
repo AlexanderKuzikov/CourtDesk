@@ -4,6 +4,7 @@
 import { writeFileSync, mkdirSync, existsSync } from 'fs';
 import { resolve } from 'path';
 import puppeteer, { type Page } from 'puppeteer';
+import iconv from 'iconv-lite';
 import { isCaptchaPage } from '../core/errors.js';
 import { RuCaptchaClient } from './rucaptcha.js';
 
@@ -12,8 +13,6 @@ export interface FetchWithCaptchaOptions {
   apiKey: string;
   softId?: string;
   debugDir?: string;
-  /** URL формы поиска (name_op=sf) для preflight captcha */
-  formUrl?: string;
 }
 
 type CaptchaMode = 'msudrf' | 'sudrf';
@@ -26,6 +25,19 @@ function detectMode(html: string): CaptchaMode | null {
   return null;
 }
 
+function buildFormUrl(searchUrl: string): string {
+  // Извлекаем только идентификаторы, чистая форма без полей поиска
+  const params = extractSearchParams(searchUrl);
+  const deloId = params['delo_id'] || '1540005';
+  const caseType = params['case_type'] || '0';
+  try {
+    const hostname = new URL(searchUrl).hostname;
+    return `https://${hostname}/modules.php?name=sud_delo&srv_num=1&name_op=sf&delo_id=${deloId}&case_type=${caseType}&new=0`;
+  } catch {
+    return searchUrl.replace(/name_op=r/, 'name_op=sf').replace(/&Submit=[^&]*/, '');
+  }
+}
+
 async function readCaptchaImageBase64(page: Page, mode: CaptchaMode): Promise<string> {
   if (mode === 'msudrf') {
     const src = await page.$eval(
@@ -33,21 +45,17 @@ async function readCaptchaImageBase64(page: Page, mode: CaptchaMode): Promise<st
       (img: HTMLImageElement) => img.getAttribute('src'),
     );
     if (!src) throw new Error('Captcha image src not found');
-
     return page.evaluate(async (imgSrc: string) => {
       const res = await fetch(imgSrc, { credentials: 'include' });
       if (!res.ok) throw new Error(`Captcha image fetch failed: HTTP ${res.status}`);
       const buf = await res.arrayBuffer();
       let binary = '';
       const bytes = new Uint8Array(buf);
-      for (let i = 0; i < bytes.byteLength; i++) {
-        binary += String.fromCharCode(bytes[i]);
-      }
+      for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
       return btoa(binary);
     }, src);
   }
 
-  // sudrf: data URIs directly in the page
   const base64 = await page.evaluate(() => {
     const el = document.querySelector('input#captcha');
     if (!el) return null;
@@ -63,44 +71,67 @@ async function readCaptchaImageBase64(page: Page, mode: CaptchaMode): Promise<st
   return base64;
 }
 
-async function fillCaptcha(page: Page, text: string, mode: CaptchaMode): Promise<void> {
-  if (mode === 'msudrf') {
-    await page.locator('input[name="captcha-response"]').fill(text);
-    await page.locator('form#kcaptchaForm button[type="submit"]').click();
-    await page.waitForNetworkIdle({ timeout: 60000 }).catch(() => {});
-  } else {
-    await page.locator('#captcha').fill(text);
-    await page.locator('input[name="Submit"]').click();
-    await page.waitForNetworkIdle({ timeout: 60000 }).catch(err => console.warn('[captcha] waitForNetworkIdle:', err));
-  }
+/** Для msudrf: заполнить капчу и сабмитнуть (AJAX-обновление) */
+async function fillCaptchaMsudrf(page: Page, text: string): Promise<void> {
+  await page.locator('input[name="captcha-response"]').fill(text);
+  await page.locator('form#kcaptchaForm button[type="submit"]').click();
+  await page.waitForNetworkIdle({ timeout: 60000 }).catch(() => {});
 }
-/** Решить капчу, заполнить поля поиска и отправить форму через JS */
-async function solveCaptchaAndSubmitSearch(page: Page, searchUrl: string, captchaText: string): Promise<void> {
-  // Заполняем капчу
-  await page.locator('#captcha').fill(captchaText);
 
-  // Извлекаем параметры поиска из URL
-  const qs = new URL(searchUrl).searchParams;
+/** Декодировать CP1251 percent-encoded параметр в строку */
+function decodeCp1251Param(encoded: string): string {
+  const latin1 = decodeURIComponent(encoded);
+  return iconv.decode(Buffer.from(latin1, 'latin1'), 'win1251');
+}
 
-  // Заполняем поля поиска — пробуем оба префикса
-  for (const prefix of ['G2', 'G1']) {
-    const p = prefix.toLowerCase();
-    const fields = [
-      [`${prefix}_PARTS__NAMESS`, qs.get(`${prefix}_PARTS__NAMESS`)],
-      [`${p}_case__CASE_NUMBERSS`, qs.get(`${p}_case__CASE_NUMBERSS`)],
-      [`${p}_case__ENTRY_DATE1D`, qs.get(`${p}_case__ENTRY_DATE1D`)],
-      [`${p}_case__ENTRY_DATE2D`, qs.get(`${p}_case__ENTRY_DATE2D`)],
-    ];
-    for (const [name, val] of fields) {
-      if (val) {
-        await page.locator(`input[name="${name}"]`).fill(val).catch(() => {});
-      }
+/** Извлечь search-параметры из URL, декодируя CP1251 */
+function extractSearchParams(searchUrl: string): Record<string, string> {
+  const qs = searchUrl.includes('?') ? searchUrl.split('?')[1]! : '';
+  const result: Record<string, string> = {};
+  for (const part of qs.split('&')) {
+    const eq = part.indexOf('=');
+    if (eq < 0) continue;
+    const key = part.substring(0, eq);
+    const val = part.substring(eq + 1);
+    if (!val || val === 'Submit=%CD%E0%E9%F2%E8') continue;
+    try {
+      result[key] = val.includes('%') ? decodeCp1251Param(val) : decodeURIComponent(val);
+    } catch {
+      result[key] = val;
+    }
+  }
+  return result;
+}
+
+/** Для sudrf: заполнить только непустые поля поиска + капчу и сабмитнуть */
+async function fillCaptchaSudrf(page: Page, searchUrl: string, captchaText: string): Promise<void> {
+  const params = extractSearchParams(searchUrl);
+
+  // Поля, которые точно есть на форме и могут быть заполнены
+  const fillable = [
+    'G2_PARTS__NAMESS', 'G1_PARTS__NAMESS',
+    'g2_case__CASE_NUMBERSS', 'g1_case__CASE_NUMBERSS',
+    'g2_case__JUDICIAL_UIDSS', 'g1_case__JUDICIAL_UIDSS',
+    'g2_case__ENTRY_DATE1D', 'g1_case__ENTRY_DATE1D',
+    'g2_case__ENTRY_DATE2D', 'g1_case__ENTRY_DATE2D',
+  ];
+
+  // Заполняем только те поля, у которых есть непустое значение
+  for (const name of fillable) {
+    const val = params[name];
+    if (val && val.trim()) {
+      try { await page.locator(`input[name="${name}"]`).fill(val); } catch { /* поле отсутствует */ }
     }
   }
 
-  // Кликаем кнопку «Найти» — это вызовет checkForm(event) и отправит форму
-  await page.locator('input[name="Submit"]').click();
-  await page.waitForNetworkIdle({ timeout: 60000 }).catch(err => console.warn('[captcha] waitForNetworkIdle:', err));
+  // Заполняем капчу
+  await page.locator('#captcha').fill(captchaText);
+
+  // Сабмитим — checkForm сработает
+  await Promise.all([
+    page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {}),
+    page.locator('input[name="Submit"]').click(),
+  ]);
 }
 
 export async function fetchWithCaptcha(options: FetchWithCaptchaOptions): Promise<string> {
@@ -119,20 +150,17 @@ export async function fetchWithCaptcha(options: FetchWithCaptchaOptions): Promis
 
   try {
     await page.goto(options.url, { waitUntil: 'domcontentloaded', timeout: 60000 });
-
     let html = await page.content();
     let mode = detectMode(html);
 
-    // Если капчи нет — возможно, sudrf вернул ошибку. Пробуем форму.
-    if (!mode && (options.formUrl || html.includes(CAPTCHA_ERROR))) {
-      const formUrl = options.formUrl ?? buildFormUrl(options.url);
-      await page.goto(formUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    // Если капчи нет, но есть ошибка капчи — загружаем форму поиска
+    if (!mode && html.includes(CAPTCHA_ERROR)) {
+      await page.goto(buildFormUrl(options.url), { waitUntil: 'domcontentloaded', timeout: 60000 });
       html = await page.content();
       mode = detectMode(html);
     }
 
     if (!mode) return html;
-
     if (options.debugDir) ensureDir(options.debugDir);
 
     const client = new RuCaptchaClient({ apiKey: options.apiKey, softId: options.softId });
@@ -140,12 +168,10 @@ export async function fetchWithCaptcha(options: FetchWithCaptchaOptions): Promis
     const captchaText = await client.solveImage(imageBase64);
 
     if (mode === 'msudrf') {
-      await fillCaptcha(page, captchaText, mode);
-    } else if (options.formUrl) {
-      // sudrf: решаем капчу, заполняем поля поиска, сабмитим через JS
-      await solveCaptchaAndSubmitSearch(page, options.url, captchaText);
+      await fillCaptchaMsudrf(page, captchaText);
     } else {
-      await fillCaptcha(page, captchaText, mode);
+      // sudrf: заполняем поля поиска + капчу, сабмитим
+      await fillCaptchaSudrf(page, options.url, captchaText);
     }
 
     html = await page.content();
@@ -157,6 +183,9 @@ export async function fetchWithCaptcha(options: FetchWithCaptchaOptions): Promis
     if (isCaptchaPage(html)) {
       throw new Error('Captcha loop: после отправки капча показана повторно');
     }
+    if (html.includes(CAPTCHA_ERROR)) {
+      throw new Error('Captcha error: неверный проверочный код — решение RuCaptcha не принято сервером');
+    }
 
     return html;
   } finally {
@@ -165,14 +194,7 @@ export async function fetchWithCaptcha(options: FetchWithCaptchaOptions): Promis
   }
 }
 
-/** Построить URL формы поиска (name_op=sf) из URL поиска (name_op=r) */
-function buildFormUrl(searchUrl: string): string {
-  const u = new URL(searchUrl);
-  const deloId = u.searchParams.get('delo_id') || '1540005';
-  const caseType = u.searchParams.get('case_type') || '0';
-  // Чистая форма поиска — только идентификаторы, без полей поиска
-  return `https://${u.hostname}/modules.php?name=sud_delo&srv_num=1&name_op=sf&delo_id=${deloId}&case_type=${caseType}&new=0`;
-}
+export { fetchWithCaptcha as fetchMagistrateHtml };
 
 function ensureDir(dir: string): void {
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
