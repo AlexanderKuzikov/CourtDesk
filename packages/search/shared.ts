@@ -62,7 +62,7 @@ export async function smartFetch(url: string, alwaysCaptcha = false): Promise<st
 }
 
 /** Построить URL поиска ГАС «Правосудие» с префиксом полей */
-export function buildSearchUrl(req: SearchRequest, params: { delo_id: string; case_type: string; prefix: string }): string {
+export function buildSearchUrl(req: SearchRequest, params: { delo_id: string; case_type: string; prefix: string; new_?: string }): string {
   const base = req.courtType === 'magistrate'
     ? `https://${req.courtId}.msudrf.ru/modules.php`
     : `https://${req.courtId}.sudrf.ru/modules.php`;
@@ -70,7 +70,7 @@ export function buildSearchUrl(req: SearchRequest, params: { delo_id: string; ca
   const p = params.prefix.toLowerCase();
   const q = [
     'name=sud_delo', 'srv_num=1',
-    'name_op=r', `delo_id=${params.delo_id}`, `case_type=${params.case_type}`, 'new=0',
+    'name_op=r', `delo_id=${params.delo_id}`, `case_type=${params.case_type}`, `new=${params.new_ ?? '0'}`,
     `${P}_PARTS__NAMESS=` + encodeParam(req.defendant || req.plaintiff || ''),
     `${p}_case__CASE_NUMBERSS=` + encodeURIComponent(req.caseNumber || ''),
     `${p}_case__JUDICIAL_UIDSS=` + encodeURIComponent(req.caseUid ?? ''),

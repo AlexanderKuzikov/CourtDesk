@@ -26,13 +26,13 @@ function detectMode(html: string): CaptchaMode | null {
 }
 
 function buildFormUrl(searchUrl: string): string {
-  // Извлекаем только идентификаторы, чистая форма без полей поиска
   const params = extractSearchParams(searchUrl);
   const deloId = params['delo_id'] || '1540005';
   const caseType = params['case_type'] || '0';
+  const newVal = params['new'] || '0';
   try {
     const hostname = new URL(searchUrl).hostname;
-    return `https://${hostname}/modules.php?name=sud_delo&srv_num=1&name_op=sf&delo_id=${deloId}&case_type=${caseType}&new=0`;
+    return `https://${hostname}/modules.php?name=sud_delo&srv_num=1&name_op=sf&delo_id=${deloId}&case_type=${caseType}&new=${newVal}`;
   } catch {
     return searchUrl.replace(/name_op=r/, 'name_op=sf').replace(/&Submit=[^&]*/, '');
   }
@@ -80,8 +80,17 @@ async function fillCaptchaMsudrf(page: Page, text: string): Promise<void> {
 
 /** Декодировать CP1251 percent-encoded параметр в строку */
 function decodeCp1251Param(encoded: string): string {
-  const latin1 = decodeURIComponent(encoded);
-  return iconv.decode(Buffer.from(latin1, 'latin1'), 'win1251');
+  // Ручной декодер percent → bytes (без проверки UTF-8 как decodeURIComponent)
+  const bytes: number[] = [];
+  for (let i = 0; i < encoded.length; i++) {
+    if (encoded[i] === '%' && i + 2 < encoded.length) {
+      bytes.push(parseInt(encoded.substring(i + 1, i + 3), 16));
+      i += 2;
+    } else {
+      bytes.push(encoded.charCodeAt(i));
+    }
+  }
+  return iconv.decode(Buffer.from(bytes), 'win1251');
 }
 
 /** Извлечь search-параметры из URL, декодируя CP1251 */
@@ -105,12 +114,10 @@ function extractSearchParams(searchUrl: string): Record<string, string> {
 
 /** Для sudrf: заполнить поле фамилии + капчу, сабмитнуть форму */
 async function fillAndSubmit(page: Page, searchUrl: string, captchaText: string): Promise<void> {
-  // Извлекаем фамилию/номер из параметров поиска
   const params = extractSearchParams(searchUrl);
   const fillable = ['G2_PARTS__NAMESS', 'G1_PARTS__NAMESS', 'g2_case__CASE_NUMBERSS', 'g1_case__CASE_NUMBERSS',
     'g2_case__ENTRY_DATE1D', 'g1_case__ENTRY_DATE1D', 'g2_case__ENTRY_DATE2D', 'g1_case__ENTRY_DATE2D'];
 
-  // Заполняем поля через locator.fill (эмуляция ввода)
   for (const name of fillable) {
     const val = params[name];
     if (val && val.trim()) {
@@ -118,13 +125,17 @@ async function fillAndSubmit(page: Page, searchUrl: string, captchaText: string)
     }
   }
 
-  // Заполняем капчу
   await page.locator('#captcha').fill(captchaText);
-
-  // Кликаем по кнопке «Найти» — checkForm сработает и отправит форму
   await page.locator('input[name="Submit"]').click();
-  // Ждём загрузку результатов
-  await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+  // Ждём появления таблицы результатов или сообщения об ошибке
+  try {
+    await page.waitForFunction(() => {
+      const html = document.body?.innerHTML || '';
+      return html.includes('№ дела') || html.includes('Данных по запросу') || html.includes('Неверно указан');
+    }, { timeout: 30000 });
+  } catch {}
+  // Даём время на завершение рендеринга
+  await new Promise(r => setTimeout(r, 1000));
 }
 
 export async function fetchWithCaptcha(options: FetchWithCaptchaOptions): Promise<string> {

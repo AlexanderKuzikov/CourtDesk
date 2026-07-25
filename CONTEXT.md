@@ -7,7 +7,7 @@
 
 ## Статус
 
-**v0.4.0** — CR6 применён (20 замечаний). CR7 — OpenCode Deep Audit (10 замечаний: 9 исправлено, 1 задокументировано). Всего 80/80 замечаний закрыто. 57 тестов, tsc clean. Dashboard с управлением делами. Search с добавлением в мониторинг.
+**v0.4.0** — CR6-CR8 применены (39 замечаний). Всего 89/89 замечаний закрыто. 57 тестов, tsc clean. Поиск работает на всех типах судов: district, appeal, cassation, magistrate (с captcha). Dashboard с управлением делами. Search с добавлением в мониторинг.
 
 | Компонент | Статус | Последнее изменение |
 |-----------|--------|---------------------|
@@ -90,7 +90,7 @@
 
 ## Баги
 
-> **80/80 закрыто.** Открытых замечаний нет.
+> **89/89 закрыто.** Открытых замечаний нет.
 > Полная история — в BUG_REPORT.md
 
 ---
@@ -135,6 +135,7 @@
 | 2026-07-25 | UX/UI v2: смена тем (dark/light), пагинация, сортировка, поиск по таблице, печать, mark-all-read, Esc-close. theme.css + app.js shared. CourtUrlError → автоархивация (разрыв error-цикла). |
 | 2026-07-25 | CR7 — OpenCode Deep Audit (10 замечаний: 9 исправлено, 1 задокументировано). |
 | 2026-07-25 | CR7 fix: `success: true`→`false` в status.ts, `toIso()` битая ISO, dead code `err.message`, живая ссылка кэша, лимит `findCourtsByRegion`, матчинг uid, логи captcha, `&rarr;` унификация, `setInterval` cleanup. |
+| 2026-07-25 | CR8 — Captcha + Search overhaul. Исправлено 9 багов: `case_type`/`new` для appeal (искал в кассации); CP1251 декодинг (decodeURIComponent падал); waitForNetworkIdle → waitForNavigation; double-encoding CP1251; regex base64; поиск по УИД; полная карточка дела в UI; логгер; captcha для всех типов sudrf. |
 
 ---
 

@@ -1,13 +1,29 @@
 # BUG REPORT — CourtDesk
 
 > Последнее обновление: 2026-07-25
-> Все 80 замечаний из 7 раундов ревью закрыты.
+> Все 89 замечаний из 8 раундов ревью закрыты.
 
 ---
 
 ## Открытых багов нет
 
-**Все 80 замечаний исправлены, закрыты или задокументированы как tech-debt.**
+**Все 89 замечаний исправлены, закрыты или задокументированы как tech-debt.**
+
+---
+
+## CR8 — Captcha + Search overhaul (2026-07-25)
+
+| ID | Severity | Файл | Описание | Статус |
+|----|----------|------|----------|--------|
+| CR8-001 | CRITICAL | `packages/search/constants.ts` | `case_type=1` для appeal — поиск шёл в кассацию, а не апелляцию. Реальный `case_type` для апелляции = `0` | ✅ FIXED |
+| CR8-002 | CRITICAL | `packages/search/constants.ts` | `new=0` для appeal — форма показывала кассацию. Апелляция требует `new=5` | ✅ FIXED |
+| CR8-003 | CRITICAL | `packages/captcha/session.ts` | `decodeURIComponent()` падает на CP1251-encoded байтах (`%CA%F3...`). Ручной percent-декодер без UTF-8 валидации | ✅ FIXED |
+| CR8-004 | HIGH | `packages/captcha/session.ts` | `waitForNetworkIdle` на sudrf страницах таймаутится из-за фоновых счетчиков. Заменён на `waitForNavigation` | ✅ FIXED |
+| CR8-005 | HIGH | `packages/captcha/session.ts` | Double-encoding CP1251 через `page.goto()`. Переход на DOM-заполнение + `checkForm` submit | ✅ FIXED |
+| CR8-006 | HIGH | `packages/captcha/session.ts` | Regex base64 не обрабатывал пробел после `base64,` в data URI (`data: image/png;base64, iVBOR...`) | ✅ FIXED |
+| CR8-007 | MEDIUM | `packages/search/shared.ts` | `parseResults` не проверял `<div id="error">` — silent empty result вместо ошибки | ✅ FIXED |
+| CR8-008 | MEDIUM | `packages/core/errors.ts` | `isCaptchaPage` не включал маркер `"Неверно указан проверочный код"` — страница с ошибкой капчи не детектилась | ✅ FIXED |
+| CR8-009 | LOW | `packages/search/constants.ts` | `SEARCH_PARAMS` не содержал `new` — параметр, влияющий на выбор картотеки (0/5) | ✅ FIXED |
 
 ---
 
@@ -65,5 +81,6 @@
 | CR4 (CR3 impl) | 8 | ✅ 8 fixed |
 | CR5 (CR5-001..012) | 12 | ✅ 9 fixed, 3 documented |
 | CR7 (CR7-001..010) | 10 | ✅ 9 fixed, 1 documented |
+| CR8 (CR8-001..009) | 9 | ✅ 9 fixed |
 
-**Итого: 80 замечаний, 80 закрыто.**
+**Итого: 89 замечаний, 89 закрыто.**

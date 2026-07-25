@@ -1,7 +1,7 @@
 # CODE REVIEW — CourtDesk
 
 > Consolidated: 2026-07-25
-> All 7 rounds of review with progress for each finding.
+> All 8 rounds of review with progress for each finding.
 
 ---
 
@@ -16,7 +16,8 @@
 | CR5 | 2026-07-22 | Perplexity | 12 | 9 fix + 3 doc | 0 |
 | CR6 | 2026-07-23 | Cursor Agent | 20 | 13 fix + 5 UX + 5 tech-debt | 0 |
 | CR7 | 2026-07-25 | OpenCode Go | 10 | 9 fix + 1 doc | 0 |
-| **Итого** | | | **80** | **72 fix + 6 doc** | **2** |
+| CR8 | 2026-07-25 | OpenCode Go | 9 | 9 fix | 0 |
+| **Итого** | | | **89** | **81 fix + 6 doc** | **2** |
 
 **Открытых критичных замечаний нет.** 6 tech-debt задокументировано.
 
@@ -63,6 +64,24 @@ CORS, shared fetchHtml, batch updateCase, graceful shutdown, persistent notifica
 ## CR5 — Perplexity-ревью (12 замечаний) — ✅ Закрыт
 
 Rate-delay, type safety, legalForceDate normalization, CORS, regex /iu, captcha retry, listCases multi-status, runFull guard, HOST env. 3 documented as trade-offs.
+
+---
+
+## CR8 — Captcha + Search overhaul (9 замечаний) — 2026-07-25
+
+**Результат:** 9 замечаний исправлено. Captcha заработала на всех типах судов sudrf.ru. Поиск по номеру и фамилии.
+
+| ID | Severity | Описание | Статус |
+|----|----------|----------|--------|
+| CR8-001 | CRITICAL | `case_type=0` для appeal (было `1`) — искал в кассации | ✅ FIXED |
+| CR8-002 | CRITICAL | `new=5` для appeal (было `0`) — форма показывала кассацию | ✅ FIXED |
+| CR8-003 | CRITICAL | `decodeURIComponent` падает на CP1251 байтах — ручной percent-декодер | ✅ FIXED |
+| CR8-004 | HIGH | `waitForNetworkIdle` таймаутится — заменён на `waitForNavigation` | ✅ FIXED |
+| CR8-005 | HIGH | Double-encoding CP1251 через `page.goto()` — DOM-заполнение + checkForm | ✅ FIXED |
+| CR8-006 | HIGH | Regex base64 не обрабатывал пробел в data URI | ✅ FIXED |
+| CR8-007 | MEDIUM | `parseResults` не проверял `<div id="error">` | ✅ FIXED |
+| CR8-008 | MEDIUM | `isCaptchaPage` не детектил страницу с ошибкой капчи | ✅ FIXED |
+| CR8-009 | LOW | `SEARCH_PARAMS` не содержал `new` (параметр картотеки) | ✅ FIXED |
 
 ---
 
