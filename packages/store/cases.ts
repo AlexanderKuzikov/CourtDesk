@@ -61,6 +61,10 @@ export function updateCase(uid: string, updates: Partial<WatchedCase>): WatchedC
   const map = load();
   const existing = map.get(uid);
   if (!existing) return null;
+  // Авто-простановка enforcedAt при первом переходе в enforced
+  if (updates.status === 'enforced' && existing.status !== 'enforced') {
+    updates = { ...updates, enforcedAt: new Date().toISOString() };
+  }
   const updated = { ...existing, ...updates, updatedAt: new Date().toISOString() };
   map.set(uid, updated);
   save(map);

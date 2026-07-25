@@ -63,7 +63,7 @@ router.post('/api/cases', (req: Request, res: Response) => {
       courtId, courtCode: courtCode ?? courtId, courtType,
       number: caseNumber, caseUid: caseUid ?? null, status: 'monitoring',
       result: null, legalForceDate: null, legalForceNotified: false,
-      userId: userId ?? null, lastChecked: null,
+      enforcedAt: null, userId: userId ?? null, lastChecked: null,
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
     };
     addCase(c);
@@ -87,7 +87,7 @@ router.post('/api/cases/wait', (req: Request, res: Response) => {
       courtId, courtCode: courtCode ?? courtId, courtType,
       number: '', caseUid: null, status: 'waiting',
       result: null, legalForceDate: null, legalForceNotified: false,
-      userId: userId ?? null, lastChecked: null,
+      enforcedAt: null, userId: userId ?? null, lastChecked: null,
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
     };
     addCase(c);

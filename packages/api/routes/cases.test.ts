@@ -15,6 +15,7 @@ const baseCase: WatchedCase = {
   result: null,
   legalForceDate: null,
   legalForceNotified: false,
+  enforcedAt: null,
   userId: null,
   lastChecked: null,
   createdAt: '2026-07-21T10:00:00.000Z',

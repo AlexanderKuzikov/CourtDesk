@@ -119,6 +119,7 @@ export interface WatchedCase {
   result: string | null;
   legalForceDate: string | null;
   legalForceNotified: boolean;
+  enforcedAt: string | null;  // ISO когда впервые проставлен enforced
   userId: string | null;
   lastChecked: string | null; // ISO
   createdAt: string;          // ISO

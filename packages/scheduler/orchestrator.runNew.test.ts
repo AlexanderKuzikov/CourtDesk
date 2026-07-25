@@ -30,6 +30,7 @@ function makeWaiting(overrides: Partial<WatchedCase> = {}): WatchedCase {
     courtType: 'district',
     number: '',
     caseUid: null,
+    enforcedAt: null,
     status: 'waiting',
     result: null,
     legalForceDate: null,

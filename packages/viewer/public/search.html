@@ -282,9 +282,65 @@ async function addWait() {
   btn.disabled = false;
 }
 
-function openDetail(idx) {
+async function openDetail(idx) {
   const r = allResults[idx];
   if (!r) return;
+
+  // Пробуем загрузить полную карточку через парсинг URL
+  let cardHtml = '';
+  try {
+    const parseRes = await fetch('/api/parse/url', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ url: r.caseUrl, courtId: r.courtId, courtType: r.courtType }),
+    });
+    if (parseRes.ok) {
+      const json = await parseRes.json();
+      const card = json.data;
+      if (card) {
+        // Информация о деле
+        cardHtml = `
+          <h3 style="font-size:13px;margin:16px 0 8px;color:var(--primary)">🏛️ Дело</h3>
+          <div class="info-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px 16px">
+            <div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px;text-transform:uppercase">Тип</div><div class="val" style="margin-top:2px">${esc(card.type || '—')}</div></div>
+            ${card.card ? `
+              <div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px;text-transform:uppercase">Судья</div><div class="val" style="margin-top:2px">${esc(card.card.judge || '—')}</div></div>
+              <div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px;text-transform:uppercase">Категория</div><div class="val" style="margin-top:2px;font-size:11px">${esc((card.card.category||[]).join(' → ') || '—')}</div></div>
+              <div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px;text-transform:uppercase">Дата поступления</div><div class="val" style="margin-top:2px">${esc(card.card.filingDate || '—')}</div></div>
+              <div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px;text-transform:uppercase">Дата слушания</div><div class="val" style="margin-top:2px">${esc(card.card.hearingDate || '—')}</div></div>
+              <div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px;text-transform:uppercase">Признак рассмотрения</div><div class="val" style="margin-top:2px">${esc(card.card.proceedingType || '—')}</div></div>
+              <div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px;text-transform:uppercase">Результат</div><div class="val" style="margin-top:2px"><strong>${esc(card.card.result || '—')}</strong></div></div>
+            ` : ''}
+            <div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px;text-transform:uppercase">UID дела</div><div class="val" style="margin-top:2px;font-family:monospace;font-size:11px">${esc(card.uid || '—')}</div></div>
+            ${card.identifiers?.case_uid ? `<div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px;text-transform:uppercase">Case UID</div><div class="val" style="margin-top:2px;font-family:monospace;font-size:11px">${esc(card.identifiers.case_uid)}</div></div>` : ''}
+            ${card.publishedAt ? `<div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px;text-transform:uppercase">Опубликовано</div><div class="val" style="margin-top:2px;font-size:11px">${esc(card.publishedAt)}</div></div>` : ''}
+            ${card.modifiedAt ? `<div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px;text-transform:uppercase">Изменено</div><div class="val" style="margin-top:2px;font-size:11px">${esc(card.modifiedAt)}</div></div>` : ''}
+          </div>`;
+
+        // Участники
+        if (card.parties && card.parties.length > 0) {
+          cardHtml += `
+            <h3 style="font-size:13px;margin:16px 0 8px;color:var(--primary)">👥 Участники (${card.parties.length})</h3>
+            <div style="overflow-x:auto">
+            <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;min-width:500px">
+              <tr style="background:var(--surface-2)"><th style="text-align:left;padding:4px 6px">Роль</th><th style="text-align:left;padding:4px 6px">Наименование</th><th style="text-align:left;padding:4px 6px">ИНН</th><th style="text-align:left;padding:4px 6px">КПП</th><th style="text-align:left;padding:4px 6px">ОГРН</th></tr>
+              ${card.parties.map(p => `<tr><td style="padding:4px 6px;border-bottom:1px solid var(--border);white-space:nowrap">${esc(p.role || '—')}</td><td style="padding:4px 6px;border-bottom:1px solid var(--border)">${esc(p.name || '—')}</td><td style="padding:4px 6px;border-bottom:1px solid var(--border);font-family:monospace;font-size:11px">${esc(p.inn || '')}</td><td style="padding:4px 6px;border-bottom:1px solid var(--border);font-family:monospace;font-size:11px">${esc(p.kpp || '')}</td><td style="padding:4px 6px;border-bottom:1px solid var(--border);font-family:monospace;font-size:11px">${esc(p.ogrn || '')}</td></tr>`).join('')}
+            </table></div>`;
+        }
+
+        // События
+        if (card.events && card.events.length > 0) {
+          cardHtml += `
+            <h3 style="font-size:13px;margin:16px 0 8px;color:var(--primary)">📅 Движение дела (${card.events.length})</h3>
+            <div style="overflow-x:auto">
+            <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;min-width:600px">
+              <tr style="background:var(--surface-2)"><th style="text-align:left;padding:4px 6px">Дата</th><th style="text-align:left;padding:4px 6px">Событие</th><th style="text-align:left;padding:4px 6px">Результат</th></tr>
+              ${card.events.slice().reverse().map(e => `<tr><td style="padding:4px 6px;border-bottom:1px solid var(--border);white-space:nowrap">${esc(e.eventDate || '—')}</td><td style="padding:4px 6px;border-bottom:1px solid var(--border)">${esc(e.eventName || '—')}</td><td style="padding:4px 6px;border-bottom:1px solid var(--border)">${esc(e.result || '—')}</td></tr>`).join('')}
+            </table></div>`;
+        }
+      }
+    }
+  } catch {}
+
   const url = safeUrl(r.caseUrl);
   document.getElementById('detailContent').innerHTML = `
     <h2>${esc(r.caseNumber)}</h2>
@@ -296,7 +352,11 @@ function openDetail(idx) {
       <tr><td style="color:var(--text-muted);padding:4px 8px;border-bottom:1px solid var(--border)">Дата решения</td><td style="padding:4px 8px;border-bottom:1px solid var(--border)">${esc(r.decisionDate || '—')}</td></tr>
       <tr><td style="color:var(--text-muted);padding:4px 8px;border-bottom:1px solid var(--border)">Результат</td><td style="padding:4px 8px;border-bottom:1px solid var(--border)"><strong>${esc(r.result || '—')}</strong></td></tr>
       <tr><td style="color:var(--success);font-weight:600;padding:4px 8px">Вступление в силу</td><td style="color:var(--success);font-weight:600;padding:4px 8px">${esc(r.legalForceDate || '—')}</td></tr>
+      ${r.caseUid ? `<tr><td style="color:var(--text-muted);padding:4px 8px;border-bottom:1px solid var(--border)">УИД</td><td style="padding:4px 8px;border-bottom:1px solid var(--border);font-family:monospace;font-size:11px">${esc(r.caseUid)}</td></tr>` : ''}
     </table>
+
+    ${cardHtml}
+
     <div style="margin-top:16px">
       <button class="btn btn-primary" style="width:auto;padding:8px 16px" onclick="addToMonitor(${idx});closeDetail()">📋 В мониторинг</button>
     </div>`;

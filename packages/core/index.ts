@@ -9,6 +9,10 @@ export {
   findCourtsByRegion,
   getTotalCourts,
   getAllCourts,
+  findHigherCourt,
+  findRsCandidatesForMs,
+  saveMsToRsMapping,
+  extractRegion,
 } from './courts.js';
 export {
   getRuCaptchaKey,

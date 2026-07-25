@@ -5,10 +5,12 @@ import { getParseAdapter } from '../parse/index.js';
 import { getSearchAdapter } from '../search/index.js';
 import { assertCourtUrl, CourtUrlError, isCaptchaPage } from '../core/errors.js';
 import { getRuCaptchaKey } from '../core/config.js';
+import { findHigherCourt, findRsCandidatesForMs, saveMsToRsMapping, extractRegion } from '../core/index.js';
 import type { WatchedCase, CaseHistoryEvent, Notification } from '../core/types.js';
 
 const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000;
-const RATE_DELAY_MS = 1500; // RATE-001: задержка между запросами к sudrf.ru
+const RATE_DELAY_MS = 1500;
+const ENFORCED_GRACE_MS = 90 * 24 * 60 * 60 * 1000; // 90 дней
 
 function now(): string {
   return new Date().toISOString();
@@ -41,8 +43,8 @@ function sleep(ms: number): Promise<void> {
 }
 
 export async function runFull(): Promise<{ ok: number; fail: number }> {
-  // CR5-007 FIXED: один проход вместо 3×listCases — статусы через Set
-  const cases = listCases({ status: ['monitoring', 'decision', 'error'] });
+  const cases = listCases({ status: ['monitoring', 'decision', 'enforced', 'error'] });
+  console.log(`[scheduler] runFull: ${cases.length} cases, statuses:`, cases.map(c => `${c.number}:${c.status}`));
   return processBatch(cases);
 }
 
@@ -161,71 +163,114 @@ async function processOne(c: WatchedCase): Promise<void> {
   // Сохраняем полную карточку для UI
   saveCard(c.uid, card);
 
+  // Сохраняем caseUid из карточки в WatchedCase
+  if (card.identifiers?.case_uid && !c.caseUid) {
+    updateCase(c.uid, { caseUid: card.identifiers.case_uid });
+  }
+
   // NEW-002 FIXED: перечитываем актуальное состояние перед каждой записью
   const prev = getCase(c.uid);
   if (!prev) return;
 
-  // CR5-002 FIXED: убран 'deleted' as unknown — несуществующий статус
   if (prev.status === 'archived') return;
 
   const updates: Partial<WatchedCase> = {};
 
-  // CR6-006: Recover from error status on successful parse
   if (prev.status === 'error') {
     updates.status = 'monitoring';
   }
 
+  // Проверка изменения результата
   if (card.card.result && card.card.result !== prev.result) {
     updates.status = 'decision';
     updates.result = card.card.result;
     addEvent(c.uid, makeEvent(c.uid, 'decision', `Вынесено решение: ${card.card.result}`));
     addNotification({
-      uid: crypto.randomUUID(),
-      caseUid: c.uid,
-      type: 'decision',
+      uid: crypto.randomUUID(), caseUid: c.uid, type: 'decision',
       message: `По делу ${c.number} вынесено решение: ${card.card.result}`,
-      read: false,
-      createdAt: now(),
+      read: false, createdAt: now(),
     });
   }
 
-  if ((prev.status === 'decision' || updates.status === 'decision') && !prev.legalForceDate) {
-    // CR5-001 FIXED: rate-delay перед вторым запросом к sudrf.ru внутри processOne
+  // Определяем, нужно ли искать дату вступления
+  const isInGracePeriod = prev.status === 'enforced' && prev.enforcedAt
+    && (Date.now() - new Date(prev.enforcedAt).getTime() < ENFORCED_GRACE_MS);
+  const shouldCheckLegalForce = !prev.legalForceDate || isInGracePeriod;
+
+  if (shouldCheckLegalForce && (prev.status === 'decision' || updates.status === 'decision' || prev.status === 'enforced')) {
     await sleep(RATE_DELAY_MS);
     try {
       const searchAdapter = getSearchAdapter(c.courtType);
       const results = await searchAdapter.searchByCaseNumber({
-        courtId: c.courtId,
-        courtCode: c.courtCode,
-        courtType: c.courtType,
-        caseNumber: c.number,
+        courtId: c.courtId, courtCode: c.courtCode, courtType: c.courtType, caseNumber: c.number,
       });
       const r = results.find(r => r.caseNumber === c.number);
       if (r?.legalForceDate) {
         updates.status = 'enforced';
-        // CR5-003 FIXED: нормализуем дату к YYYY-MM-DD при сохранении
         updates.legalForceDate = r.legalForceDate.slice(0, 10);
-        addEvent(
-          c.uid,
-          makeEvent(c.uid, 'enforced', `Решение вступило в силу ${updates.legalForceDate}`, {
-            legalForceDate: updates.legalForceDate,
-          }),
-        );
-        addNotification({
-          uid: crypto.randomUUID(),
-          caseUid: c.uid,
-          type: 'enforced',
-          message: `Решение по делу ${c.number} вступило в законную силу`,
-          read: false,
-          createdAt: now(),
-        });
+        if (!prev.enforcedAt) {
+          addEvent(c.uid, makeEvent(c.uid, 'enforced', `Решение вступило в силу ${updates.legalForceDate}`, { legalForceDate: updates.legalForceDate }));
+          addNotification({
+            uid: crypto.randomUUID(), caseUid: c.uid, type: 'enforced',
+            message: `Решение по делу ${c.number} вступило в законную силу`,
+            read: false, createdAt: now(),
+          });
+        }
+      } else if (prev.enforcedAt) {
+        // Если раньше была дата вступления, а теперь её нет — откатываем
+        updates.status = 'decision';
+        updates.legalForceDate = null;
+        addEvent(c.uid, makeEvent(c.uid, 'changed', 'Дата вступления отозвана — дело продолжает движение'));
       }
-    } catch {
-      // Поиск может быть недоступен — не фатально
+    } catch { /* не фатально */ }
+  }
+
+  // Поиск в вышестоящем суде (для enforced в grace period или если есть caseUid)
+  const caseUid = card.identifiers?.case_uid || c.caseUid;
+  if (caseUid && (isInGracePeriod || (prev.status !== 'enforced' && card.identifiers?.case_uid))) {
+    let higherCourt = findHigherCourt(c.courtCode);
+
+    // MS → RS: если нет кэша, перебираем кандидатов
+    if (!higherCourt && c.courtType === 'magistrate') {
+      const candidates = findRsCandidatesForMs(c.courtCode);
+      for (const rs of candidates) {
+        try {
+          await sleep(RATE_DELAY_MS);
+          const searchAdapter = getSearchAdapter('district');
+          const rsResults = await searchAdapter.searchByCaseUid({
+            courtId: rs.subdomain, courtCode: rs.code, courtType: 'district', caseUid,
+          });
+          if (rsResults.length > 0) {
+            higherCourt = rs;
+            saveMsToRsMapping(c.courtCode, rs.code);
+            break;
+          }
+        } catch { /* следующий кандидат */ }
+      }
+    }
+
+    if (higherCourt) {
+      await sleep(RATE_DELAY_MS);
+      try {
+        const searchAdapter = getSearchAdapter(higherCourt.courtType);
+        const results = await searchAdapter.searchByCaseUid({
+          courtId: higherCourt.subdomain, courtCode: higherCourt.code, courtType: higherCourt.courtType, caseUid,
+        });
+        if (results.length > 0) {
+          const found = results[0]!;
+          addEvent(c.uid, makeEvent(c.uid, 'found_in_appeal',
+            `Дело обнаружено в ${higherCourt.name}: ${found.caseNumber}`, { caseUrl: found.caseUrl }));
+          addNotification({
+            uid: crypto.randomUUID(), caseUid: c.uid, type: 'found',
+            message: `Дело ${c.number} обнаружено в ${higherCourt.name} (${found.caseNumber})`,
+            read: false, createdAt: now(),
+          });
+        }
+      } catch { /* не фатально */ }
     }
   }
 
-  // CR6-004: Re-check archived before writing (race with PATCH API)
+  // CR6-004: Re-check archived before writing
   const finalState = getCase(c.uid);
   if (!finalState) return;
   if (finalState.status === 'archived') {
@@ -253,8 +298,9 @@ async function fetchHtml(url: string): Promise<string> {
     html = iconv.decode(Buffer.from(buf), 'win1251');
   }
 
-  // Если капча — решаем через Puppeteer
-  if (isCaptchaPage(html)) {
+  // Если капча или её ошибка — решаем через Puppeteer
+  const NEEDS_CAPTCHA = 'Неверно указан проверочный код';
+  if (isCaptchaPage(html) || html.includes(NEEDS_CAPTCHA)) {
     const apiKey = getRuCaptchaKey();
     if (apiKey) {
       const { fetchWithCaptcha } = await import('../captcha/session.js');

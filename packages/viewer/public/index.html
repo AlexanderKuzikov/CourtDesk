@@ -248,40 +248,39 @@ async function loadDashboard() {
 
 async function openDetail(uid) {
   try {
-    const [caseRes, eventsRes, cardRes] = await Promise.all([
+    const [caseRes, eventsRes, cardRes, courtRes] = await Promise.all([
       fetch('/api/cases/' + encodeURIComponent(uid)).then(r => r.json()),
       fetch('/api/cases/' + encodeURIComponent(uid) + '/events').then(r => r.json()),
       fetch('/api/cases/' + encodeURIComponent(uid) + '/card').then(r => r.json()).catch(() => ({ data: null })),
+      fetch('/api/courts/' + encodeURIComponent(document.querySelector('#detailOverlay')?.dataset?.courtId || '')).then(r => r.json()).catch(() => ({ data: null })),
     ]);
     const c = caseRes.data || caseRes;
     const card = cardRes.data || null;
     const events = eventsRes.data || [];
 
-    // Информация о суде
-    let courtHtml = '';
+    // Информация о суде из справочника
+    let courtInfoHtml = '';
     if (card) {
-      const courtInfo = card.court ? '—' : card.court;
-      courtHtml = `
+      const courtName = card.court || c.courtId;
+      courtInfoHtml = `
         <h3 style="font-size:13px;margin:16px 0 8px;color:var(--primary)">🏛️ Суд</h3>
         <div class="info-grid">
           <div class="info-item"><div class="key">Поддомен</div><div class="val">${esc(card.court || '—')}</div></div>
+          <div class="info-item"><div class="key">Тип суда</div><div class="val">${esc(card.courtType || c.courtType)}</div></div>
           <div class="info-item"><div class="key">Тип дела</div><div class="val">${esc(card.type || '—')}</div></div>
           ${card.card ? `
-          <div class="info-item"><div class="key">Категория</div><div class="val">${esc((card.card.category||[]).join(' → ') || '—')}</div></div>
+          <div class="info-item"><div class="key">Категория</div><div class="val" style="font-size:11px">${esc((card.card.category||[]).join(' → ') || '—')}</div></div>
           <div class="info-item"><div class="key">Судья</div><div class="val">${esc(card.card.judge || '—')}</div></div>
           <div class="info-item"><div class="key">Дата поступления</div><div class="val">${esc(card.card.filingDate || '—')}</div></div>
           <div class="info-item"><div class="key">Дата слушания</div><div class="val">${esc(card.card.hearingDate || '—')}</div></div>
           <div class="info-item"><div class="key">Признак рассмотрения</div><div class="val">${esc(card.card.proceedingType || '—')}</div></div>
-          <div class="info-item"><div class="key">UID дела</div><div class="val" style="font-family:monospace;font-size:11px">${esc(card.uid || '—')}</div></div>
-          ${card.identifiers?.case_uid ? `<div class="info-item"><div class="key">Case UID</div><div class="val" style="font-family:monospace;font-size:11px">${esc(card.identifiers.case_uid)}</div></div>` : ''}
+          <div class="info-item"><div class="key">Результат</div><div class="val"><strong>${esc(card.card.result || '—')}</strong></div></div>
+          <div class="info-item"><div class="key">UID (внутр.)</div><div class="val" style="font-family:monospace;font-size:11px">${esc(card.uid || '—')}</div></div>
+          ${card.identifiers?.case_uid ? `<div class="info-item"><div class="key">Case UID (GUID)</div><div class="val" style="font-family:monospace;font-size:11px">${esc(card.identifiers.case_uid)}</div></div>` : ''}
+          ${card.identifiers?.delo_id ? `<div class="info-item"><div class="key">Delo ID</div><div class="val" style="font-family:monospace;font-size:11px">${esc(card.identifiers.delo_id)}</div></div>` : ''}
+          ${card.publishedAt ? `<div class="info-item"><div class="key">Опубликовано</div><div class="val" style="font-size:11px">${esc(card.publishedAt)}</div></div>` : ''}
+          ${card.modifiedAt ? `<div class="info-item"><div class="key">Изменено</div><div class="val" style="font-size:11px">${esc(card.modifiedAt)}</div></div>` : ''}
           ` : ''}
-        </div>`;
-    } else {
-      courtHtml = `
-        <h3 style="font-size:13px;margin:16px 0 8px;color:var(--primary)">🏛️ Суд</h3>
-        <div class="info-grid">
-          <div class="info-item"><div class="key">Поддомен</div><div class="val">${esc(c.courtId || '—')}</div></div>
-          <div class="info-item"><div class="key">Тип суда</div><div class="val">${esc(c.courtType)}</div></div>
         </div>`;
     }
 
@@ -290,10 +289,11 @@ async function openDetail(uid) {
     if (card && card.parties && card.parties.length > 0) {
       partiesHtml = `
         <h3 style="font-size:13px;margin:16px 0 8px;color:var(--primary)">👥 Участники (${card.parties.length})</h3>
-        <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px">
-          <tr style="background:var(--surface-2)"><th style="text-align:left;padding:4px 6px">Роль</th><th style="text-align:left;padding:4px 6px">Наименование</th><th style="text-align:left;padding:4px 6px">ИНН</th><th style="text-align:left;padding:4px 6px">ОГРН</th></tr>
-          ${card.parties.map(p => `<tr><td style="padding:4px 6px;border-bottom:1px solid var(--border)">${esc(p.role || '—')}</td><td style="padding:4px 6px;border-bottom:1px solid var(--border)">${esc(p.name || '—')}</td><td style="padding:4px 6px;border-bottom:1px solid var(--border);font-family:monospace;font-size:11px">${esc(p.inn || '')}</td><td style="padding:4px 6px;border-bottom:1px solid var(--border);font-family:monospace;font-size:11px">${esc(p.ogrn || '')}</td></tr>`).join('')}
-        </table>`;
+        <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;min-width:500px">
+          <tr style="background:var(--surface-2)"><th style="text-align:left;padding:4px 6px">Роль</th><th style="text-align:left;padding:4px 6px">Наименование</th><th style="text-align:left;padding:4px 6px">ИНН</th><th style="text-align:left;padding:4px 6px">КПП</th><th style="text-align:left;padding:4px 6px">ОГРН</th><th style="text-align:left;padding:4px 6px">ОГРНИП</th></tr>
+          ${card.parties.map(p => `<tr><td style="padding:4px 6px;border-bottom:1px solid var(--border);white-space:nowrap">${esc(p.role || '—')}</td><td style="padding:4px 6px;border-bottom:1px solid var(--border)">${esc(p.name || '—')}</td><td style="padding:4px 6px;border-bottom:1px solid var(--border);font-family:monospace;font-size:11px">${esc(p.inn || '')}</td><td style="padding:4px 6px;border-bottom:1px solid var(--border);font-family:monospace;font-size:11px">${esc(p.kpp || '')}</td><td style="padding:4px 6px;border-bottom:1px solid var(--border);font-family:monospace;font-size:11px">${esc(p.ogrn || '')}</td><td style="padding:4px 6px;border-bottom:1px solid var(--border);font-family:monospace;font-size:11px">${esc(p.ogrnip || '')}</td></tr>`).join('')}
+        </table></div>`;
     }
 
     // События дела (из CaseCard)
@@ -301,10 +301,11 @@ async function openDetail(uid) {
     if (card && card.events && card.events.length > 0) {
       cardEventsHtml = `
         <h3 style="font-size:13px;margin:16px 0 8px;color:var(--primary)">📅 Движение дела (${card.events.length})</h3>
-        <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px">
-          <tr style="background:var(--surface-2)"><th style="text-align:left;padding:4px 6px">Дата</th><th style="text-align:left;padding:4px 6px">Событие</th><th style="text-align:left;padding:4px 6px">Результат</th></tr>
-          ${card.events.slice().reverse().map(e => `<tr><td style="padding:4px 6px;border-bottom:1px solid var(--border)">${esc(e.eventDate || '—')}</td><td style="padding:4px 6px;border-bottom:1px solid var(--border)">${esc(e.eventName || '—')}</td><td style="padding:4px 6px;border-bottom:1px solid var(--border)">${esc(e.result || '—')}</td></tr>`).join('')}
-        </table>`;
+        <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;min-width:600px">
+          <tr style="background:var(--surface-2)"><th style="text-align:left;padding:4px 6px">Дата</th><th style="text-align:left;padding:4px 6px">Время</th><th style="text-align:left;padding:4px 6px">Событие</th><th style="text-align:left;padding:4px 6px">Результат</th><th style="text-align:left;padding:4px 6px">Судья</th><th style="text-align:left;padding:4px 6px">Место</th></tr>
+          ${card.events.slice().reverse().map(e => `<tr><td style="padding:4px 6px;border-bottom:1px solid var(--border);white-space:nowrap">${esc(e.eventDate || '—')}</td><td style="padding:4px 6px;border-bottom:1px solid var(--border)">${esc(e.eventTime || '')}</td><td style="padding:4px 6px;border-bottom:1px solid var(--border)">${esc(e.eventName || '—')}</td><td style="padding:4px 6px;border-bottom:1px solid var(--border)">${esc(e.result || '—')}</td><td style="padding:4px 6px;border-bottom:1px solid var(--border);font-size:11px">${esc(e.judge || '')}</td><td style="padding:4px 6px;border-bottom:1px solid var(--border);font-size:11px">${esc(e.location || '')}</td></tr>`).join('')}
+        </table></div>`;
     }
 
     // Timeline (история мониторинга)
@@ -320,20 +321,19 @@ async function openDetail(uid) {
       <div class="case-num">${esc(c.url || '—')}</div>
       <div class="info-grid">
         <div class="info-item"><div class="key">Статус</div><div class="val"><span class="badge badge-${esc(c.status)}">${esc(STATUS_LABELS[c.status] || c.status)}</span></div></div>
-        <div class="info-item"><div class="key">Результат</div><div class="val">${esc(c.result || '—')}</div></div>
         <div class="info-item"><div class="key">Вступление в силу</div><div class="val" style="color:var(--success);font-weight:600">${esc(c.legalForceDate || '—')}</div></div>
         <div class="info-item"><div class="key">Последняя проверка</div><div class="val">${formatTime(c.lastChecked)}</div></div>
         ${c.caseUid ? `<div class="info-item"><div class="key">УИД</div><div class="val" style="font-family:monospace;font-size:11px">${esc(c.caseUid)}</div></div>` : ''}
       </div>
 
-      ${courtHtml}
+      ${courtInfoHtml}
       ${partiesHtml}
       ${cardEventsHtml}
 
       <h3 style="font-size:13px;margin:16px 0 8px;color:var(--primary)">📋 История мониторинга</h3>
       <div class="timeline">${timelineHtml}</div>
 
-      <div style="margin-top:16px;display:flex;gap:8px">
+      <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">
         ${c.status !== 'archived' ? `<button class="btn btn-secondary btn-sm" onclick="archiveCase('${esc(c.uid)}');closeDetail()">📦 Архивировать</button>` : `<button class="btn btn-secondary btn-sm" onclick="unarchiveCase('${esc(c.uid)}');closeDetail()">↩ Вернуть</button>`}
         <button class="btn btn-danger btn-sm" onclick="deleteCase('${esc(c.uid)}');closeDetail()">🗑 Удалить</button>
         <button class="btn btn-secondary btn-sm" onclick="window.print()">🖨 Печать</button>
