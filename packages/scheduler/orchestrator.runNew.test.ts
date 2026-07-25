@@ -8,6 +8,7 @@ const storeMock = {
   getCase: vi.fn((): WatchedCase | null => null),
   getEvents: vi.fn((): CaseHistoryEvent[] => []),
   addNotification: vi.fn((): void => undefined),
+  saveCard: vi.fn((): void => undefined),
 };
 
 const searchAdapter = {
@@ -28,6 +29,7 @@ function makeWaiting(overrides: Partial<WatchedCase> = {}): WatchedCase {
     courtCode: 'kirov--perm',
     courtType: 'district',
     number: '',
+    caseUid: null,
     status: 'waiting',
     result: null,
     legalForceDate: null,

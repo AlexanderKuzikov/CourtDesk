@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from 'express';
-import { getCase, listCases, addCase, updateCase, deleteCase, getStats, deleteNotificationsByCase } from '../../store/index.js';
+import { getCase, listCases, addCase, updateCase, deleteCase, getStats, deleteNotificationsByCase, deleteCard, getCard } from '../../store/index.js';
 import { addEvent as addHistoryEvent, getEvents as getCaseEvents, clearEvents } from '../../store/events.js';
 import type { WatchedCase, CaseStatus } from '../../core/types.js';
 
@@ -54,14 +54,14 @@ router.get('/api/cases/:uid', (req: Request, res: Response) => {
 // Добавить дело в мониторинг
 router.post('/api/cases', (req: Request, res: Response) => {
   try {
-    const { url, courtId, courtCode, courtType, caseNumber, userId } = req.body ?? {};
+    const { url, courtId, courtCode, courtType, caseNumber, caseUid, userId } = req.body ?? {};
     if (!url || !courtId || !courtType || !caseNumber) {
       return fail(res, 'BAD_REQUEST', 'url, courtId, courtType, caseNumber обязательны');
     }
     const c: WatchedCase = {
       uid: crypto.randomUUID(), url,
       courtId, courtCode: courtCode ?? courtId, courtType,
-      number: caseNumber, status: 'monitoring',
+      number: caseNumber, caseUid: caseUid ?? null, status: 'monitoring',
       result: null, legalForceDate: null, legalForceNotified: false,
       userId: userId ?? null, lastChecked: null,
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
@@ -85,7 +85,7 @@ router.post('/api/cases/wait', (req: Request, res: Response) => {
     const c: WatchedCase = {
       uid: crypto.randomUUID(), url: '',
       courtId, courtCode: courtCode ?? courtId, courtType,
-      number: '', status: 'waiting',
+      number: '', caseUid: null, status: 'waiting',
       result: null, legalForceDate: null, legalForceNotified: false,
       userId: userId ?? null, lastChecked: null,
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
@@ -116,11 +116,24 @@ router.patch('/api/cases/:uid', (req: Request, res: Response) => {
 // Удалить дело
 router.delete('/api/cases/:uid', (req: Request, res: Response) => {
   try {
-    const deleted = deleteCase(String(req.params['uid']));
+    const uid = String(req.params['uid']);
+    const deleted = deleteCase(uid);
     if (!deleted) return fail(res, 'NOT_FOUND', 'Дело не найдено', 404);
-    clearEvents(String(req.params['uid']));
-    deleteNotificationsByCase(String(req.params['uid']));
+    clearEvents(uid);
+    deleteNotificationsByCase(uid);
+    deleteCard(uid);
     ok(res, null);
+  } catch (e) { fail(res, 'STORE_ERROR', errMsg(e), 500); }
+});
+
+// Полная карточка дела (CaseCard)
+router.get('/api/cases/:uid/card', (req: Request, res: Response) => {
+  try {
+    const c = getCase(String(req.params['uid']));
+    if (!c) return fail(res, 'NOT_FOUND', 'Дело не найдено', 404);
+    const card = getCard(String(req.params['uid']));
+    if (!card) return fail(res, 'NOT_FOUND', 'Карточка дела ещё не загружена', 404);
+    ok(res, card);
   } catch (e) { fail(res, 'STORE_ERROR', errMsg(e), 500); }
 });
 

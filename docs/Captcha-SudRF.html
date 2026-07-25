@@ -1,0 +1,258 @@
+<form action="" method="get" name="calform" id="calform">
+	<input name="name" type="hidden" value="sud_delo">
+	<input name="srv_num" type="hidden" value="1">
+	<input name="name_op" type="hidden" value="r">
+	<input name="delo_id" type="hidden" value="5">
+	<input name="case_type" type="hidden" value="0">
+	<input name="new" type="hidden" value="5">
+  	  	<table width="100%" cellpadding="0" cellspacing="0" border="0">  	    	
+		<tbody><tr>
+      		<td style="width:50%; border: 1px solid #CECECE;" align="center">
+      			<div id="case_type" style="font: 14px Tahoma; color: #555;">
+    	  			Выбрана картотека поиска:<br>
+        			<div style="color:#006699; font-size:20px">
+	        			Гражданские дела - апелляция    				</div>
+       				<div style="text-align: right; padding:0 10px 6px 0"><a href="#" onclick="showCatalogInst(550,500,2,1);">Изменить</a></div>
+    			</div>
+    		</td>
+  		</tr>
+  		<tr>
+  	 		<td style="font: 14px Tahoma; color: #555; text-align: center">Поиск по делам
+      			<table width="100%" cellpadding="0" cellspacing="2" border="0">
+        			<tbody><tr>
+    	 				<td style="width:10%;" align="right">Фамилия</td>
+    	   				<td style="width:40%;">
+							<input name="G2_PARTS__NAMESS" type="text" class="Lookup" size="70">          				</td>
+        			</tr>
+			                			<tr>
+         				<td style="width:10%;" align="right">Номер дела (материала)</td>
+   	    				<td style="width:40%;">
+							<input name="g2_case__CASE_NUMBERSS" type="text" class="Lookup" size="70">    	  				</td>
+    	  			</tr>
+			                			<tr>
+         				<td style="width:10%;" align="right">Уникальный идентификатор дела</td>
+   	    				<td style="width:40%;">
+							<span class="shell"><input name="g2_case__JUDICIAL_UIDSS" type="text" class="Lookup masked" size="70" id="case__JUDICIAL_UIDSS" data-placeholder="XXXXXXXX-XX-YYYY-XXXXXX-XX" pattern="^\d{2}(VS|KJ|AJ|OS|RS|KV|AV|OV|GV|AO|AA|AS|UD|KS|US|GU|MS|IC)\d{4}-0[1-9]{1}-(19|20)\d{2}-\d{6}-\d{2}$" data-charset="XX__XXXX-XX-XXXX-XXXXXX-XX" title="Формат УИД: XXWWXXXX-XX-XXXX-XXXXXX-XX" data-valid-example="26RS0023-01-2020-000159-48" maxlength="26"><span aria-hidden="true" id="case__JUDICIAL_UIDSSMaskError" class="error-mask">Неверный формат ввода</span></span>    	  				</td>
+    	  			</tr>
+						
+					<tr>
+						<td style="width:10%;" align="right">Проверочный код</td>
+												<td style="width:40%;">  <input name="captcha" autocomplete="off" id="captcha" type="text" class="Lookup" style="vertical-align:top;height:25px;font-size:17px;" size="10"> 
+						<img src="data: image/png;base64, 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" style="border: 1px solid #4a739d;">
+						<input name="captchaid" type="hidden" value="29af3a6e1108ca2090a916711271dafc">
+												</td>
+					</tr>
+						  			</tbody></table>
+    		</td>    		
+   		</tr>
+    </tbody></table>
+	  	<input name="delo_table" type="hidden" value="g2_case">
+    <div id="line"></div>
+    <div style="font: 14px Tahoma; color: #555; text-align: center;">Дополнительные параметры поиска</div>
+    <div id="line"></div>
+    <table width="100%" cellpadding="1" cellspacing="2" border="0">
+		<tbody><tr><td colspan="2" class="title">ДАННЫЕ ПО ДЕЛУ<br></td></tr>        <tr>
+        	<td style="width:30%" valign="bottom" align="right">Дата поступления</td>
+	        <td style="width:70%">
+				с <nobr><input name="g2_case__ENTRY_DATE1D" type="text" size="10" class="Lookup">					<img src="/images/b_calc.gif" onclick="show_calendar('calform.g2_case__ENTRY_DATE1D');" style="width: 15px; height: 17px; border: 0; cursor: pointer;" align="top">
+					 по <input name="g2_case__ENTRY_DATE2D" type="text" size="10" class="Lookup">					<img src="/images/b_calc.gif" onclick="show_calendar('calform.g2_case__ENTRY_DATE2D');" style="width: 15px; height: 17px; border: 0; cursor: pointer;" align="top"></nobr>
+					       		</td>
+     	</tr>
+       	        <tr>
+        	<td style="width:30%" valign="bottom" align="right">Регион суда первой инстанции</td>
+	        <td style="width:70%">
+									<input name="G2_CASE__COURT_I_REGION_ID" type="hidden" value="">
+					<input type="text" name="textfield" class="Lookup" size="70" disabled="">
+					<img src="/images/arow.gif" onclick="showCatalog(500,450,'G2_CASE','COURT_I_REGION_ID');" style="width: 15px; height: 17px; border: 0; cursor: pointer;" align="top">
+					       		</td>
+     	</tr>
+       	        <tr>
+        	<td style="width:30%" valign="bottom" align="right">Суд (судебный участок) первой инстанции</td>
+	        <td style="width:70%">
+									<input name="G2_CASE__COURT_I" type="hidden" value="">
+					<input type="text" name="textfield" class="Lookup" size="70" disabled="">
+					<img src="/images/arow.gif" onclick="showCatalog(500,450,'G2_CASE','COURT_I');" style="width: 15px; height: 17px; border: 0; cursor: pointer;" align="top">
+					       		</td>
+     	</tr>
+       	        <tr>
+        	<td style="width:30%" valign="bottom" align="right">Номер дела в первой инстанции</td>
+	        <td style="width:70%">
+				<input name="G2_CASE__CASE_NUMBER_ISS" type="text" class="Lookup" size="70">       		</td>
+     	</tr>
+       	        <tr>
+        	<td style="width:30%" valign="bottom" align="right">Категория дела</td>
+	        <td style="width:70%">
+				<input name="dic" type="button" style="border-color:#006699; color:#006699 " value="Выбрать из справочника" onclick="getDicRow(02,this);">       		</td>
+     	</tr>
+       	        <tr>
+        	<td style="width:30%" valign="bottom" align="right">Материал (в порядке исполнения решений и иные)</td>
+	        <td style="width:70%">
+									<input name="G2_CASE__M_SUB_TYPE" type="hidden" value="">
+					<input type="text" name="textfield" class="Lookup" size="70" disabled="">
+					<img src="/images/arow.gif" onclick="showCatalog(500,450,'G2_CASE','M_SUB_TYPE');" style="width: 15px; height: 17px; border: 0; cursor: pointer;" align="top">
+					       		</td>
+     	</tr>
+       	        <tr>
+        	<td style="width:30%" valign="bottom" align="right">Судья</td>
+	        <td style="width:70%">
+									<input name="G2_CASE__JUDGE" type="hidden" value="">
+					<input type="text" name="textfield" class="Lookup" size="70" disabled="">
+					<img src="/images/arow.gif" onclick="showCatalog(500,450,'G2_CASE','JUDGE');" style="width: 15px; height: 17px; border: 0; cursor: pointer;" align="top">
+					       		</td>
+     	</tr>
+       	        <tr>
+        	<td style="width:30%" valign="bottom" align="right">Дата рассмотрения</td>
+	        <td style="width:70%">
+				с <nobr><input name="g2_case__RESULT_DATE1D" type="text" size="10" class="Lookup">					<img src="/images/b_calc.gif" onclick="show_calendar('calform.g2_case__RESULT_DATE1D');" style="width: 15px; height: 17px; border: 0; cursor: pointer;" align="top">
+					 по <input name="g2_case__RESULT_DATE2D" type="text" size="10" class="Lookup">					<img src="/images/b_calc.gif" onclick="show_calendar('calform.g2_case__RESULT_DATE2D');" style="width: 15px; height: 17px; border: 0; cursor: pointer;" align="top"></nobr>
+					       		</td>
+     	</tr>
+       	        <tr>
+        	<td style="width:30%" valign="bottom" align="right">Результат рассмотрения</td>
+	        <td style="width:70%">
+									<input name="G2_CASE__RESULT" type="hidden" value="">
+					<input type="text" name="textfield" class="Lookup" size="70" disabled="">
+					<img src="/images/arow.gif" onclick="showCatalog(500,450,'G2_CASE','RESULT');" style="width: 15px; height: 17px; border: 0; cursor: pointer;" align="top">
+					       		</td>
+     	</tr>
+       	        <tr>
+        	<td style="width:30%" valign="bottom" align="right">Номер здания, название обособленного подразделения</td>
+	        <td style="width:70%">
+									<input name="G2_CASE__BUILDING_ID" type="hidden" value="">
+					<input type="text" name="textfield" class="Lookup" size="70" disabled="">
+					<img src="/images/arow.gif" onclick="showCatalog(500,450,'G2_CASE','BUILDING_ID');" style="width: 15px; height: 17px; border: 0; cursor: pointer;" align="top">
+					       		</td>
+     	</tr>
+       	        <tr>
+        	<td style="width:30%" valign="bottom" align="right">Судья (мировой судья) первой инстанции</td>
+	        <td style="width:70%">
+									<input name="G2_CASE__JUDGE_I" type="hidden" value="">
+					<input type="text" name="textfield" class="Lookup" size="70" disabled="">
+					<img src="/images/arow.gif" onclick="showCatalog(500,450,'G2_CASE','JUDGE_I');" style="width: 15px; height: 17px; border: 0; cursor: pointer;" align="top">
+					       		</td>
+     	</tr>
+       	        <tr>
+        	<td style="width:30%" valign="bottom" align="right">Признак рассмотрения дела</td>
+	        <td style="width:70%">
+									<input name="G2_CASE__COURT_STRUCT" type="hidden" value="">
+					<input type="text" name="textfield" class="Lookup" size="70" disabled="">
+					<img src="/images/arow.gif" onclick="showCatalog(500,450,'G2_CASE','COURT_STRUCT');" style="width: 15px; height: 17px; border: 0; cursor: pointer;" align="top">
+					       		</td>
+     	</tr>
+       	<tr><td colspan="2">&nbsp;</td></tr><tr><td colspan="2"><span class="title">ДВИЖЕНИЕ ДЕЛА</span><br></td></tr>			<tr>
+				<td style="width:40%" align="right">Наименование события</td>
+				<td style="width:60%">
+											<input name="G2_EVENT__EVENT_NAME" type="hidden" value="">
+						<input type="text" name="textfield" class="Lookup" size="70" disabled="">
+						<img src="/images/arow.gif" onclick="showCatalog(500,450,'G2_EVENT','EVENT_NAME');" style="width: 15px; height: 17px; border: 0; cursor: pointer;" align="top">
+										</td>
+			</tr>
+						<tr>
+				<td style="width:40%" align="right">Дата</td>
+				<td style="width:60%">
+					<input name="G2_EVENT__EVENT_DATEDD" type="text" size="10" class="Lookup">						<a href="javascript:show_calendar('calform.G2_EVENT__EVENT_DATEDD');" onmouseover="window.status='Date Picker';return true;" onmouseout="window.status='';return true;">
+							<img src="/images/b_calc.gif" width="15" height="17" border="0" align="top"></a>
+										</td>
+			</tr>
+			<tr><td colspan="2">&nbsp;</td></tr><tr><td colspan="2"><span class="title">УЧАСТНИКИ</span><br></td></tr>			<tr>
+				<td style="width:40%" align="right">Вид лица, участвующего в деле</td>
+				<td style="width:60%">
+											<input name="G2_PARTS__PARTS_TYPE" type="hidden" value="">
+						<input type="text" name="textfield" class="Lookup" size="70" disabled="">
+						<img src="/images/arow.gif" onclick="showCatalog(500,450,'G2_PARTS','PARTS_TYPE');" style="width: 15px; height: 17px; border: 0; cursor: pointer;" align="top">
+										</td>
+			</tr>
+						<tr>
+				<td style="width:40%" align="right">ИНН</td>
+				<td style="width:60%">
+					<input name="G2_PARTS__INN_STRSS" type="text" class="Lookup" size="70">				</td>
+			</tr>
+						<tr>
+				<td style="width:40%" align="right">КПП</td>
+				<td style="width:60%">
+					<input name="G2_PARTS__KPP_STRSS" type="text" class="Lookup" size="70">				</td>
+			</tr>
+						<tr>
+				<td style="width:40%" align="right">ОГРН</td>
+				<td style="width:60%">
+					<input name="G2_PARTS__OGRN_STRSS" type="text" class="Lookup" size="70">				</td>
+			</tr>
+						<tr>
+				<td style="width:40%" align="right">ОГРНИП</td>
+				<td style="width:60%">
+					<input name="G2_PARTS__OGRNIP_STRSS" type="text" class="Lookup" size="70">				</td>
+			</tr>
+			<tr><td colspan="2">&nbsp;</td></tr><tr><td colspan="2"><span class="title">РЕШЕНИЯ</span><br></td></tr>			<tr>
+				<td style="width:40%" align="right">Дата публикации</td>
+				<td style="width:60%">
+					с <nobr><input name="G2_DOCUMENT__PUBL_DATE1D" type="text" size="10" class="Lookup">						<img src="/images/b_calc.gif" onclick="show_calendar('calform.G2_DOCUMENT__PUBL_DATE1D');" style="width: 15px; height: 17px; border: 0; cursor: pointer;" align="top">
+						 по <input name="G2_DOCUMENT__PUBL_DATE2D" type="text" size="10" class="Lookup">						<img src="/images/b_calc.gif" onclick="show_calendar('calform.G2_DOCUMENT__PUBL_DATE2D');" style="width: 15px; height: 17px; border: 0; cursor: pointer;" align="top">
+						</nobr>				</td>
+			</tr>
+						<tr>
+				<td style="width:40%" align="right">Дата вступления в законную силу</td>
+				<td style="width:60%">
+					с <nobr><input name="G2_DOCUMENT__VALIDITY_DATE1D" type="text" size="10" class="Lookup">						<img src="/images/b_calc.gif" onclick="show_calendar('calform.G2_DOCUMENT__VALIDITY_DATE1D');" style="width: 15px; height: 17px; border: 0; cursor: pointer;" align="top">
+						 по <input name="G2_DOCUMENT__VALIDITY_DATE2D" type="text" size="10" class="Lookup">						<img src="/images/b_calc.gif" onclick="show_calendar('calform.G2_DOCUMENT__VALIDITY_DATE2D');" style="width: 15px; height: 17px; border: 0; cursor: pointer;" align="top">
+						</nobr>				</td>
+			</tr>
+			<tr><td colspan="2">&nbsp;</td></tr><tr><td colspan="2"><span class="title">ОГРАНИЧЕНИЯ ДОСТУПА</span><br></td></tr>			<tr>
+				<td style="width:40%" align="right">Вид информации, подлежащей ограничению (гл. 27.1, 27.2 КАС)</td>
+				<td style="width:60%">
+											<input name="G2_RKN_ACCESS_RESTRICTION__RKN_REASON" type="hidden" value="">
+						<input type="text" name="textfield" class="Lookup" size="70" disabled="">
+						<img src="/images/arow.gif" onclick="showCatalog(500,450,'G2_RKN_ACCESS_RESTRICTION','RKN_REASON');" style="width: 15px; height: 17px; border: 0; cursor: pointer;" align="top">
+										</td>
+			</tr>
+						<tr>
+				<td style="width:40%" align="right">Доменное имя второго уровня (гл. 27.1, 27.2 КАС)</td>
+				<td style="width:60%">
+					<input name="g2_rkn_access_restriction__RKN_RESTRICT_URLSS" type="text" class="Lookup" size="70">				</td>
+			</tr>
+			<tr><td colspan="2">&nbsp;</td></tr><tr><td colspan="2"><span class="title">ИСПОЛНИТЕЛЬНЫЕ ЛИСТЫ</span><br></td></tr>			<tr>
+				<td style="width:40%" align="right">Дата выдачи</td>
+				<td style="width:60%">
+					с <nobr><input name="G2_ORDER_INFO__ORDER_DATE1D" type="text" size="10" class="Lookup">						<img src="/images/b_calc.gif" onclick="show_calendar('calform.G2_ORDER_INFO__ORDER_DATE1D');" style="width: 15px; height: 17px; border: 0; cursor: pointer;" align="top">
+						 по <input name="G2_ORDER_INFO__ORDER_DATE2D" type="text" size="10" class="Lookup">						<img src="/images/b_calc.gif" onclick="show_calendar('calform.G2_ORDER_INFO__ORDER_DATE2D');" style="width: 15px; height: 17px; border: 0; cursor: pointer;" align="top">
+						</nobr>				</td>
+			</tr>
+						<tr>
+				<td style="width:40%" align="right">Серия, номер бланка</td>
+				<td style="width:60%">
+					<input name="G2_ORDER_INFO__ORDER_NUMSS" type="text" class="Lookup" size="70">				</td>
+			</tr>
+						<tr>
+				<td style="width:40%" align="right">Номер электронного ИД</td>
+				<td style="width:60%">
+					<input name="G2_ORDER_INFO__EXTERNALKEYSS" type="text" class="Lookup" size="70">				</td>
+			</tr>
+						<tr>
+				<td style="width:40%" align="right">Статус</td>
+				<td style="width:60%">
+											<input name="G2_ORDER_INFO__STATE_ID" type="hidden" value="">
+						<input type="text" name="textfield" class="Lookup" size="70" disabled="">
+						<img src="/images/arow.gif" onclick="showCatalog(500,450,'G2_ORDER_INFO','STATE_ID');" style="width: 15px; height: 17px; border: 0; cursor: pointer;" align="top">
+										</td>
+			</tr>
+						<tr>
+				<td style="width:40%" align="right">Кому выдан / направлен</td>
+				<td style="width:60%">
+											<input name="G2_ORDER_INFO__RECIP_ID" type="hidden" value="">
+						<input type="text" name="textfield" class="Lookup" size="70" disabled="">
+						<img src="/images/arow.gif" onclick="showCatalog(500,450,'G2_ORDER_INFO','RECIP_ID');" style="width: 15px; height: 17px; border: 0; cursor: pointer;" align="top">
+										</td>
+			</tr>
+				    <tr>
+	    	<td align="center" colspan="2">
+		    				    	<br>
+			        <input name="list" type="checkbox" class="checkbox" value="ON">&nbsp;Отобразить полный список
+		        		    </td>
+		</tr>
+	</tbody></table>
+	<div id="line"></div>
+	<div align="center" style="font-size: 11px; color: #555; margin-top:10px;'">
+		<input name="Submit" type="submit" class="booton" value="Найти" onclick="checkForm(event);">
+	    <input name="Reset" type="reset" class="booton" value="Очистить" onclick="clearErrors(); clearFieldN();">
+	    <br>
+	</div>
+</form>

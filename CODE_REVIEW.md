@@ -1,7 +1,7 @@
 # CODE REVIEW — CourtDesk
 
-> Consolidated: 2026-07-24
-> All 6 rounds of review with progress for each finding.
+> Consolidated: 2026-07-25
+> All 7 rounds of review with progress for each finding.
 
 ---
 
@@ -15,9 +15,10 @@
 | CR4 | 2026-07-22 | Perplexity (CR3→4) | 8 | 8 | 0 |
 | CR5 | 2026-07-22 | Perplexity | 12 | 9 fix + 3 doc | 0 |
 | CR6 | 2026-07-23 | Cursor Agent | 20 | 13 fix + 5 UX + 5 tech-debt | 0 |
-| **Итого** | | | **80** | **73** | **2** |
+| CR7 | 2026-07-25 | OpenCode Go | 10 | 10 doc | 0 |
+| **Итого** | | | **80** | **63 fix + 15 doc** | **2** |
 
-**Открытых критичных замечаний нет.** 5 tech-debt задокументировано.
+**Открытых критичных замечаний нет.** 15 tech-debt задокументировано.
 
 | Метрика | Значение |
 |---------|----------|
@@ -62,6 +63,25 @@ CORS, shared fetchHtml, batch updateCase, graceful shutdown, persistent notifica
 ## CR5 — Perplexity-ревью (12 замечаний) — ✅ Закрыт
 
 Rate-delay, type safety, legalForceDate normalization, CORS, regex /iu, captcha retry, listCases multi-status, runFull guard, HOST env. 3 documented as trade-offs.
+
+---
+
+## CR7 — OpenCode Go Deep Audit (10 замечаний) — 2026-07-25
+
+**Результат:** 10 замечаний (8 MEDIUM, 2 LOW), все задокументированы как tech-debt.
+
+| ID | Severity | Описание | Статус |
+|----|----------|----------|--------|
+| CR7-001 | MEDIUM | `success: true` при HTTP 500 в `/api/status` | ✅ DOCUMENTED |
+| CR7-002 | MEDIUM | `toIso()` — битая ISO дата (двойные `:00`) | ✅ DOCUMENTED |
+| CR7-003 | MEDIUM | Dead code: `err.message === 'timeout'` | ✅ DOCUMENTED |
+| CR7-004 | MEDIUM | `listNotifications()` — живая ссылка на кэш | ✅ DOCUMENTED |
+| CR7-005 | MEDIUM | `findCourtsByRegion` без лимита | ✅ DOCUMENTED |
+| CR7-006 | MEDIUM | Матчинг `r.uid === c.uid` никогда не сработает | ✅ DOCUMENTED |
+| CR7-007 | MEDIUM | `waitForNetworkIdle().catch(() => {})` глотает ошибки | ✅ DOCUMENTED |
+| CR7-008 | MEDIUM | `process.loadEnvFile()` требует Node ≥21 | ✅ DOCUMENTED |
+| CR7-009 | LOW | `&rarr;` обрабатывается по-разному в адаптерах | ✅ DOCUMENTED |
+| CR7-010 | LOW | `setInterval` не чистится при уходе со страницы | ✅ DOCUMENTED |
 
 ---
 

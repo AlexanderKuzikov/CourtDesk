@@ -1,8 +1,13 @@
 // Совместимый слой для CourtFlow-модулей (captcha)
 
+const CAPTCHA_MARKERS = [
+  'kcaptchaForm',             // msudrf.ru — отдельная форма капчи
+  'id="captcha"',             // sudrf.ru — капча встроена в форму поиска
+  'name="captcha"',           // sudrf.ru — альтернативный маркер
+];
+
 export function isCaptchaPage(html: string): boolean {
-  // Маркер капчи на msudrf.ru
-  return html.includes('kcaptchaForm');
+  return CAPTCHA_MARKERS.some(m => html.includes(m));
 }
 
 export class CaptchaRequiredError extends Error {

@@ -58,6 +58,7 @@
     <div class="tabs" id="modeTabs">
       <button class="active" data-mode="party" onclick="switchMode('party',this)">По участникам</button>
       <button data-mode="case" onclick="switchMode('case',this)">По номеру</button>
+      <button data-mode="uid" onclick="switchMode('uid',this)">По УИД</button>
     </div>
 
     <div id="caseFields" style="display:none">
@@ -71,6 +72,11 @@
       <input type="date" id="dateFrom">
       <label>по</label>
       <input type="date" id="dateTo">
+    </div>
+    <div id="uidFields" style="display:none">
+      <label>УИД (уникальный идентификатор дела)</label>
+      <input id="caseUid" placeholder="26RS0023-01-2020-000159-48">
+      <div style="font-size:11px;color:var(--text-dim);margin-top:-4px">Формат: XXWWXXXX-XX-XXXX-XXXXXX-XX</div>
     </div>
 
     <button class="btn btn-primary" onclick="doSearch()" id="searchBtn">🔍 Найти</button>
@@ -141,6 +147,7 @@ function switchMode(mode, btn) {
   btn.classList.add('active');
   document.getElementById('caseFields').style.display = mode === 'case' ? 'block' : 'none';
   document.getElementById('partyFields').style.display = mode === 'party' ? 'block' : 'none';
+  document.getElementById('uidFields').style.display = mode === 'uid' ? 'block' : 'none';
 }
 
 async function doSearch() {
@@ -160,6 +167,11 @@ async function doSearch() {
       if (!num) { showToast('Введите номер дела', 'error'); btn.disabled = false; btn.innerHTML = '🔍 Найти'; return; }
       body = { courtId: courtCode, caseNumber: num };
       url = '/api/search/by-number';
+    } else if (mode === 'uid') {
+      const uidVal = document.getElementById('caseUid').value.trim();
+      if (!uidVal) { showToast('Введите УИД', 'error'); btn.disabled = false; btn.innerHTML = '🔍 Найти'; return; }
+      body = { courtId: courtCode, caseUid: uidVal };
+      url = '/api/search/by-case-uid';
     } else {
       const def = document.getElementById('defendant').value.trim();
       if (!def) { showToast('Введите ФИО или название', 'error'); btn.disabled = false; btn.innerHTML = '🔍 Найти'; return; }

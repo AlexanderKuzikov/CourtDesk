@@ -1,11 +1,10 @@
-// Апелляционные суды (*oblsud--*.sudrf.ru) — без капчи
+// Апелляционные суды (*oblsud--*.sudrf.ru)
 // delo_id=5 — апелляционные дела
-// op=sf → op=r
 
 import { encodeParam } from '../../core/encoding.js';
 import type { SearchRequest, SearchResult } from '../../core/types.js';
 import type { SearchAdapter } from './types.js';
-import { fetchHtml, parseResults } from '../shared.js';
+import { smartFetch, parseResults } from '../shared.js';
 import { SEARCH_PARAMS } from '../constants.js';
 
 export class AppealSearchAdapter implements SearchAdapter {
@@ -17,7 +16,8 @@ export class AppealSearchAdapter implements SearchAdapter {
       'name_op=r', `delo_id=${p.delo_id}`, `case_type=${p.case_type}`, 'new=0',
       'G1_PARTS__NAMESS=' + encodeParam(req.defendant || req.plaintiff || ''),
       'g1_case__CASE_NUMBERSS=' + encodeURIComponent(req.caseNumber || ''),
-      'g1_case__JUDICIAL_UIDSS=', 'delo_table=g1_case',
+      'g1_case__JUDICIAL_UIDSS=' + encodeURIComponent(req.caseUid ?? ''),
+      'delo_table=g1_case',
       'g1_case__ENTRY_DATE1D=' + encodeURIComponent(req.filingDateFrom || ''),
       'g1_case__ENTRY_DATE2D=' + encodeURIComponent(req.filingDateTo || ''),
       'G1_CASE__JUDGE=', 'g1_case__RESULT_DATE1D=', 'g1_case__RESULT_DATE2D=',
@@ -40,9 +40,12 @@ export class AppealSearchAdapter implements SearchAdapter {
     return base + '?' + q.join('&');
   }
   async searchByCaseNumber(req: SearchRequest): Promise<SearchResult[]> {
-    return parseResults(await fetchHtml(this.buildSearchUrl(req)), req);
+    return parseResults(await smartFetch(this.buildSearchUrl(req)), req);
   }
   async searchByParty(req: SearchRequest): Promise<SearchResult[]> {
-    return parseResults(await fetchHtml(this.buildSearchUrl(req)), req);
+    return parseResults(await smartFetch(this.buildSearchUrl(req)), req);
+  }
+  async searchByCaseUid(req: SearchRequest): Promise<SearchResult[]> {
+    return parseResults(await smartFetch(this.buildSearchUrl(req)), req);
   }
 }

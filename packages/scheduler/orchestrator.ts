@@ -1,9 +1,10 @@
 // Оркестратор мониторинга
 import iconv from 'iconv-lite'; // статический импорт — BUG-011
-import { listCases, updateCase, addEvent, getCase, getEvents, addNotification } from '../store/index.js';
+import { listCases, updateCase, addEvent, getCase, getEvents, addNotification, saveCard } from '../store/index.js';
 import { getParseAdapter } from '../parse/index.js';
 import { getSearchAdapter } from '../search/index.js';
-import { assertCourtUrl, CourtUrlError } from '../core/errors.js';
+import { assertCourtUrl, CourtUrlError, isCaptchaPage } from '../core/errors.js';
+import { getRuCaptchaKey } from '../core/config.js';
 import type { WatchedCase, CaseHistoryEvent, Notification } from '../core/types.js';
 
 const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000;
@@ -157,6 +158,9 @@ async function processOne(c: WatchedCase): Promise<void> {
   const html = await fetchHtml(c.url);
   const card = await adapter.parse(html, c.url);
 
+  // Сохраняем полную карточку для UI
+  saveCard(c.uid, card);
+
   // NEW-002 FIXED: перечитываем актуальное состояние перед каждой записью
   const prev = getCase(c.uid);
   if (!prev) return;
@@ -240,11 +244,25 @@ async function fetchHtml(url: string): Promise<string> {
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const ct = res.headers.get('content-type') ?? '';
-  if (ct.includes('charset=utf-8') || ct.includes('charset=UTF-8')) {
-    return res.text();
+  const charset = ct.includes('charset=utf-8') || ct.includes('charset=UTF-8') ? 'utf8' : 'win1251';
+  let html: string;
+  if (charset === 'utf8') {
+    html = await res.text();
+  } else {
+    const buf = await res.arrayBuffer();
+    html = iconv.decode(Buffer.from(buf), 'win1251');
   }
-  const buf = await res.arrayBuffer();
-  return iconv.decode(Buffer.from(buf), 'win1251');
+
+  // Если капча — решаем через Puppeteer
+  if (isCaptchaPage(html)) {
+    const apiKey = getRuCaptchaKey();
+    if (apiKey) {
+      const { fetchWithCaptcha } = await import('../captcha/session.js');
+      html = await fetchWithCaptcha({ url, apiKey });
+    }
+  }
+
+  return html;
 }
 
 export async function runSingle(uid: string): Promise<boolean> {

@@ -10,6 +10,7 @@ const baseCase: WatchedCase = {
   courtCode: 'kirov--perm',
   courtType: 'district',
   number: '2-100/2026',
+  caseUid: null,
   status: 'monitoring',
   result: null,
   legalForceDate: null,
@@ -28,6 +29,8 @@ const storeMock = {
   deleteCase: vi.fn((uid: string): boolean => false),
   getStats: vi.fn(() => ({ monitoring: 0, waiting: 0, decision: 0, enforcedToday: 0 })),
   deleteNotificationsByCase: vi.fn((): void => undefined),
+  deleteCard: vi.fn((): void => undefined),
+  getCard: vi.fn((): null => null),
 };
 
 const eventsMock = {

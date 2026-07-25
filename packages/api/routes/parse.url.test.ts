@@ -11,7 +11,7 @@ const mockConfig = { getRuCaptchaKey: vi.fn(() => 'fake-key') };
 
 vi.mock('../../parse/index.js', () => ({ getParseAdapter: vi.fn(() => parseAdapter) }));
 vi.mock('../../core/index.js', () => ({ findCourtByCodeOrSubdomain: vi.fn(() => null) }));
-vi.mock('../../captcha/session.js', () => ({ fetchMagistrateHtml: vi.fn(async () => '<html><body>msudrf</body></html>') }));
+vi.mock('../../captcha/session.js', () => ({ fetchWithCaptcha: vi.fn(async () => '<html><body>msudrf</body></html>'), fetchMagistrateHtml: vi.fn(async () => '<html><body>msudrf</body></html>') }));
 vi.mock('../../core/config.js', () => mockConfig);
 
 async function buildApp(): Promise<Express> {

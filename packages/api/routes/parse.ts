@@ -2,10 +2,11 @@ import { Router, type Request, type Response } from 'express';
 import iconv from 'iconv-lite';
 import { getParseAdapter } from '../../parse/index.js';
 import { findCourtByCodeOrSubdomain } from '../../core/index.js';
-import { fetchMagistrateHtml } from '../../captcha/session.js';
+import { fetchWithCaptcha } from '../../captcha/session.js';
 import { getRuCaptchaKey } from '../../core/config.js';
-import { assertCourtUrl } from '../../core/errors.js';
+import { assertCourtUrl, isCaptchaPage } from '../../core/errors.js';
 import { runFull, runRetry, runNew } from '../../scheduler/index.js';
+import { saveCard } from '../../store/index.js';
 
 const router = Router();
 
@@ -45,20 +46,27 @@ router.post('/api/parse/url', async (req: Request, res: Response) => {
     const type = courtType ?? courtInfo?.courtType ?? 'district';
     const adapter = getParseAdapter(type);
     let html: string;
-    if (type === 'magistrate') {
+    try {
+      html = await fetchWithIconv(url);
+    } catch {
+      html = '';
+    }
+
+    // Если капча или fetch не удался — решаем через Puppeteer (для всех типов судов)
+    if (!html || isCaptchaPage(html)) {
       const apiKey = getRuCaptchaKey();
       if (!apiKey) {
         return res.status(503).json({
           success: false,
-          error: 'RUCAPTCHA_API_KEY не задан — мировые суды недоступны',
+          error: 'RUCAPTCHA_API_KEY не задан — требуется для прохождения капчи',
           code: 'CAPTCHA_KEY_MISSING',
         });
       }
-      html = await fetchMagistrateHtml({ url, apiKey });
-    } else {
-      html = await fetchWithIconv(url);
+      html = await fetchWithCaptcha({ url, apiKey });
     }
     const card = await adapter.parse(html, url);
+    // Сохраняем полную карточку если известен uid дела
+    if (card.uid) saveCard(card.uid, card);
     res.json({ success: true, data: card });
   } catch (err) {
     console.error('[parse/url]', err);

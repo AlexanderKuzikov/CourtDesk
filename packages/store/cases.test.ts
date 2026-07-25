@@ -25,6 +25,7 @@ function makeCase(overrides: Partial<WatchedCase> = {}): WatchedCase {
     courtCode: 'kirov--perm',
     courtType: 'district',
     number: '2-100/2026',
+    caseUid: null,
     status: 'monitoring',
     result: null,
     legalForceDate: null,

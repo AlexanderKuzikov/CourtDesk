@@ -61,6 +61,7 @@ export class MagistrateSearchAdapter implements SearchAdapter {
       'name_op=r', `delo_id=${p.delo_id}`, `case_type=${p.case_type}`, 'new=0',
       'G1_PARTS__NAMESS=' + encodeParam(req.defendant || req.plaintiff || ''),
       'g1_case__CASE_NUMBERSS=' + encodeURIComponent(req.caseNumber || ''),
+      'g1_case__JUDICIAL_UIDSS=' + encodeURIComponent(req.caseUid ?? ''),
       'Submit=%CD%E0%E9%F2%E8',
     ];
     return base + '?' + q.join('&');
@@ -113,5 +114,20 @@ export class MagistrateSearchAdapter implements SearchAdapter {
   async searchByParty(req: SearchRequest): Promise<SearchResult[]> {
     // Поиск по участникам использует тот же механизм (buildSearchUrl с G1_PARTS__NAMESS)
     return this.searchByCaseNumber(req);
+  }
+
+  async searchByCaseUid(req: SearchRequest): Promise<SearchResult[]> {
+    const apiKey = getRuCaptchaKey();
+    if (!apiKey) throw new Error('Для мировых судов нужен ключ RuCaptcha в .env');
+
+    const { fetchWithCaptcha } = await import('../../captcha/session.js');
+    const searchUrl = this.buildSearchUrl(req);
+    const html = await fetchWithCaptcha({ url: searchUrl, apiKey });
+
+    if (isCaptchaPage(html)) {
+      throw new Error('Captcha loop: не удалось получить результаты поиска');
+    }
+
+    return parseResults(html, req);
   }
 }

@@ -38,6 +38,7 @@ export interface SearchRequest {
   defendant?: string;
   filingDateFrom?: string;
   filingDateTo?: string;
+  caseUid?: string;
 }
 
 export interface SearchResult {
@@ -53,6 +54,7 @@ export interface SearchResult {
   courtId: string;
   courtCode?: string;
   courtType: CourtType;
+  caseUid?: string;       // УИД (XXWWXXXX-XX-XXXX-XXXXXX-XX)
   matchScore?: number;
 }
 
@@ -112,6 +114,7 @@ export interface WatchedCase {
   courtCode: string;
   courtType: CourtType;
   number: string;
+  caseUid: string | null;    // УИД (XXWWXXXX-XX-XXXX-XXXXXX-XX)
   status: CaseStatus;
   result: string | null;
   legalForceDate: string | null;
@@ -209,6 +212,12 @@ export interface SearchPartyRequest {
   plaintiff?: string;
   from?: string;
   to?: string;
+}
+
+export interface SearchUidRequest {
+  courtId: string;
+  courtType?: CourtType;
+  caseUid: string;
 }
 
 // NEW-006 FIXED: mode синхронизирован с реальным switch в parse.ts

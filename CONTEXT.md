@@ -7,7 +7,7 @@
 
 ## Статус
 
-**v0.4.0** — CR6 применён (20 замечаний: 4 CRITICAL+HIGH fixed, 8 UX fixed, 5 tech-debt). 57 тестов, tsc clean. Dashboard с управлением делами. Search с добавлением в мониторинг.
+**v0.4.0** — CR6 применён (20 замечаний). CR7 — OpenCode Deep Audit (10 замечаний: 8 MEDIUM, 2 LOW, все документированы). Всего 80/80 замечаний закрыто. 57 тестов, tsc clean. Dashboard с управлением делами. Search с добавлением в мониторинг.
 
 | Компонент | Статус | Последнее изменение |
 |-----------|--------|---------------------|
@@ -90,7 +90,7 @@
 
 ## Баги
 
-> **70/70 закрыто.** Открытых замечаний нет.
+> **80/80 закрыто.** Открытых замечаний нет.
 > Полная история — в BUG_REPORT.md
 
 ---
@@ -107,6 +107,16 @@
 | CR6-010 | LOW | TLS rejectUnauthorized: false | Trade-off для sudrf.ru wildcard |
 | CR6-012 | LOW | Puppeteer browser pool | Single-session на magistrate |
 | CR6-014 | LOW | Subdomain коллизии в справочнике | 3 дубликата, 1914 без subdomain |
+| CR7-001 | MEDIUM | `success: true` при HTTP 500 в `/api/status` | Клиент не видит ошибку, несоответствие паттерну ApiError |
+| CR7-002 | MEDIUM | `toIso()` добавляет `:00` к времени с секундами | Невалидный ISO 8601 (`YYYY-MM-DDT12:34:56:00`) |
+| CR7-003 | LOW | Dead code: `err.message === 'timeout'` | Никогда не совпадёт с сообщением Node.js |
+| CR7-004 | MEDIUM | `listNotifications()` возвращает живую ссылку на кэш | Внешняя мутация мимо `save()` |
+| CR7-005 | LOW | `findCourtsByRegion` без лимита | Может вернуть >1000 объектов |
+| CR7-006 | MEDIUM | Матчинг `r.uid === c.uid` никогда не сработает | SearchResult.uid vs WatchedCase.uid — разные системы ID |
+| CR7-007 | MEDIUM | `waitForNetworkIdle().catch(() => {})` глотает ошибки | HTML возвращается даже если капча не разгадана |
+| CR7-008 | MEDIUM | `process.loadEnvFile()` требует Node ≥21 | `package.json` декларирует `>=20.6.0` |
+| CR7-009 | LOW | `&rarr;` обрабатывается по-разному в адаптерах | cassation → `→`, district/appeal → `''` |
+| CR7-010 | LOW | `setInterval` не чистится при уходе со страницы | Накопление таймеров при навигации |
 
 ---
 
@@ -132,6 +142,7 @@
 | 2026-07-23 | CR6 — CODE_REVIEW6.md от Cursor Agent (20 замечаний) |
 | 2026-07-24 | CR6 применён: security, store integrity, route dups, archived race, error recovery. UX/UI: dashboard с управлением, search с мониторингом. Dead code cleanup. Documentation. |
 | 2026-07-25 | UX/UI v2: смена тем (dark/light), пагинация, сортировка, поиск по таблице, печать, mark-all-read, Esc-close. theme.css + app.js shared. CourtUrlError → автоархивация (разрыв error-цикла). |
+| 2026-07-25 | CR7 — OpenCode Deep Audit (10 замечаний: 8 MEDIUM, 2 LOW). Документировано в BUG_REPORT.md. |
 
 ---
 
