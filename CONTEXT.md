@@ -7,7 +7,7 @@
 
 ## Статус
 
-**v0.4.0** — CR6-CR8 применены (39 замечаний). Всего 89/89 замечаний закрыто. 57 тестов, tsc clean. Поиск работает на всех типах судов: district, appeal, cassation, magistrate (с captcha). Dashboard с управлением делами. Search с добавлением в мониторинг.
+**v0.4.0** — CR6-CR9 применены (49 замечаний). Всего 99/99 замечаний закрыто. 57 тестов, tsc clean. Поиск работает на всех типах судов. Мониторинг включает grace period 90 дней для enforced дел. Поиск в вышестоящей инстанции по УИД. Полная карточка дела в UI.
 
 | Компонент | Статус | Последнее изменение |
 |-----------|--------|---------------------|
@@ -29,6 +29,8 @@
 | Viewer (Dashboard) | ✅ Фильтры, пагинация, сортировка, поиск, печать, темы | CR6-007 + UX v2 |
 | Viewer (Search) | ✅ Рабочий, + мониторинг, + waiting, темы | CR6-007 + UX v2 |
 | CODE_REVIEW6 | ✅ Применён | 2026-07-24 |
+| Court Hierarchy | ✅ CR9 — findHigherCourt, CASSATION_MAP, MS→RS кэш | 2026-07-25 |
+| Grace Period | ✅ 90 дней для enforced дел | 2026-07-25 |
 
 ---
 
@@ -90,7 +92,7 @@
 
 ## Баги
 
-> **89/89 закрыто.** Открытых замечаний нет.
+> **99/99 закрыто.** Открытых замечаний нет.
 > Полная история — в BUG_REPORT.md
 
 ---
@@ -136,6 +138,7 @@
 | 2026-07-25 | CR7 — OpenCode Deep Audit (10 замечаний: 9 исправлено, 1 задокументировано). |
 | 2026-07-25 | CR7 fix: `success: true`→`false` в status.ts, `toIso()` битая ISO, dead code `err.message`, живая ссылка кэша, лимит `findCourtsByRegion`, матчинг uid, логи captcha, `&rarr;` унификация, `setInterval` cleanup. |
 | 2026-07-25 | CR8 — Captcha + Search overhaul. Исправлено 9 багов: `case_type`/`new` для appeal (искал в кассации); CP1251 декодинг (decodeURIComponent падал); waitForNetworkIdle → waitForNavigation; double-encoding CP1251; regex base64; поиск по УИД; полная карточка дела в UI; логгер; captcha для всех типов sudrf. |
+| 2026-07-25 | CR9 — Court Hierarchy & Grace Period. `findHigherCourt()`, `COURT_HIERARCHY` (MS→RS→OS→KJ), `CASSATION_MAP` (89 регионов → 9 кассац. судов), MS→RS кэш, `enforcedAt`, grace period 90 дней, поиск в вышестоящем по УИД. |
 
 ---
 

@@ -1,7 +1,7 @@
 # CODE REVIEW — CourtDesk
 
 > Consolidated: 2026-07-25
-> All 8 rounds of review with progress for each finding.
+> All 9 rounds of review with progress for each finding.
 
 ---
 
@@ -17,7 +17,8 @@
 | CR6 | 2026-07-23 | Cursor Agent | 20 | 13 fix + 5 UX + 5 tech-debt | 0 |
 | CR7 | 2026-07-25 | OpenCode Go | 10 | 9 fix + 1 doc | 0 |
 | CR8 | 2026-07-25 | OpenCode Go | 9 | 9 fix | 0 |
-| **Итого** | | | **89** | **81 fix + 6 doc** | **2** |
+| CR9 | 2026-07-25 | OpenCode Go | 10 | 10 fix | 0 |
+| **Итого** | | | **99** | **91 fix + 6 doc** | **2** |
 
 **Открытых критичных замечаний нет.** 6 tech-debt задокументировано.
 
@@ -64,6 +65,25 @@ CORS, shared fetchHtml, batch updateCase, graceful shutdown, persistent notifica
 ## CR5 — Perplexity-ревью (12 замечаний) — ✅ Закрыт
 
 Rate-delay, type safety, legalForceDate normalization, CORS, regex /iu, captcha retry, listCases multi-status, runFull guard, HOST env. 3 documented as trade-offs.
+
+---
+
+## CR9 — Court Hierarchy & Grace Period (10 замечаний) — 2026-07-25
+
+**Результат:** 10 замечаний исправлено. Добавлена иерархия судов (MS→RS→OS→KJ), карта 89 регионов к 9 кассационным судам, кэш MS→RS привязок, grace period 90 дней для enforced дел, поиск в вышестоящей инстанции по УИД.
+
+| ID | Severity | Описание | Статус |
+|----|----------|----------|--------|
+| CR9-001 | CRITICAL | `runFull` не обрабатывал `enforced` дела | ✅ FIXED |
+| CR9-002 | CRITICAL | `fetchHtml` в оркестраторе не детектил "Неверно указан проверочный код" | ✅ FIXED |
+| CR9-003 | HIGH | Отсутствовала функция `findHigherCourt` | ✅ FIXED |
+| CR9-004 | HIGH | Не описана иерархия судов (MS→RS→OS→KJ) | ✅ FIXED |
+| CR9-005 | HIGH | Не задана привязка регионов к кассационным судам | ✅ FIXED |
+| CR9-006 | MEDIUM | MS→RS привязки не кэшировались на диск | ✅ FIXED |
+| CR9-007 | MEDIUM | `enforcedAt` не было в `WatchedCase` | ✅ FIXED |
+| CR9-008 | MEDIUM | `updateCase` не проставлял `enforcedAt` авто-матом | ✅ FIXED |
+| CR9-009 | LOW | Grace period 90 дней для `enforced` дел | ✅ FIXED |
+| CR9-010 | LOW | Поиск в вышестоящей инстанции по УИД через `searchByCaseUid` | ✅ FIXED |
 
 ---
 

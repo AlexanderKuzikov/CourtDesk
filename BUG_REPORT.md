@@ -1,13 +1,30 @@
 # BUG REPORT — CourtDesk
 
 > Последнее обновление: 2026-07-25
-> Все 89 замечаний из 8 раундов ревью закрыты.
+> Все 99 замечаний из 9 раундов ревью закрыты.
 
 ---
 
 ## Открытых багов нет
 
-**Все 89 замечаний исправлены, закрыты или задокументированы как tech-debt.**
+**Все 99 замечаний исправлены, закрыты или задокументированы как tech-debt.**
+
+---
+
+## CR9 — Court Hierarchy & Grace Period (2026-07-25)
+
+| ID | Severity | Файл | Описание | Статус |
+|----|----------|------|----------|--------|
+| CR9-001 | CRITICAL | `scheduler/orchestrator.ts` | `runFull` не обрабатывал `enforced` дела — отсутствовал `'enforced'` в списке статусов | ✅ FIXED |
+| CR9-002 | CRITICAL | `scheduler/orchestrator.ts` | `processOne` не проверял `"Неверно указан проверочный код"` в оркестраторе — captcha для апелляции не решалась при мониторинге | ✅ FIXED |
+| CR9-003 | HIGH | `core/courts.ts` | `findHigherCourt` отсутствовал — не было функции определения вышестоящего суда по коду | ✅ FIXED |
+| CR9-004 | HIGH | `core/courts.ts` | `COURT_HIERARCHY` отсутствовал — иерархия MS→RS→OS→KJ не была описана | ✅ FIXED |
+| CR9-005 | HIGH | `core/courts.ts` | `CASSATION_MAP` отсутствовал — привязка 89 регионов к 9 кассационным судам не была задана | ✅ FIXED |
+| CR9-006 | MEDIUM | `core/courts.ts` | `saveMsToRsMapping` отсутствовал — кэш MS→RS привязок не сохранялся на диск | ✅ FIXED |
+| CR9-007 | MEDIUM | `core/types.ts` | `enforcedAt` отсутствовал в `WatchedCase` — не было поля для grace period | ✅ FIXED |
+| CR9-008 | MEDIUM | `store/cases.ts` | `updateCase` не проставлял `enforcedAt` авто-матом при переходе в `enforced` | ✅ FIXED |
+| CR9-009 | LOW | `scheduler/orchestrator.ts` | `ENFORCED_GRACE_MS` (90 дней) — после enforced дела мониторятся ещё 90 дней | ✅ FIXED |
+| CR9-010 | LOW | `scheduler/orchestrator.ts` | `searchByCaseUid` теперь вызывается для поиска в вышестоящей инстанции по УИД | ✅ FIXED |
 
 ---
 
@@ -82,5 +99,6 @@
 | CR5 (CR5-001..012) | 12 | ✅ 9 fixed, 3 documented |
 | CR7 (CR7-001..010) | 10 | ✅ 9 fixed, 1 documented |
 | CR8 (CR8-001..009) | 9 | ✅ 9 fixed |
+| CR9 (CR9-001..010) | 10 | ✅ 10 fixed |
 
-**Итого: 89 замечаний, 89 закрыто.**
+**Итого: 99 замечаний, 99 закрыто.**

@@ -4,7 +4,7 @@
 
 ---
 
-## [0.4.0] — 2026-07-24
+## [0.4.0] — 2026-07-25
 
 ### CR6 — Security & Data Integrity (20 замечаний)
 
@@ -47,7 +47,47 @@
 - `GET /api/cases/:uid/events` — новый эндпоинт для timeline событий в UI
 - `version` синхронизирована: package.json / health = 0.4.0
 
-### Tech-debt (перенесено)
+---
+
+## [0.4.0] — CR7-CR9
+
+### CR7 — Deep Audit Fixes (10 замечаний)
+
+- **CR7-001**: `success: true` → `false` при HTTP 500 в `/api/status` (`status.ts`)
+- **CR7-002**: `toIso()` — битая ISO дата (двойные `:00`) (`parse/adapters/shared.ts`)
+- **CR7-003**: Dead code `err.message === 'timeout'` удалён (`search/shared.ts`)
+- **CR7-004**: `listNotifications()` возвращает копию массива, а не живую ссылку (`store/notifications.ts`)
+- **CR7-005**: `findCourtsByRegion` — добавлен `.slice(0, 50)` (`core/courts.ts`)
+- **CR7-006**: Матчинг `r.uid === c.uid` убран, только `r.caseNumber === c.number` (`scheduler/orchestrator.ts`)
+- **CR7-007**: `waitForNetworkIdle().catch(() => {})` — логируем ошибки (`captcha/session.ts`)
+- **CR7-009**: `&rarr;` унифицирован на ` → ` во всех адаптерах (`parse/adapters/`)
+- **CR7-010**: `setInterval` чистится при `visibilitychange` (`viewer/index.html`)
+
+### CR8 — Captcha & Search Overhaul (9 замечаний)
+
+- **CR8-001/002**: Исправлены `case_type` (0→1) и `new` (0→5) для апелляции — поиск шёл в кассацию
+- **CR8-003**: CP1251 percent-декодер: ручной парсинг вместо `decodeURIComponent` (падал на невалидных UTF-8)
+- **CR8-004**: `waitForNetworkIdle` → `waitForNavigation` на sudrf (фоновые счетчики не давали network idle)
+- **CR8-005**: Double-encoding CP1251 через `page.goto()` → DOM-заполнение + `checkForm` submit
+- **CR8-006**: Regex base64 — пробел после `base64,` в data URI
+- **CR8-007**: `parseResults` — проверка `<div id="error">`
+- **CR8-008**: `isCaptchaPage` — добавлен маркер "Неверно указан проверочный код"
+- **CR8-009**: `SEARCH_PARAMS` — добавлен `new_` параметр (0/5 для картотеки)
+
+### CR9 — Court Hierarchy & Grace Period (10 замечаний)
+
+- **CR9-001**: `runFull` — добавлен `'enforced'` в список статусов
+- **CR9-002**: `fetchHtml` в оркестраторе — проверка "Неверно указан проверочный код"
+- **CR9-003**: `findHigherCourt()` — новая функция в `core/courts.ts`
+- **CR9-004**: `COURT_HIERARCHY` — иерархия MS→RS→OS→KJ
+- **CR9-005**: `CASSATION_MAP` — 89 регионов → 9 кассационных судов
+- **CR9-006**: `saveMsToRsMapping()` — кэш MS→RS привязок на диск
+- **CR9-007**: `enforcedAt` — новое поле в `WatchedCase`
+- **CR9-008**: `updateCase` — авто-простановка `enforcedAt`
+- **CR9-009**: `ENFORCED_GRACE_MS` — 90 дней grace period для enforced дел
+- **CR9-010**: `searchByCaseUid` — поиск в вышестоящей инстанции по УИД
+
+### Tech-debt (без изменений)
 
 | ID | Описание | Заметка |
 |----|----------|---------|
