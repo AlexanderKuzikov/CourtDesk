@@ -64,8 +64,8 @@ async function readCaptchaImageBase64(page: Page, mode: CaptchaMode): Promise<st
     const img = row.querySelector('img');
     if (!img) return null;
     const src = img.getAttribute('src') || '';
-    const m = src.match(/^data:\s*image\/[^;]+;base64,(.+)$/i);
-    return m ? m[1] : null;
+    const m = src.match(/^data:\s*image\/[^;]+;base64,\s*(.+)$/i);
+    return m ? m[1].trim() : null;
   });
   if (!base64) throw new Error('Captcha image base64 not found in sudrf page');
   return base64;
@@ -103,35 +103,28 @@ function extractSearchParams(searchUrl: string): Record<string, string> {
   return result;
 }
 
-/** Для sudrf: заполнить только непустые поля поиска + капчу и сабмитнуть */
-async function fillCaptchaSudrf(page: Page, searchUrl: string, captchaText: string): Promise<void> {
+/** Для sudrf: заполнить поле фамилии + капчу, сабмитнуть форму */
+async function fillAndSubmit(page: Page, searchUrl: string, captchaText: string): Promise<void> {
+  // Извлекаем фамилию/номер из параметров поиска
   const params = extractSearchParams(searchUrl);
+  const fillable = ['G2_PARTS__NAMESS', 'G1_PARTS__NAMESS', 'g2_case__CASE_NUMBERSS', 'g1_case__CASE_NUMBERSS',
+    'g2_case__ENTRY_DATE1D', 'g1_case__ENTRY_DATE1D', 'g2_case__ENTRY_DATE2D', 'g1_case__ENTRY_DATE2D'];
 
-  // Поля, которые точно есть на форме и могут быть заполнены
-  const fillable = [
-    'G2_PARTS__NAMESS', 'G1_PARTS__NAMESS',
-    'g2_case__CASE_NUMBERSS', 'g1_case__CASE_NUMBERSS',
-    'g2_case__JUDICIAL_UIDSS', 'g1_case__JUDICIAL_UIDSS',
-    'g2_case__ENTRY_DATE1D', 'g1_case__ENTRY_DATE1D',
-    'g2_case__ENTRY_DATE2D', 'g1_case__ENTRY_DATE2D',
-  ];
-
-  // Заполняем только те поля, у которых есть непустое значение
+  // Заполняем поля через locator.fill (эмуляция ввода)
   for (const name of fillable) {
     const val = params[name];
     if (val && val.trim()) {
-      try { await page.locator(`input[name="${name}"]`).fill(val); } catch { /* поле отсутствует */ }
+      await page.locator(`input[name="${name}"]`).fill(val).catch(() => {});
     }
   }
 
   // Заполняем капчу
   await page.locator('#captcha').fill(captchaText);
 
-  // Сабмитим — checkForm сработает
-  await Promise.all([
-    page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {}),
-    page.locator('input[name="Submit"]').click(),
-  ]);
+  // Кликаем по кнопке «Найти» — checkForm сработает и отправит форму
+  await page.locator('input[name="Submit"]').click();
+  // Ждём загрузку результатов
+  await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
 }
 
 export async function fetchWithCaptcha(options: FetchWithCaptchaOptions): Promise<string> {
@@ -146,50 +139,52 @@ export async function fetchWithCaptcha(options: FetchWithCaptchaOptions): Promis
       '--ignore-certificate-errors',
     ],
   });
-  const page = await browser.newPage();
 
   try {
-    await page.goto(options.url, { waitUntil: 'domcontentloaded', timeout: 60000 });
-    let html = await page.content();
-    let mode = detectMode(html);
+    const page = await browser.newPage();
 
-    // Если капчи нет, но есть ошибка капчи — загружаем форму поиска
-    if (!mode && html.includes(CAPTCHA_ERROR)) {
-      await page.goto(buildFormUrl(options.url), { waitUntil: 'domcontentloaded', timeout: 60000 });
+    const MAX_TRIES = 3;
+    for (let attempt = 1; attempt <= MAX_TRIES; attempt++) {
+      await page.goto(options.url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+      let html = await page.content();
+      let mode = detectMode(html);
+
+      if (!mode && html.includes(CAPTCHA_ERROR)) {
+        await page.goto(buildFormUrl(options.url), { waitUntil: 'domcontentloaded', timeout: 60000 });
+        html = await page.content();
+        mode = detectMode(html);
+      }
+
+      if (!mode) return html;
+      if (options.debugDir) ensureDir(options.debugDir);
+
+      const client = new RuCaptchaClient({ apiKey: options.apiKey, softId: options.softId });
+      const imageBase64 = await readCaptchaImageBase64(page, mode);
+      const captchaText = await client.solveImage(imageBase64);
+
+      if (mode === 'msudrf') {
+        await fillCaptchaMsudrf(page, captchaText);
+      } else {
+        await fillAndSubmit(page, options.url, captchaText);
+      }
+
       html = await page.content();
-      mode = detectMode(html);
+
+      if (options.debugDir) {
+        writeFileSync(resolve(options.debugDir, 'captcha-last.html'), html, 'utf-8');
+      }
+
+      if (isCaptchaPage(html)) continue;
+      if (html.includes(CAPTCHA_ERROR)) {
+        console.warn(`[captcha] attempt ${attempt}/${MAX_TRIES}: wrong captcha, retry`);
+        continue;
+      }
+
+      return html;
     }
 
-    if (!mode) return html;
-    if (options.debugDir) ensureDir(options.debugDir);
-
-    const client = new RuCaptchaClient({ apiKey: options.apiKey, softId: options.softId });
-    const imageBase64 = await readCaptchaImageBase64(page, mode);
-    const captchaText = await client.solveImage(imageBase64);
-
-    if (mode === 'msudrf') {
-      await fillCaptchaMsudrf(page, captchaText);
-    } else {
-      // sudrf: заполняем поля поиска + капчу, сабмитим
-      await fillCaptchaSudrf(page, options.url, captchaText);
-    }
-
-    html = await page.content();
-
-    if (options.debugDir) {
-      writeFileSync(resolve(options.debugDir, 'captcha-last.html'), html, 'utf-8');
-    }
-
-    if (isCaptchaPage(html)) {
-      throw new Error('Captcha loop: после отправки капча показана повторно');
-    }
-    if (html.includes(CAPTCHA_ERROR)) {
-      throw new Error('Captcha error: неверный проверочный код — решение RuCaptcha не принято сервером');
-    }
-
-    return html;
+    throw new Error('Captcha error: решение RuCaptcha не принято сервером после 3 попыток');
   } finally {
-    await page.close().catch(() => {});
     await browser.close().catch(() => {});
   }
 }

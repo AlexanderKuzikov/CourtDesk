@@ -27,7 +27,9 @@ export class RuCaptchaClient {
 
   async solveImage(imageBase64: string): Promise<string> {
     const taskId = await this.createTask(imageBase64);
-    return this.pollResult(taskId);
+    const result = await this.pollResult(taskId);
+    console.log('[rucaptcha] solved:', result);
+    return result;
   }
 
   private async createTask(imageBase64: string): Promise<number> {
@@ -39,6 +41,9 @@ export class RuCaptchaClient {
         task: {
           type: 'ImageToTextTask',
           body: imageBase64,
+          numeric: 1,
+          minLength: 4,
+          maxLength: 6,
           ...(this.softId ? { softId: this.softId } : {}),
         },
       }),

@@ -3,6 +3,7 @@
 // Эти идентификаторы могут меняться при обновлении БД sudrf.ru.
 
 // Префикс полей формы G1_/g1_ для первой инстанции, G2_/g2_ для апелляции/кассации
+// case_type: 0=апелляция, 1=кассация (для delo_id=5)
 export const SEARCH_PARAMS = {
   district:   { delo_id: '1540005', case_type: '0', prefix: 'g1' },
   appeal:     { delo_id: '5',       case_type: '0', prefix: 'g2' },
