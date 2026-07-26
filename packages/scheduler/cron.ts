@@ -2,8 +2,9 @@ import { getSettings } from '../store/settings.js';
 import { runFull, runRetry } from './index.js';
 
 let _fullTimer: ReturnType<typeof setInterval> | null = null;
-let _retryTimer: ReturnType<typeof setInterval> | null = null;
-let _lastRetryRun: string | null = null; // дата последнего retry YYYY-MM-DD HH:00
+// CR10-012: _retryTimer removed — was declared but never assigned
+let _lastRetryRun: string | null = null; // дата последнего retry ISO
+let _lastFullRunDate: string | null = null; // CR10-011: guard против double-fire
 
 function pad2(n: number): string {
   return n.toString().padStart(2, '0');
@@ -18,7 +19,9 @@ function shouldRunFull(now: Date, scheduleTime: string): boolean {
   if (!scheduleTime) return false;
   const [h, m] = scheduleTime.split(':').map(Number);
   if (isNaN(h) || isNaN(m)) return false;
-  // В окне 5 минут после назначенного времени
+  // CR10-011: guard — не запускать дважды в одно окно (при задержке event loop)
+  const today = todayDate();
+  if (_lastFullRunDate === `${today}T${pad2(h)}:${pad2(m)}`) return false;
   const diff = now.getHours() * 60 + now.getMinutes() - (h * 60 + m);
   return diff >= 0 && diff < 5;
 }
@@ -35,11 +38,12 @@ async function tick() {
   try {
     const settings = getSettings();
     if (!settings.scheduleEnabled) return;
-
     const now = new Date();
 
     // Полный прогон по расписанию (раз в сутки)
     if (shouldRunFull(now, settings.scheduleFull)) {
+      const [h, m] = settings.scheduleFull.split(':').map(Number);
+      _lastFullRunDate = `${todayDate()}T${pad2(h)}:${pad2(m)}`;
       console.log('[cron] запуск полного мониторинга по расписанию');
       runFull().catch(err => console.error('[cron] full error:', err));
     }
@@ -63,6 +67,8 @@ export function startCron(): void {
 }
 
 export function stopCron(): void {
-  if (_fullTimer) { clearInterval(_fullTimer); _fullTimer = null; }
-  if (_retryTimer) { clearInterval(_retryTimer); _retryTimer = null; }
+  if (_fullTimer) {
+    clearInterval(_fullTimer);
+    _fullTimer = null;
+  }
 }

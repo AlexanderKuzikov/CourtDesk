@@ -1,9 +1,13 @@
 import { Router, type Request, type Response } from 'express';
-import { getCase, listCases, addCase, updateCase, deleteCase, getStats, deleteNotificationsByCase, deleteCard, getCard, saveCard } from '../../store/index.js';
+import https from 'https';
+import iconvLite from 'iconv-lite';
+import { getCase, listCases, addCase, updateCase, deleteCase, getStats,
+  deleteNotificationsByCase, deleteCard, getCard, saveCard } from '../../store/index.js';
 import { addEvent as addHistoryEvent, getEvents as getCaseEvents, clearEvents } from '../../store/events.js';
 import { findCourtByCodeOrSubdomain, getRuCaptchaKey } from '../../core/index.js';
 import { getParseAdapter } from '../../parse/index.js';
 import { isCaptchaPage } from '../../core/errors.js';
+import { fetchWithCaptcha } from '../../captcha/session.js'; // CR10-009: static import
 import type { WatchedCase, CaseStatus } from '../../core/types.js';
 
 const router = Router();
@@ -14,20 +18,21 @@ function fail(res: Response, code: string, msg: string, status = 400) {
 }
 function errMsg(e: unknown) { return e instanceof Error ? e.message : 'Внутренняя ошибка'; }
 
-/** Express 5: req.query значения имеют тип string | string[] | ParsedQs | ParsedQs[] | undefined.
- *  Для скалярных параметров используем помощную функцию. */
+/**
+ * Express 5: req.query values are string | string[] | ParsedQs | ParsedQs[] | undefined.
+ * For scalar params use this helper.
+ */
 function strQuery(v: unknown): string | undefined {
   return typeof v === 'string' ? v : undefined;
 }
 
-// Поля, которые пользователь может менять через PATCH.
-// uid, createdAt, courtId, courtType — неизменяемы.
-const PATCH_ALLOWED = new Set<keyof WatchedCase>([
-  'status', 'result', 'legalForceDate', 'legalForceNotified', 'userId', 'url',
-  'errorCount', 'lastError',
+// Fields allowed via PATCH. uid, createdAt, courtId, courtType — immutable.
+const PATCH_ALLOWED = new Set([
+  'status', 'result', 'legalForceDate', 'legalForceNotified',
+  'userId', 'url', 'errorCount', 'lastError',
 ]);
 
-// Список дел
+// List cases
 router.get('/api/cases', (req: Request, res: Response) => {
   try {
     const cases = listCases({
@@ -36,7 +41,6 @@ router.get('/api/cases', (req: Request, res: Response) => {
       courtId: strQuery(req.query['courtId']),
       q: strQuery(req.query['q']),
     });
-    // Обогащаем названием суда
     const enriched = cases.map(c => {
       const courtInfo = findCourtByCodeOrSubdomain(c.courtCode || c.courtId);
       return { ...c, courtName: courtInfo?.name ?? c.courtId };
@@ -45,13 +49,12 @@ router.get('/api/cases', (req: Request, res: Response) => {
   } catch (e) { fail(res, 'STORE_ERROR', 'Ошибка получения списка: ' + errMsg(e), 500); }
 });
 
-// Статистика
+// Stats
 router.get('/api/cases/stats', (_req: Request, res: Response) => {
-  try { ok(res, getStats()); }
-  catch (e) { fail(res, 'STORE_ERROR', errMsg(e), 500); }
+  try { ok(res, getStats()); } catch (e) { fail(res, 'STORE_ERROR', errMsg(e), 500); }
 });
 
-// Одно дело
+// Single case
 router.get('/api/cases/:uid', (req: Request, res: Response) => {
   try {
     const c = getCase(String(req.params['uid']));
@@ -61,7 +64,7 @@ router.get('/api/cases/:uid', (req: Request, res: Response) => {
   } catch (e) { fail(res, 'STORE_ERROR', errMsg(e), 500); }
 });
 
-// Добавить дело в мониторинг
+// Add case to monitoring
 router.post('/api/cases', async (req: Request, res: Response) => {
   try {
     const { url, courtId, courtCode, courtType, caseNumber, caseUid, userId } = req.body ?? {};
@@ -71,12 +74,15 @@ router.post('/api/cases', async (req: Request, res: Response) => {
     const uid = crypto.randomUUID();
     const now = new Date().toISOString();
     const c: WatchedCase = {
-      uid, url,
-      courtId, courtCode: courtCode ?? courtId, courtType,
-      number: caseNumber, caseUid: caseUid ?? null, status: 'monitoring',
+      uid, url, courtId,
+      courtCode: courtCode ?? courtId,
+      courtType, number: caseNumber,
+      caseUid: caseUid ?? null,
+      status: 'monitoring',
       result: null, legalForceDate: null, legalForceNotified: false,
-      enforcedAt: null, userId: userId ?? null, lastChecked: null,
-      createdAt: now, updatedAt: now,
+      enforcedAt: null,
+      userId: userId ?? null,
+      lastChecked: null, createdAt: now, updatedAt: now,
       errorCount: 0, lastError: null,
     };
     addCase(c);
@@ -85,39 +91,35 @@ router.post('/api/cases', async (req: Request, res: Response) => {
       message: 'Добавлено в мониторинг', data: {}, createdAt: now,
     });
 
-    // Синхронный парсинг при ?parse=true
+    // Sync parse on ?parse=true — CR10-009: static imports, no dynamic import() in hot path
     if (req.query['parse'] === 'true' || req.body?.parse) {
       try {
         const adapter = getParseAdapter(courtType);
         let html = '';
         const apiKey = getRuCaptchaKey();
-        // Пробуем fetch, при капче — Puppeteer
+
         try {
-          const https = await import('https');
-          const iconv = await import('iconv-lite');
           html = await new Promise<string>((resolve, reject) => {
-            https.default.get(url, { rejectUnauthorized: false, timeout: 60000, headers: { 'User-Agent': 'CourtDesk/0.1' } }, (res: any) => {
+            https.get(url, { rejectUnauthorized: false, timeout: 60000,
+              headers: { 'User-Agent': 'CourtDesk/0.1' } }, (res: any) => {
               const chunks: Buffer[] = [];
               res.on('data', (c: Buffer) => chunks.push(c));
-              res.on('end', () => {
-                resolve(iconv.default.decode(Buffer.concat(chunks), 'win1251'));
-              });
+              res.on('end', () => { resolve(iconvLite.decode(Buffer.concat(chunks), 'win1251')); });
             }).on('error', reject);
           });
-        } catch { /* fall through */ }
+        } catch { /* fall through to captcha */ }
+
         if (!html || isCaptchaPage(html)) {
           if (!apiKey) throw new Error('Требуется RuCaptcha для капчи');
-          const { fetchWithCaptcha } = await import('../../captcha/session.js');
           html = await fetchWithCaptcha({ url, apiKey });
         }
+
         const card = await adapter.parse(html, url);
         saveCard(uid, card);
-        // Обновляем caseUid из карточки
         if (card.identifiers?.case_uid) updateCase(uid, { caseUid: card.identifiers.case_uid });
         return ok(res, { ...c, card });
       } catch (parseErr) {
         console.error('[cases/add] parse error:', parseErr);
-        // Не фатально — дело уже добавлено в мониторинг
         return ok(res, { ...c, parseError: errMsg(parseErr) });
       }
     }
@@ -126,7 +128,7 @@ router.post('/api/cases', async (req: Request, res: Response) => {
   } catch (e) { fail(res, 'STORE_ERROR', 'Ошибка добавления: ' + errMsg(e), 500); }
 });
 
-// Отслеживать появление
+// Wait for case appearance
 router.post('/api/cases/wait', (req: Request, res: Response) => {
   try {
     const { courtId, courtCode, courtType, party, filingDate, userId } = req.body ?? {};
@@ -134,11 +136,11 @@ router.post('/api/cases/wait', (req: Request, res: Response) => {
       return fail(res, 'BAD_REQUEST', 'courtId, courtType, party обязательны');
     }
     const c: WatchedCase = {
-      uid: crypto.randomUUID(), url: '',
-      courtId, courtCode: courtCode ?? courtId, courtType,
-      number: '', caseUid: null, status: 'waiting',
-      result: null, legalForceDate: null, legalForceNotified: false,
-      enforcedAt: null, userId: userId ?? null, lastChecked: null,
+      uid: crypto.randomUUID(), url: '', courtId,
+      courtCode: courtCode ?? courtId, courtType, number: '',
+      caseUid: null, status: 'waiting', result: null,
+      legalForceDate: null, legalForceNotified: false, enforcedAt: null,
+      userId: userId ?? null, lastChecked: null,
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
       errorCount: 0, lastError: null,
     };
@@ -152,7 +154,7 @@ router.post('/api/cases/wait', (req: Request, res: Response) => {
   } catch (e) { fail(res, 'STORE_ERROR', errMsg(e), 500); }
 });
 
-// Обновить дело — только разрешённые поля
+// Update case — allowed fields only
 router.patch('/api/cases/:uid', (req: Request, res: Response) => {
   try {
     const body = req.body ?? {};
@@ -165,7 +167,7 @@ router.patch('/api/cases/:uid', (req: Request, res: Response) => {
   } catch (e) { fail(res, 'STORE_ERROR', errMsg(e), 500); }
 });
 
-// Удалить дело
+// Delete case
 router.delete('/api/cases/:uid', (req: Request, res: Response) => {
   try {
     const uid = String(req.params['uid']);
@@ -178,7 +180,7 @@ router.delete('/api/cases/:uid', (req: Request, res: Response) => {
   } catch (e) { fail(res, 'STORE_ERROR', errMsg(e), 500); }
 });
 
-// Полная карточка дела (CaseCard)
+// Full case card (CaseCard)
 router.get('/api/cases/:uid/card', (req: Request, res: Response) => {
   try {
     const c = getCase(String(req.params['uid']));
@@ -189,7 +191,7 @@ router.get('/api/cases/:uid/card', (req: Request, res: Response) => {
   } catch (e) { fail(res, 'STORE_ERROR', errMsg(e), 500); }
 });
 
-// События дела (для дашборда)
+// Case events (timeline)
 router.get('/api/cases/:uid/events', (req: Request, res: Response) => {
   try {
     const c = getCase(String(req.params['uid']));

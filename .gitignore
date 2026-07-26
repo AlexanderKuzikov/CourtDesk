@@ -8,12 +8,10 @@ lerna-debug.log*
 *.pid
 *.seed
 *.pid.lock
-
 lib-cov
 coverage
 *.lcov
 .nyc_output
-
 node_modules/
 jspm_packages/
 web_modules/
@@ -46,7 +44,11 @@ Thumbs.db
 # Runtime data (хранилище мониторинга, логи)
 /data/
 
+# TUI logs (CR10-013)
+tui.log
+tui-err.log
+*.log
+
 # Captcha debug
 captcha-debug/
-
 /.goose
