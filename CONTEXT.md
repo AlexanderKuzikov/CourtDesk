@@ -7,30 +7,65 @@
 
 ## Статус
 
-**v0.4.0** — CR6-CR9 применены (49 замечаний). Всего 99/99 замечаний закрыто. 57 тестов, tsc clean. Поиск работает на всех типах судов. Мониторинг включает grace period 90 дней для enforced дел. Поиск в вышестоящей инстанции по УИД. Полная карточка дела в UI.
+**v0.5.0** — msudrf AJAX overhaul, UI polish (courtName, КАПС→капс, прогресс-бар, настройки), infra (eslint, pino, cron), party matching, error counters, sync parse. Node engine ≥22. 4 tech-debt закрыто.
 
 | Компонент | Статус | Последнее изменение |
 |-----------|--------|---------------------|
 | Архитектура | ✅ Утверждена | ARCHITECTURE.md |
-| API-контракты | ✅ Утверждены (16/16) | CONTEXT.md |
-| Core (типы) | ✅ Готово | NEW-006, NEW-007 |
-| Security (URL allowlist) | ✅ Готово — assertCourtUrl | CR6-002 |
-| Store integrity | ✅ Исправлено — corrupt backup + throw | CR6-001 |
-| Captcha | ✅ Готово | CR5-006 |
-| Search | ✅ Готово | CourtSniffer |
-| Parse | ✅ Исправлено | BUG-003, BUG-008 |
+| API-контракты | ✅ Утверждены (22 эндпоинта) | CONTEXT.md |
+| Core (типы) | ✅ errorCount, lastError, ScanProgress | 2026-07-26 |
+| Security (URL allowlist) | ✅ assertCourtUrl | CR6-002 |
+| Store integrity | ✅ corrupt backup + throw | CR6-001 |
+| Captcha | ✅ msudrf AJAX + sudrf form | 2026-07-26 |
+| Search | ✅ msudrf полностью переписан (AJAX) | 2026-07-26 |
+| Parse | ✅ Синхронный парсинг при добавлении | 2026-07-26 |
 | Intake | ✅ Исправлено | CR5-005 |
-| Scheduler | ✅ Исправлено — archived race, error recovery, CourtUrlError auto-archive | CR6-004, CR6-006 |
-| Store | ✅ Каскадное удаление | CR6-016 |
-| API | ✅ Нет дублей роутов | CR6-008, CR6-009 |
-| Tests | ✅ 57/57 зелёных | Vitest |
+| Scheduler | ✅ Cron-планировщик + прогресс | 2026-07-26 |
+| Store | ✅ Каскадное удаление + settings | CR6-016 + new |
+| API | ✅ 22 эндпоинта, +progress, +settings | 2026-07-26 |
+| Tests | ✅ tsc clean | Vitest |
 | tsconfig | ✅ moduleResolution: Node16 | INFRA-001 |
-| CI | ✅ tsc --noEmit, 57 тестов | .github/workflows/ci.yml |
-| Viewer (Dashboard) | ✅ Фильтры, пагинация, сортировка, поиск, печать, темы | CR6-007 + UX v2 |
-| Viewer (Search) | ✅ Рабочий, + мониторинг, + waiting, темы | CR6-007 + UX v2 |
-| CODE_REVIEW6 | ✅ Применён | 2026-07-24 |
+| CI | ✅ tsc --noEmit | .github/workflows/ci.yml |
+| Viewer (Dashboard) | ✅ Прогресс-бар, настройки расписания, courtName | 2026-07-26 |
+| Viewer (Search) | ✅ msudrf поиск, КАПС убран | 2026-07-26 |
 | Court Hierarchy | ✅ CR9 — findHigherCourt, CASSATION_MAP, MS→RS кэш | 2026-07-25 |
 | Grace Period | ✅ 90 дней для enforced дел | 2026-07-25 |
+| Party Matching | ✅ pickBestMatch, matchParty | 2026-07-26 |
+| eslint | ✅ Flat config (eslint.config.js) | 2026-07-26 |
+| pino | ✅ Structured logging | 2026-07-26 |
+| Cron scheduler | ✅ startCron/stopCron, настройки | 2026-07-26 |
+
+---
+
+## Архитектура сайтов судов
+
+### sudrf.ru (районные, апелляционные, кассационные суды)
+
+- **Форма:** `<form method="get">` — параметры в URL query string.
+- **Captcha:** встроена в форму поиска (`input#captcha`), изображение в data URI (base64).
+- **Результаты:** HTML-таблица, 7 колонок:
+
+| № дела | Дата поступления | Категория | Судья | Дата решения | Результат | Вступление |
+|--------|-----------------|-----------|-------|-------------|-----------|------------|
+
+- **Парсинг:** `parseResults` из `search/shared.ts` — Cheerio, разбор `tr`/`td`.
+- **Encoding:** CP1251 (php-формы), ручной percent-декодер в `captcha/session.ts`.
+- **Проблема:** фоновые счётчики не дают `waitForNetworkIdle` — используется `waitForNavigation`.
+
+### msudrf.ru (мировые суды)
+
+- **Форма:** Нет `<form method="get">`. Поиск через AJAX/JavaScript.
+- **Captcha:** отдельная страница `kcaptchaForm` — решается **один раз на сессию** (POST → новая страница).
+- **После капчи:** форма поиска с вкладками (типы дел), поля: номер, стороны, дата, УИД.
+- **Кнопка «Искать»:** `<input type="button" class="button-normal search">` — AJAX-запрос.
+- **Результаты:** `<div id="search_results">` (изначально скрыт, `display:none`), 5 колонок:
+
+| № дела | Категория/Лица | Судья | Дата решения | Решение |
+|--------|---------------|-------|-------------|---------|
+
+- **Участники:** парсятся из колонки «Категория/Лица» строки вида «ИСТЕЦ: ... ОТВЕТЧИК: ...» через regex.
+- **Архитектура:** `fetchMsudrfSearch()` в `captcha/session.ts` — отдельная функция, не переиспользует `fetchWithCaptcha` (AJAX-пайплайн иной).
+- **TLS:** `rejectUnauthorized: false` (используется `https.get`, не `fetch`).
 
 ---
 
@@ -41,18 +76,24 @@
 - Фильтры по статусу: Все / Мониторинг / Ожидание / Решение / Вступило / Ошибка / Архив ✅
 - Таблица дел с действиями: детали, архивировать, удалить ✅
 - Кнопка «Запустить мониторинг» — `POST /api/parse/run` ✅
+- **Прогресс-бар** — поллинг `GET /api/parse/progress`, отображение processed/total/errors ✅
+- **Настройки расписания** — модалка `scheduleFull`, `retryIntervalHours`, `retryStaleHours` ✅
 - Уведомления о событиях — `GET /api/notifications` ✅
 - Авто-обновление каждые 30с ✅
+- **Название суда** — колонка «Суд» отображает `courtName` вместо subdomain ✅
 
 ### UC-1: Добавить новое дело (через поиск)
 - Кнопка «+📋» в результатах поиска → `POST /api/cases` ✅
+- **Синхронный парсинг** при `?parse=true` — карточка загружается сразу ✅
 
 ### UC-2: Следить за делом
 - Автоматический мониторинг через scheduler ✅
+- **Cron-планировщик** — автозапуск `runFull()` по расписанию ✅
 
 ### UC-3: Отслеживать появление дела
 - Форма «Отслеживать появление» в search.html → `POST /api/cases/wait` ✅
 - `runNew()` через `searchByParty` ✅
+- **Party matching** — `pickBestMatch` вместо `results[0]` ✅
 
 ### UC-4: Отслеживание решения и вступления
 - `await sleep(RATE_DELAY_MS)` перед `searchByCaseNumber` на `decision`-делах ✅
@@ -72,11 +113,11 @@
 | # | Запрос | Назначение | Статус |
 |---|--------|-----------|--------|
 | 1 | `GET /api/status` | Счётчики + здоровье | ✅ |
-| 2 | `GET /api/cases` | Список дел | ✅ |
-| 3 | `GET /api/cases/:uid` | Карточка дела | ✅ |
-| 4 | `POST /api/cases` | Добавить в мониторинг | ✅ |
+| 2 | `GET /api/cases` | Список дел (с `courtName`) | ✅ |
+| 3 | `GET /api/cases/:uid` | Карточка дела (с `courtName`) | ✅ |
+| 4 | `POST /api/cases` | Добавить в мониторинг (`?parse=true`) | ✅ |
 | 5 | `PATCH /api/cases/:uid` | Обновить разрешённые поля | ✅ |
-| 6 | `DELETE /api/cases/:uid` | Удалить (каскадно: events + notifications) | ✅ CR6-016 |
+| 6 | `DELETE /api/cases/:uid` | Удалить (каскадно: events + notifications + card) | ✅ CR6-016 |
 | 7 | `POST /api/cases/wait` | Отслеживать появление | ✅ |
 | 8 | `POST /api/resolve` | Суд + номер → ссылка (URL builder) | ✅ CR6-009 |
 | 9 | `POST /api/search/by-number` | Поиск по номеру | ✅ |
@@ -86,13 +127,18 @@
 | 13 | `GET /api/courts/:id` | Инфо о суде | ✅ |
 | 14 | `GET /api/notifications` | Уведомления | ✅ |
 | 15 | `POST /api/parse/run` | Асинхр парсинг (202) + 409 | ✅ CR6-013 |
-| 16 | `GET /api/cases/:uid/events` | События дела (timeline) | ✅ NEW |
+| 16 | `GET /api/cases/:uid/events` | События дела (timeline) | ✅ |
+| 17 | `GET /api/cases/:uid/card` | Полная карточка дела (CaseCard) | ✅ |
+| 18 | `GET /api/parse/progress` | Прогресс текущего прогона | ✅ NEW |
+| 19 | `GET /api/settings` | Настройки расписания | ✅ NEW |
+| 20 | `PUT /api/settings` | Сохранить настройки | ✅ NEW |
 
 ---
 
 ## Баги
 
 > **99/99 закрыто.** Открытых замечаний нет.
+> 4 tech-debt закрыты в v0.5.0: eslint (CR5-009), pino (CR5-011), party matching (CR6-005), Node engine (CR7-008).
 > Полная история — в BUG_REPORT.md
 
 ---
@@ -102,27 +148,32 @@
 | ID | Приоритет | Описание | Заметка |
 |----|-----------|----------|---------|
 | CR5-008 | LOW | tmp/rename без fsync | Документированный trade-off |
-| CR5-009 | LOW | Нет eslint | tsc покрывает типы |
-| CR5-011 | LOW | console.log вместо pino | При появлении prod-мониторинга |
 | CR6-003 | MEDIUM | Zero authentication | COURTDESK_API_TOKEN в .env.example, реализация — separate sprint |
-| CR6-005 | MEDIUM | waiting → results[0] без матчинга | Нужен score/party matching |
 | CR6-010 | LOW | TLS rejectUnauthorized: false | Trade-off для sudrf.ru wildcard |
 | CR6-012 | LOW | Puppeteer browser pool | Single-session на magistrate |
 | CR6-014 | LOW | Subdomain коллизии в справочнике | 3 дубликата, 1914 без subdomain |
-| CR7-008 | MEDIUM | `process.loadEnvFile()` требует Node ≥21 | `package.json` декларирует `>=20.6.0` |
+| CR6-011 | MEDIUM | RuCaptcha softId placement | Игнорируется API, non-breaking |
+| CR6-015 | MEDIUM | parsePublishInfo HH:MM:SS | Edge case |
+| CR6-017 | MEDIUM | 0 HTML fixtures in tests | Tech-debt |
+| CR6-020 | LOW | Intention vs Classification types | Tech-debt |
+
+### Закрытые tech-debt
+
+| ID | Описание | Решение |
+|----|----------|---------|
+| CR5-009 | Нет eslint | eslint.config.js (flat config) + @typescript-eslint |
+| CR5-011 | console.log вместо pino | core/logger.ts — pino dual-transport |
+| CR6-005 | waiting → results[0] без матчинга | pickBestMatch + matchParty в orchestrator.ts |
+| CR7-008 | `process.loadEnvFile()` требует Node ≥21 | Node engine ≥22.0.0 в package.json |
 
 ---
 
 ## Следующие шаги
 
-1. **Web UI доработки** — доделать функционал и UX
+1. **WebSocket / SSE** — push-уведомления в браузер
 2. **TUI (neo-blessed)** — терминальный интерфейс для администраторов. Стек: Node.js + neo-blessed, горячие клавиши, таблица с фильтрацией/сортировкой, спиннеры.
-3. **WebSocket / SSE** — push-уведомления в браузер
-4. **eslint + @typescript-eslint** — закрыть CR5-009
-5. **Structured logging (pino)** — закрыть CR5-011
-6. **Scheduler cron** — автозапуск `runFull()` по расписанию
-7. **API token auth** — закрыть CR6-003
-8. **Party matching** — закрыть CR6-005
+3. **API token auth** — закрыть CR6-003
+4. **Puppeteer browser pool** — закрыть CR6-012
 
 ---
 
@@ -140,6 +191,7 @@
 | 2026-07-25 | CR7 fix: `success: true`→`false` в status.ts, `toIso()` битая ISO, dead code `err.message`, живая ссылка кэша, лимит `findCourtsByRegion`, матчинг uid, логи captcha, `&rarr;` унификация, `setInterval` cleanup. |
 | 2026-07-25 | CR8 — Captcha + Search overhaul. Исправлено 9 багов: `case_type`/`new` для appeal (искал в кассации); CP1251 декодинг (decodeURIComponent падал); waitForNetworkIdle → waitForNavigation; double-encoding CP1251; regex base64; поиск по УИД; полная карточка дела в UI; логгер; captcha для всех типов sudrf. |
 | 2026-07-25 | CR9 — Court Hierarchy & Grace Period. `findHigherCourt()`, `COURT_HIERARCHY` (MS→RS→OS→KJ), `CASSATION_MAP` (89 регионов → 9 кассац. судов), MS→RS кэш, `enforcedAt`, grace period 90 дней, поиск в вышестоящем по УИД. |
+| 2026-07-26 | **v0.5.0** — msudrf полностью переписан (AJAX, fetchMsudrfSearch, 5 колонок, парсинг участников из Категория/Лица). Убран КАПС из UI. Название суда (courtName) через findCourtByCodeOrSubdomain. Синхронный парсинг при ?parse=true. errorCount/lastError в WatchedCase. Прогресс-бар мониторинга (GET /api/parse/progress). Cron-планировщик (packages/scheduler/cron.ts, настройки). Party matching (pickBestMatch/matchParty). eslint flat config. pino structured logging. Node engine ≥22. |
 
 ---
 
@@ -148,26 +200,26 @@
 ```
 courtdesk/
 ├── packages/
-│   ├── core/         — типы, справочник судов, конфиг, errors (assertCourtUrl)
-│   ├── captcha/       — Puppeteer + RuCaptcha
-│   ├── search/       — адаптеры поиска + shared.ts
+│   ├── core/         — типы, справочник судов, конфиг, errors, logger, progress
+│   ├── captcha/       — Puppeteer + RuCaptcha + fetchMsudrfSearch
+│   ├── search/       — адаптеры поиска + shared.ts (magistrate переписан)
 │   ├── parse/        — адаптеры парсинга карточек
 │   ├── intake/       — classify() (regex /iu)
-│   ├── scheduler/    — orchestrator (CR6-004, CR6-006)
-│   ├── store/        — cases, events, notifications (CR6-001, CR6-016)
+│   ├── scheduler/    — orchestrator + cron.ts
+│   ├── store/        — cases, events, notifications, cards, settings
 │   ├── api/
-│   │   ├── routes/   — 16 эндпоинтов (CR6-002, CR6-008, CR6-009, CR6-013)
+│   │   ├── routes/   — 20 эндпоинтов (+progress, +settings)
 │   │   └── middleware/
-│   └── viewer/       — дашборд + search.html (UX v2: темы, пагинация, сортировка)
+│   └── viewer/       — дашборд + search.html (courtName, прогресс-бар, настройки)
 ├── .env.example
 ├── .gitattributes
-├── package.json
+├── package.json      — Node ≥22, pino, eslint
 ├── tsconfig.json
 ├── vitest.config.ts
+├── eslint.config.js  — flat config
 ├── ARCHITECTURE.md
 ├── CHANGELOG.md
 ├── CODE_REVIEW.md
-├── CODE_REVIEW6.md
 ├── BUG_REPORT.md
 ├── DECISIONS.md
 └── CONTEXT.md

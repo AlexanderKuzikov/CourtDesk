@@ -4,6 +4,74 @@
 
 ---
 
+## [0.5.0] — 2026-07-26
+
+### msudrf — полностью переписан
+
+- **Новая архитектура AJAX-поиска:** msudrf не поддерживает GET-формы (как sudrf). Поиск через JS/AJAX. Капча (`kcaptchaForm`) решается один раз на сессию. Результаты в `<div id="search_results">`.
+- **`fetchMsudrfSearch()`** (`captcha/session.ts`) — отдельная функция для AJAX-пайплайна: открыть страницу → решить капчу (с retry) → заполнить поля → клик «Искать» → дождаться `#search_results`. Не переиспользует `fetchWithCaptcha`.
+- **`search/adapters/magistrate.ts`** — переписан полностью. Использует `fetchMsudrfSearch()`, парсит 5-колоночную таблицу msudrf (№ дела | Категория/Лица | Судья | Дата решения | Решение). Участники извлекаются из колонки «Категория/Лица» через regex (ИСТЕЦ/ОТВЕТЧИК).
+- **Таблица msudrf (5 колонок):** № дела | Категория/Лица | Судья | Дата решения | Решение. Отличается от sudrf (7 колонок: № дела | Дата поступления | Категория | Судья | Дата решения | Результат | Вступление).
+- **TLS:** `rejectUnauthorized: false` для `https.get` в orchestrator и синхронном парсинге (msudrf требует игнорирования TLS-ошибок).
+
+### UI
+
+- **Убран КАПС:** `theme.css` — все КАПС-селекторы и переменные заменены на нормальный регистр. `index.html`, `search.html` — текст КАПС заменён.
+- **Название суда вместо домена:** `GET /api/cases` и `GET /api/cases/:uid` обогащают ответ полем `courtName` через `findCourtByCodeOrSubdomain()`. Дашборд: колонка «Суд» отображает название, а не subdomain. Поиск по таблице включает `courtName`.
+- **Прогресс-бар мониторинга:** новый эндпоинт `GET /api/parse/progress`, модуль `core/progress.ts`. Дашборд: поллинг прогресса каждые 5с, отображение `processed/total (errors)`, скрытие при завершении.
+- **Настройки расписания:** модалка в `index.html` с полями: время полного прогона, интервал retry, stale-порог, вкл/выкл. Эндпоинты `GET/PUT /api/settings`.
+
+### Синхронный парсинг при добавлении
+
+- `POST /api/cases?parse=true` (или `body.parse`) — парсинг карточки сразу после добавления дела.
+- Результат возвращается в теле ответа (`card`).
+- Использует `https.get` с `rejectUnauthorized: false`, при капче — Puppeteer.
+- Если парсинг упал — дело всё равно добавлено, ошибка в `parseError`.
+
+### Счётчик ошибок
+
+- `WatchedCase` получил `errorCount: number` и `lastError: string | null`.
+- `PATCH_ALLOWED` включает эти поля.
+- `orchestrator.ts`: при ошибке пишет `errorCount+1` и `lastError`, при успехе сбрасывает.
+
+### Party matching (CR6-005 — закрыт)
+
+- `matchParty(party, resultParties): number` — скоринг совпадения имён (100 = точное, 90 = startsWith, фамилия+слова).
+- `pickBestMatch(results, party): SearchResult | null` — выбор лучшего по score.
+- `processWaiting` использует `pickBestMatch` вместо `results[0]`.
+
+### Infra
+
+- **eslint + @typescript-eslint (CR5-009 — закрыт):** `eslint.config.js` (flat config, ESM). Правила: `no-console: warn`, `@typescript-eslint/no-unused-vars`, `@typescript-eslint/no-explicit-any`, `prefer-const`, `no-var`.
+- **pino (CR5-011 — закрыт):** `core/logger.ts` — pino с dual-transport (файл `logs/courtdesk.log` + stdout), ISO-таймстампы. `log()` и `logRequest()` функции. Express-логи через `logRequest`.
+- **Node engine:** `>=22.0.0` (было `>=20.6.0`). CR7-008 закрыт.
+
+### Cron-планировщик
+
+- `packages/scheduler/cron.ts` — `startCron()` проверяет каждые 60с, запускает `runFull()` по расписанию и `runRetry()` по интервалу.
+- `stopCron()` — остановка.
+- `server.ts` — автостарт `startCron()` при запуске.
+- Настройки: `scheduleFull`, `retryIntervalHours`, `retryStaleHours`, `scheduleEnabled` — через UI и `PUT /api/settings`.
+
+### API
+
+- **22 эндпоинта** (было 16 + 1 `GET /cases/:uid/card` в v0.4.0):
+  - `GET /api/parse/progress` — прогресс мониторинга
+  - `GET /api/settings` — настройки расписания
+  - `PUT /api/settings` — сохранить настройки
+  - `POST /api/cases?parse=true` — синхронный парсинг
+
+### Tech-debt закрыто
+
+| ID | Описание | Решение |
+|----|----------|---------|
+| CR5-009 | Нет eslint | eslint.config.js (flat config) |
+| CR5-011 | console.log вместо pino | pino structured logging |
+| CR6-005 | waiting → results[0] без матчинга | pickBestMatch + matchParty |
+| CR7-008 | `process.loadEnvFile()` требует Node ≥21 | engine >=22.0.0 |
+
+---
+
 ## [0.4.0] — 2026-07-25
 
 ### CR6 — Security & Data Integrity (20 замечаний)

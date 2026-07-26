@@ -4,7 +4,138 @@
 
 ---
 
-## 2026-07-24: URL allowlist — assertCourtUrl (CR6-002)
+## 2026-07-26: msudrf AJAX — отдельный пайплайн (не sudrf)
+
+**Решение:** msudrf использует `fetchMsudrfSearch()` в `captcha/session.ts` — отдельную функцию, не переиспользует `fetchWithCaptcha`.
+
+**Архитектура msudrf:**
+- AJAX-поиск, нет `<form method="get">` (в отличие от sudrf, где GET-форма с параметрами в URL).
+- Капча (`kcaptchaForm`) на отдельной странице, решается **один раз на сессию** (POST-сабмит → редирект на форму поиска).
+- Кнопка «Искать» — `<input type="button" class="button-normal search">`, AJAX-запрос.
+- Результаты в `<div id="search_results">` (изначально `display: none`).
+
+**Архитектура sudrf:**
+- `<form method="get">`, параметры в query string.
+- Captcha встроена в форму (`input#captcha`), изображение в data URI.
+- Сабмит формы → полная перезагрузка страницы.
+
+**Таблицы результатов:**
+- **msudrf (5 колонок):** № дела | Категория/Лица | Судья | Дата решения | Решение. Участники парсятся из «Категория/Лица».
+- **sudrf (7 колонок):** № дела | Дата поступления | Категория | Судья | Дата решения | Результат | Вступление.
+
+**Обоснование:** `fetchWithCaptcha` завязана на GET-форму sudrf (заполнение `#captcha`, `checkForm` submit, `waitForNavigation`). msudrf требует: решить капчу на отдельной странице, дождаться формы поиска, заполнить поля, кликнуть JS-кнопку, дождаться AJAX-ответа. Общий код — только чтение капчи (через `page.$eval`/`evaluate`), остальное разное. Единая функция была бы перегружена ветвлениями.
+
+---
+
+## 2026-07-26: fetchMsudrfSearch — отдельная функция (не переиспользовать fetchWithCaptcha)
+
+**Решение:** `fetchMsudrfSearch()` — самостоятельная функция, не наследующая `fetchWithCaptcha`.
+
+**Обоснование:** `fetchWithCaptcha` спроектирована под sudrf: заполнить `#captcha` + `fillAndSubmit`. msudrf требует другой последовательности: открыть `kcaptchaForm` → решить капчу (возможно, с retry) → дождаться перехода на форму поиска → заполнить поля → кликнуть JS-кнопку → дождаться `#search_results`. Попытка параметризовать `fetchWithCaptcha` привела бы к 5+ новым параметрам и условным операторам, ухудшив читаемость обоих пайплайнов. Дублирование кода запуска Puppeteer оправдано ясностью каждого пути.
+
+---
+
+## 2026-07-26: https.get с rejectUnauthorized вместо fetch для msudrf TLS
+
+**Решение:** Для HTTP-запросов к судовым сайтам используется `https.get` с `{ rejectUnauthorized: false, timeout: 120000 }` вместо `fetch()` или `node:https` default.
+
+**Применение:** `orchestrator.ts fetchHtml()` (строка 341), синхронный парсинг в `cases.ts` (строка 99).
+
+**Обоснование:** Судовые серверы sudrf.ru/msudrf.ru используют wildcard-сертификаты, не проходящие валидацию Node.js (самоподписанные, просроченные, неверная цепочка). `fetch()` в Node.js не поддерживает `rejectUnauthorized` (нет опции для игнорирования TLS). `https.get` — единственный встроенный способ отключить проверку сертификата. Альтернатива (`NODE_TLS_REJECT_UNAUTHORIZED=0`) глобальна и опаснее.
+
+Trade-off: уязвимость к MITM на уровне транспорта. Mitigation: `assertCourtUrl` ограничивает запросы только доменами `.sudrf.ru`/`.msudrf.ru`.
+
+---
+
+## 2026-07-26: pino как единственный логгер
+
+**Решение:** `core/logger.ts` — pino с dual-transport (файл `logs/courtdesk.log` + stdout). Уровень лога из `LOG_LEVEL` env. Экспорт: `log(level, msg, data?)`, `logRequest(method, url, status, durationMs)`.
+
+**Применение:** `api/server.ts` — HTTP-логи через `logRequest`. `console.log` остались в `orchestrator.ts`, `parse.ts` — tech-debt.
+
+**Обоснование:** pino — самый быстрый structured logger для Node.js (benchmark: ~2x быстрее winston, ~5x быстрее bunyan). JSON-формат: машиночитаем, совместим с log aggregators (ELK, Loki). Dual-transport: разработчик видит в stdout, продакшен читает файл. Альтернатива (console.log) — неструктурирован, нет уровней, нет ротации. Альтернатива (winston) — тяжелее, больше зависимостей.
+
+Trade-off: pino — ещё одна dependency. Но она компактна (tree-shakeable) и оправдана для продакшен-мониторинга.
+
+---
+
+## 2026-07-26: eslint flat config
+
+**Решение:** `eslint.config.js` — flat config (ESM), `@typescript-eslint/parser`, `@typescript-eslint/eslint-plugin`.
+
+**Правила:**
+- `no-console: warn` — миграция на pino
+- `@typescript-eslint/no-unused-vars: warn` — с `argsIgnorePattern: '^_'`
+- `@typescript-eslint/no-explicit-any: warn` — контроль `any`
+- `prefer-const: error`, `no-var: error`
+
+**Обоснование:** eslint v9+ использует flat config как единственный формат (`.eslintrc` deprecated). `@typescript-eslint` — стандарт для TS-проектов. Flat config — ESM-native, без дополнительных конфиг-файлов. Правила выбраны минимально инвазивными для существующей кодовой базы: `warn` позволяет коммитить, но подсвечивает проблему.
+
+---
+
+## 2026-07-26: Синхронный парсинг при добавлении (?parse=true)
+
+**Решение:** `POST /api/cases?parse=true` (или `body.parse`) запускает парсинг карточки сразу после добавления дела. Результат (`card`) возвращается в теле ответа. При ошибке парсинга дело всё равно добавляется, ошибка в `parseError`.
+
+**Обоснование:** Основной user flow: поиск → клик «+📋» → увидеть карточку. Без синхронного парсинга пользователь после добавления видел пустую карточку, пока scheduler не запустит `processOne`. `?parse=true` замыкает цикл: дело добавлено + карточка сразу видна. Trade-off: время ответа API увеличивается на ~3-10с (загрузка + парсинг). Принято: это POST, не блокирующий UI — клиент может показать спиннер.
+
+---
+
+## 2026-07-26: Party matching (CR6-005)
+
+**Решение:** `matchParty(party, resultParties): number` — скоринг по правилам: 100 (точное совпадение), 90 (startsWith), фамилия + совпавшие слова (30 + N*20). `pickBestMatch(results, party)` — выбор лучшего. `processWaiting` использует `pickBestMatch(results, party) ?? results[0]`.
+
+**Обоснование:** До этого `processWaiting` брал `results[0]` — первый результат поиска, который мог не относиться к искомой стороне. Скоринг по ФИО/названию: для юрлиц — точное совпадение названия, для физлиц — совпадение фамилии + минимум одно слово имени. Отсечение по порогу 30 (только фамилия без совпадений по имени — низкий score, не matching).
+
+Trade-off: матчинг по имени — неточная метрика. УИД был бы точнее, но его нет на этапе waiting. Можно улучшать: стемминг русских фамилий, Levenshtein distance.
+
+---
+
+## 2026-07-26: Cron-планировщик
+
+**Решение:** `packages/scheduler/cron.ts` — `setInterval` каждые 60с проверяет настройки и запускает `runFull()`/`runRetry()`. Настройки в `store/settings.ts`, API `GET/PUT /api/settings`, UI-модалка.
+
+**Обоснование:** Без планировщика мониторинг запускался только вручную через `POST /api/parse/run`. Cron замыкает цикл «добавил дело → забыл». `setInterval` (не `node-cron`): zero-dependency, простота. Проверка каждые 60с достаточна для планирования с точностью до 5 минут.
+
+Trade-off: никакой персистентности — при перезапуске сервера таймеры сбрасываются. Для HA нужен внешний планировщик (systemd timer, cron job).
+
+---
+
+## 2026-07-26: Прогресс-бар мониторинга
+
+**Решение:** `core/progress.ts` — in-memory `ScanProgress`. `orchestrator.ts` вызывает `setProgress()` в начале и после каждого кейса. `GET /api/parse/progress` отдаёт состояние. UI поллит каждые 5с.
+
+**Обоснование:** Без прогресс-бара пользователь не знает, сколько дел обработано и сколько осталось. In-memory: прогресс не нужно сохранять между рестартами (прогон всё равно прервётся). Race condition: `setProgress` — синхронная операция, присваивание атомарно в single-thread Node.js.
+
+---
+
+## 2026-07-26: Счётчик ошибок (errorCount, lastError)
+
+**Решение:** `WatchedCase.errorCount: number` и `WatchedCase.lastError: string | null`. При ошибке в `processOne`: `errorCount+1`, `lastError`. При успехе: сброс.
+
+**Обоснование:** До этого была только `lastChecked` — нельзя было отличить «дело никогда не проверялось» от «дело упало 20 раз подряд». `errorCount` даёт метрику для потенциальной авто-архивации (N ошибок подряд → archive). `lastError` — последняя причина для диагностики.
+
+---
+
+## Предыдущие решения (CR1–CR9)
+
+### 2026-07-25: Grace period 90 дней для enforced дел (CR9)
+
+**Решение:** `ENFORCED_GRACE_MS = 90 дней`. Дела со статусом `enforced` продолжают мониториться, если `enforcedAt` в пределах grace period. После grace period — исключаются из `runFull`.
+
+**Обоснование:** Решение может быть обжаловано в вышестоящей инстанции. Grace period даёт 90 дней на обнаружение апелляции. После — дело считается окончательно завершённым.
+
+---
+
+### 2026-07-25: Court Hierarchy — отдельная функция (CR9)
+
+**Решение:** `findHigherCourt(courtCode)` в `core/courts.ts`. Иерархия `COURT_HIERARCHY`: MS→RS→OS→KJ. `CASSATION_MAP`: 89 регионов → 9 кассационных судов. MS→RS кэшируется в `court-hierarchy.json`.
+
+**Обоснование:** Ранее поиск в вышестоящем суде не производился. Иерархия нужна для отслеживания обжалования. Кэш MS→RS: у мирового судьи нет прямого районного — перебор кандидатов дорогой, результат кэшируется.
+
+---
+
+### 2026-07-24: URL allowlist — assertCourtUrl (CR6-002)
 
 **Решение:** `assertCourtUrl(url)` проверяет protocol=https + hostname ends with `.sudrf.ru` или `.msudrf.ru`. Блокирует `file://`, `http://`, `localhost`, IP-адреса, cloud metadata endpoints.
 
@@ -14,7 +145,7 @@
 
 ---
 
-## 2026-07-24: Corrupt JSON → backup + throw (CR6-001)
+### 2026-07-24: Corrupt JSON → backup + throw (CR6-001)
 
 **Решение:** `readJson` при JSON.parse error (не ENOENT) переименовывает файл в `.corrupt.<timestamp>` и бросает Error.
 
@@ -22,7 +153,7 @@
 
 ---
 
-## 2026-07-24: archived re-check перед updateCase (CR6-004)
+### 2026-07-24: archived re-check перед updateCase (CR6-004)
 
 **Решение:** После всех `await` в `processOne`, перед финальным `updateCase`, перечитываем `getCase(uid)`. Если `status === 'archived'` — пишем только `lastChecked`, изменения статуса отбрасываем.
 
@@ -30,7 +161,7 @@
 
 ---
 
-## 2026-07-24: Error recovery в processOne (CR6-006)
+### 2026-07-24: Error recovery в processOne (CR6-006)
 
 **Решение:** При успешном `processOne`, если `prev.status === 'error'`, устанавливаем `updates.status = 'monitoring'`.
 
@@ -38,51 +169,41 @@
 
 ---
 
-## 2026-07-24: Каскадное удаление (CR6-016)
+### 2026-07-24: Каскадное удаление (CR6-016)
 
-**Решение:** `DELETE /api/cases/:uid` вызывает `clearEvents(uid)` + `deleteNotificationsByCase(uid)` после `deleteCase`.
+**Решение:** `DELETE /api/cases/:uid` вызывает `clearEvents(uid)` + `deleteNotificationsByCase(uid)` + `deleteCard(uid)` после `deleteCase`.
 
-**Обоснование:** Без каскада events и notifications для удалённого дела копятся как orphans, `events.json` растёт бесконечно.
-
----
-
-## 2026-07-24: Дедупликация роутов (CR6-008, CR6-009)
-
-**Решение:** Удалён дублирующий `GET /api/status` из `health.ts` (тенит `status.ts`). Удалён дублирующий `POST /api/resolve` из `search.ts` (live scrape, дублирует `resolve.ts` URL builder).
-
-**Обоснование:** Express выполняет первый match. Дубль в health.ts возвращал расширенный ответ без `health` поля — dashboard работал, но `DashboardStatus.health` был мёртв. Дубль в search.ts делал network-запрос, а resolve.ts строит URL без сети — два разных контракта на одном пути.
+**Обоснование:** Без каскада events и notifications для удалённого дела копятся как orphans.
 
 ---
 
-## 2026-07-24: _isRunning TOCTOU fix (CR6-013)
+### 2026-07-24: Дедупликация роутов (CR6-008, CR6-009)
+
+**Решение:** Удалён дублирующий `GET /api/status` из `health.ts`. Удалён дублирующий `POST /api/resolve` из `search.ts`.
+
+---
+
+### 2026-07-24: _isRunning TOCTOU fix (CR6-013)
 
 **Решение:** `_isRunning = true` устанавливается до `res.status(202)`, не после.
 
-**Обоснование:** В single-process Node.js окно TOCTOU микросекундно (синхронный код до `runner()`), но установка флага до ответа — корректный паттерн. При multi-instance заменять на Redis lock.
-
 ---
 
-## 2026-07-24: Dashboard UX — управление делами
+### 2026-07-24: Dashboard UX — управление делами
 
 **Решение:** Dashboard получил: фильтры по статусу с счётчиками, modal деталей дела с timeline событий, кнопки архив/возврат/удаление, кнопку запуска мониторинга, авто-обновление 30с.
 
-**Обоснование:** Без управления делами dashboard — read-only счётчик. Базовый сценарий «найти → добавить → следить → архивировать» теперь доступен из UI.
-
 ---
 
-## 2026-07-24: Search UX — добавление в мониторинг
+### 2026-07-24: Search UX — добавление в мониторинг
 
 **Решение:** Каждая строка результатов поиска получила кнопку «+📋» → `POST /api/cases`. Добавлена форма «Отслеживать появление» → `POST /api/cases/wait`.
 
-**Обоснование:** Разрыв user flow (поиск → ??? → мониторинг) — главный UX-блокер. Кнопка замыкает петлю.
-
 ---
 
-## 2026-07-24: Dead code cleanup — magistrate search adapter
+### 2026-07-24: Dead code cleanup — magistrate search adapter
 
 **Решение:** Удалены `createMagistrateSession()` (мёртвая функция с багом `page.url()`) и `solveCaptchaOnPage()` (дубликат `captcha/session.ts`).
-
-**Обоснование:** Два независимых Puppeteer-launch пути — контролируемых одинпуть. Устранение дублирования = один source of truth для капчи.
 
 ---
 
