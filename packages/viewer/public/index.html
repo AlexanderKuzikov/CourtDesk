@@ -25,7 +25,7 @@
     .icon-btn.danger:hover { color: var(--danger); }
     .notifications { background: var(--surface); border-radius: 10px; border: 1px solid var(--border); margin-top: 24px; transition: background .2s; }
     .notif-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; border-bottom: 1px solid var(--border); }
-    .notif-header h3 { font-size: 13px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; }
+    .notif-header h3 { font-size: 13px; color: var(--text-muted); }
     .notif-item { padding: 10px 16px; border-bottom: 1px solid var(--bg); display: flex; align-items: center; gap: 10px; }
     .notif-item:last-child { border-bottom: none; }
     .notif-item .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
@@ -37,7 +37,7 @@
     .notif-item .time { font-size: 11px; color: var(--text-dim); white-space: nowrap; }
     .detail-card .case-num { font-size: 12px; color: var(--text-dim); margin-bottom: 16px; word-break: break-all; }
     .detail-card .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; margin-bottom: 20px; }
-    .detail-card .info-item .key { color: var(--text-muted); font-size: 11px; text-transform: uppercase; }
+    .detail-card .info-item .key { color: var(--text-muted); font-size: 11px; }
     .detail-card .info-item .val { color: var(--text); margin-top: 2px; }
     .detail-card .timeline { border-left: 2px solid var(--border); padding-left: 16px; }
     .detail-card .timeline-item { position: relative; padding: 8px 0; }
@@ -131,7 +131,7 @@ function getFilteredCases() {
   if (searchQuery) {
     cases = cases.filter(c =>
       (c.number || '').toLowerCase().includes(searchQuery) ||
-      (c.courtId || '').toLowerCase().includes(searchQuery)
+      (c.courtName || c.courtId || '').toLowerCase().includes(searchQuery)
     );
   }
   cases.sort((a, b) => {
@@ -174,7 +174,7 @@ function renderTable() {
     <tr>
       <td><a href="#" onclick="openDetail('${esc(c.uid)}');return false" style="color:var(--primary);text-decoration:none;font-weight:600">${esc(c.number || '—')}</a></td>
       <td><span class="badge badge-${esc(c.status)}">${esc(STATUS_LABELS[c.status] || c.status)}</span></td>
-      <td>${esc(c.courtId || '—')}</td>
+      <td>${esc(c.courtName || c.courtId || '—')}</td>
       <td>${esc(c.result ? c.result.substring(0, 30) : '—')}</td>
       <td>${esc(c.legalForceDate || '—')}</td>
       <td style="font-size:11px;color:var(--text-dim)">${formatTime(c.updatedAt)}</td>
@@ -261,11 +261,11 @@ async function openDetail(uid) {
     // Информация о суде из справочника
     let courtInfoHtml = '';
     if (card) {
-      const courtName = card.court || c.courtId;
+      const courtName = c.courtName || card.court || c.courtId;
       courtInfoHtml = `
         <h3 style="font-size:13px;margin:16px 0 8px;color:var(--primary)">🏛️ Суд</h3>
         <div class="info-grid">
-          <div class="info-item"><div class="key">Поддомен</div><div class="val">${esc(card.court || '—')}</div></div>
+          <div class="info-item"><div class="key">Суд</div><div class="val">${esc(courtName)}</div></div>
           <div class="info-item"><div class="key">Тип суда</div><div class="val">${esc(card.courtType || c.courtType)}</div></div>
           <div class="info-item"><div class="key">Тип дела</div><div class="val">${esc(card.type || '—')}</div></div>
           ${card.card ? `

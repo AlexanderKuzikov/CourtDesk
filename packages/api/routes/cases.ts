@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { getCase, listCases, addCase, updateCase, deleteCase, getStats, deleteNotificationsByCase, deleteCard, getCard } from '../../store/index.js';
 import { addEvent as addHistoryEvent, getEvents as getCaseEvents, clearEvents } from '../../store/events.js';
+import { findCourtByCodeOrSubdomain } from '../../core/index.js';
 import type { WatchedCase, CaseStatus } from '../../core/types.js';
 
 const router = Router();
@@ -32,7 +33,12 @@ router.get('/api/cases', (req: Request, res: Response) => {
       courtId: strQuery(req.query['courtId']),
       q: strQuery(req.query['q']),
     });
-    ok(res, cases);
+    // Обогащаем названием суда
+    const enriched = cases.map(c => {
+      const courtInfo = findCourtByCodeOrSubdomain(c.courtCode || c.courtId);
+      return { ...c, courtName: courtInfo?.name ?? c.courtId };
+    });
+    ok(res, enriched);
   } catch (e) { fail(res, 'STORE_ERROR', 'Ошибка получения списка: ' + errMsg(e), 500); }
 });
 
@@ -47,7 +53,8 @@ router.get('/api/cases/:uid', (req: Request, res: Response) => {
   try {
     const c = getCase(String(req.params['uid']));
     if (!c) return fail(res, 'NOT_FOUND', 'Дело не найдено', 404);
-    ok(res, c);
+    const courtInfo = findCourtByCodeOrSubdomain(c.courtCode || c.courtId);
+    ok(res, { ...c, courtName: courtInfo?.name ?? c.courtId });
   } catch (e) { fail(res, 'STORE_ERROR', errMsg(e), 500); }
 });
 

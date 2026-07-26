@@ -10,7 +10,7 @@
     .app { display: grid; grid-template-columns: 300px 1fr; gap: 0; height: calc(100vh - 60px); }
     @media (max-width: 800px) { .app { grid-template-columns: 1fr; height: auto; } }
     .sidebar { background: var(--surface); padding: 16px; overflow-y: auto; border-right: 1px solid var(--border); transition: background .2s; }
-    .sidebar h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-dim); margin: 16px 0 8px; }
+    .sidebar h2 { font-size: 11px; color: var(--text-dim); margin: 16px 0 8px; }
     .sidebar h2:first-child { margin-top: 0; }
     .sidebar label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 3px; }
     .sidebar .btn { width: 100%; padding: 8px; margin-bottom: 8px; }
@@ -301,19 +301,19 @@ async function openDetail(idx) {
         cardHtml = `
           <h3 style="font-size:13px;margin:16px 0 8px;color:var(--primary)">🏛️ Дело</h3>
           <div class="info-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px 16px">
-            <div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px;text-transform:uppercase">Тип</div><div class="val" style="margin-top:2px">${esc(card.type || '—')}</div></div>
+            <div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px">Тип</div><div class="val" style="margin-top:2px">${esc(card.type || '—')}</div></div>
             ${card.card ? `
-              <div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px;text-transform:uppercase">Судья</div><div class="val" style="margin-top:2px">${esc(card.card.judge || '—')}</div></div>
-              <div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px;text-transform:uppercase">Категория</div><div class="val" style="margin-top:2px;font-size:11px">${esc((card.card.category||[]).join(' → ') || '—')}</div></div>
-              <div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px;text-transform:uppercase">Дата поступления</div><div class="val" style="margin-top:2px">${esc(card.card.filingDate || '—')}</div></div>
-              <div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px;text-transform:uppercase">Дата слушания</div><div class="val" style="margin-top:2px">${esc(card.card.hearingDate || '—')}</div></div>
-              <div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px;text-transform:uppercase">Признак рассмотрения</div><div class="val" style="margin-top:2px">${esc(card.card.proceedingType || '—')}</div></div>
-              <div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px;text-transform:uppercase">Результат</div><div class="val" style="margin-top:2px"><strong>${esc(card.card.result || '—')}</strong></div></div>
+              <div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px">Судья</div><div class="val" style="margin-top:2px">${esc(card.card.judge || '—')}</div></div>
+              <div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px">Категория</div><div class="val" style="margin-top:2px;font-size:11px">${esc((card.card.category||[]).join(' → ') || '—')}</div></div>
+              <div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px">Дата поступления</div><div class="val" style="margin-top:2px">${esc(card.card.filingDate || '—')}</div></div>
+              <div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px">Дата слушания</div><div class="val" style="margin-top:2px">${esc(card.card.hearingDate || '—')}</div></div>
+              <div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px">Признак рассмотрения</div><div class="val" style="margin-top:2px">${esc(card.card.proceedingType || '—')}</div></div>
+              <div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px">Результат</div><div class="val" style="margin-top:2px"><strong>${esc(card.card.result || '—')}</strong></div></div>
             ` : ''}
-            <div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px;text-transform:uppercase">UID дела</div><div class="val" style="margin-top:2px;font-family:monospace;font-size:11px">${esc(card.uid || '—')}</div></div>
-            ${card.identifiers?.case_uid ? `<div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px;text-transform:uppercase">Case UID</div><div class="val" style="margin-top:2px;font-family:monospace;font-size:11px">${esc(card.identifiers.case_uid)}</div></div>` : ''}
-            ${card.publishedAt ? `<div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px;text-transform:uppercase">Опубликовано</div><div class="val" style="margin-top:2px;font-size:11px">${esc(card.publishedAt)}</div></div>` : ''}
-            ${card.modifiedAt ? `<div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px;text-transform:uppercase">Изменено</div><div class="val" style="margin-top:2px;font-size:11px">${esc(card.modifiedAt)}</div></div>` : ''}
+            <div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px">UID дела</div><div class="val" style="margin-top:2px;font-family:monospace;font-size:11px">${esc(card.uid || '—')}</div></div>
+            ${card.identifiers?.case_uid ? `<div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px">Case UID</div><div class="val" style="margin-top:2px;font-family:monospace;font-size:11px">${esc(card.identifiers.case_uid)}</div></div>` : ''}
+            ${card.publishedAt ? `<div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px">Опубликовано</div><div class="val" style="margin-top:2px;font-size:11px">${esc(card.publishedAt)}</div></div>` : ''}
+            ${card.modifiedAt ? `<div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px">Изменено</div><div class="val" style="margin-top:2px;font-size:11px">${esc(card.modifiedAt)}</div></div>` : ''}
           </div>`;
 
         // Участники

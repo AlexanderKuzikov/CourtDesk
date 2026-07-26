@@ -71,11 +71,49 @@ async function readCaptchaImageBase64(page: Page, mode: CaptchaMode): Promise<st
   return base64;
 }
 
-/** Для msudrf: заполнить капчу и сабмитнуть (AJAX-обновление) */
-async function fillCaptchaMsudrf(page: Page, text: string): Promise<void> {
-  await page.locator('input[name="captcha-response"]').fill(text);
+/** Для msudrf: заполнить капчу, дождаться формы поиска, заполнить поля и сабмитнуть */
+async function fillCaptchaMsudrf(page: Page, searchUrl: string, captchaText: string): Promise<void> {
+  // 1. Решаем капчу
+  await page.locator('input[name="captcha-response"]').fill(captchaText);
   await page.locator('form#kcaptchaForm button[type="submit"]').click();
-  await page.waitForNetworkIdle({ timeout: 60000 }).catch(() => {});
+  // Ждём появления формы поиска (вместо капчи)
+  try {
+    await page.waitForFunction(() => {
+      const html = document.body?.innerHTML || '';
+      return html.includes('sud_delo') && !html.includes('kcaptchaForm');
+    }, { timeout: 30000 });
+  } catch {
+    // Если после капчи снова капча — выходим, caller retry
+    return;
+  }
+  await new Promise(r => setTimeout(r, 500));
+
+  // 2. Заполняем поля поиска из URL и сабмитим (как fillAndSubmit для sudrf)
+  const params = extractSearchParams(searchUrl);
+  const fillable = ['G2_PARTS__NAMESS', 'G1_PARTS__NAMESS', 'g2_case__CASE_NUMBERSS', 'g1_case__CASE_NUMBERSS',
+    'g2_case__ENTRY_DATE1D', 'g1_case__ENTRY_DATE1D', 'g2_case__ENTRY_DATE2D', 'g1_case__ENTRY_DATE2D',
+    'g2_case__JUDICIAL_UIDSS', 'g1_case__JUDICIAL_UIDSS'];
+
+  for (const name of fillable) {
+    const val = params[name];
+    if (val && val.trim()) {
+      await page.locator(`input[name="${name}"]`).fill(val).catch(() => {});
+    }
+  }
+
+  await page.locator('input[name="Submit"]').click().catch(async () => {
+    // Fallback: кнопка может быть button, не input
+    await page.locator('button[name="Submit"]').click().catch(() => {});
+  });
+
+  // 3. Ждём появления таблицы результатов
+  try {
+    await page.waitForFunction(() => {
+      const html = document.body?.innerHTML || '';
+      return html.includes('№ дела') || html.includes('Данных по запросу') || html.includes('Неверно указан');
+    }, { timeout: 30000 });
+  } catch {}
+  await new Promise(r => setTimeout(r, 1000));
 }
 
 /** Декодировать CP1251 percent-encoded параметр в строку */
@@ -174,7 +212,7 @@ export async function fetchWithCaptcha(options: FetchWithCaptchaOptions): Promis
       const captchaText = await client.solveImage(imageBase64);
 
       if (mode === 'msudrf') {
-        await fillCaptchaMsudrf(page, captchaText);
+        await fillCaptchaMsudrf(page, options.url, captchaText);
       } else {
         await fillAndSubmit(page, options.url, captchaText);
       }
