@@ -58,7 +58,7 @@ async function tick() {
 export function startCron(): void {
   if (_fullTimer) return; // уже запущен
   console.log('[cron] запуск планировщика (интервал: 60с)');
-  tick(); // сразу проверить при старте
+  _lastRetryRun = new Date().toISOString(); // не запускать retry сразу при старте
   _fullTimer = setInterval(tick, 60_000);
 }
 

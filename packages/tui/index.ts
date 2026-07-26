@@ -1,4 +1,2 @@
 #!/usr/bin/env node
-import { createApp } from './app.js';
-
-createApp();
+import './app.js';
