@@ -1,23 +1,39 @@
-// Мировые суды (*.msudrf.ru) — с капчей через Puppeteer+RuCaptcha
+// Мировые суды (*.msudrf.ru) — AJAX-поиск через Puppeteer+RuCaptcha
 //
-// msudrf ставит капчу на любой запрос к modules.php.
-// Стратегия: решаем капчу на op=hl (список дел),
-// затем в той же сессии делаем page.goto с поисковыми параметрами.
-//
-// Параметры поиска — те же, что в district (CP1251 encoding):
-//   name=sud_delo, srv_num=1, name_op=r, delo_id=1540005
-//   g1_case__CASE_NUMBERSS, G1_PARTS__NAMESS (через encodeParam)
+// msudrf отличается от sudrf:
+// - Нет <form method="get"> — поиск через JS/AJAX
+// - Капча (kcaptchaForm) решается ОДИН раз на сессию
+// - После капчи — форма поиска с вкладками
+// - Кнопка «Искать» — <input type="button" class="button-normal search">
+// - Результаты в <div id="search_results">
 
 import * as cheerio from 'cheerio';
-import { isCaptchaPage } from '../../core/errors.js';
 import { getRuCaptchaKey } from '../../core/config.js';
 import type { SearchRequest, SearchResult } from '../../core/types.js';
 import type { SearchAdapter } from './types.js';
-import { buildSearchUrl } from '../shared.js';
 import { SEARCH_PARAMS } from '../constants.js';
 
+/** Построить URL формы поиска msudrf (name_op=sf, не r) */
+function buildFormUrl(req: SearchRequest): string {
+  const params = SEARCH_PARAMS.magistrate;
+  return `https://${req.courtId}.msudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=sf&delo_id=${params.delo_id}&case_type=${params.case_type}&new=${params.new_ ?? '0'}`;
+}
+
+/** Собрать поля для заполнения формы из SearchRequest */
+function buildFields(req: SearchRequest): Record<string, string> {
+  const fields: Record<string, string> = {};
+  if (req.caseNumber) fields['g1_case__CASE_NUMBERSS'] = req.caseNumber;
+  if (req.defendant) fields['G1_PARTS__NAMESS'] = req.defendant;
+  if (req.plaintiff) fields['G1_PARTS__NAMESS'] = req.plaintiff;
+  if (req.caseUid) fields['g1_case__JUDICIAL_UIDSS'] = req.caseUid;
+  if (req.filingDateFrom) fields['g1_case__ENTRY_DATE1D'] = req.filingDateFrom;
+  if (req.filingDateTo) fields['g1_case__ENTRY_DATE2D'] = req.filingDateTo;
+  return fields;
+}
+
 /**
- * Парсинг таблицы результатов msudrf (формат ГАС «Правосудие»).
+ * Парсинг таблицы результатов msudrf.
+ * HTML — фрагмент из #search_results (таблица поиска ГАС «Правосудие»).
  * Колонки: № дела | Дата поступления | Категория | Судья | Дата решения | Результат | Вступление в силу
  */
 function parseResults(html: string, req: SearchRequest): SearchResult[] {
@@ -53,9 +69,9 @@ function parseResults(html: string, req: SearchRequest): SearchResult[] {
 }
 
 export class MagistrateSearchAdapter implements SearchAdapter {
-  buildSearchUrl(req: SearchRequest): string {
-    // msudrf использует те же параметры, что и district
-    return buildSearchUrl(req, SEARCH_PARAMS.magistrate);
+  buildSearchUrl(_req: SearchRequest): string {
+    // Не используется — msudrf не поддерживает прямые GET-запросы результатов
+    return '';
   }
 
   async searchByCaseNumber(req: SearchRequest): Promise<SearchResult[]> {
@@ -64,10 +80,11 @@ export class MagistrateSearchAdapter implements SearchAdapter {
       throw new Error('Для мировых судов нужен ключ RuCaptcha в .env');
     }
 
-    // Парсинг по URL дела — делегируем parse-адаптеру
+    // Парсинг по URL дела — делегируем parse-адаптеру (через старый fetchWithCaptcha)
     if (req.caseNumber && req.caseNumber.startsWith('http')) {
       const { fetchWithCaptcha } = await import('../../captcha/session.js');
       const html = await fetchWithCaptcha({ url: req.caseNumber, apiKey });
+      const { isCaptchaPage } = await import('../../core/errors.js');
       if (isCaptchaPage(html)) {
         throw new Error('Captcha loop: не удалось загрузить страницу дела');
       }
@@ -90,20 +107,16 @@ export class MagistrateSearchAdapter implements SearchAdapter {
       }];
     }
 
-    // Поиск по номеру — через браузерную сессию (капча решается один раз)
-    const { fetchWithCaptcha } = await import('../../captcha/session.js');
-    const searchUrl = this.buildSearchUrl(req);
-    const html = await fetchWithCaptcha({ url: searchUrl, apiKey });
-
-    if (isCaptchaPage(html)) {
-      throw new Error('Captcha loop: не удалось получить результаты поиска');
-    }
+    // Поиск через AJAX-форму msudrf
+    const { fetchMsudrfSearch } = await import('../../captcha/session.js');
+    const formUrl = buildFormUrl(req);
+    const fields = buildFields(req);
+    const html = await fetchMsudrfSearch({ formUrl, fields, apiKey });
 
     return parseResults(html, req);
   }
 
   async searchByParty(req: SearchRequest): Promise<SearchResult[]> {
-    // Поиск по участникам использует тот же механизм (buildSearchUrl с G1_PARTS__NAMESS)
     return this.searchByCaseNumber(req);
   }
 
@@ -111,13 +124,10 @@ export class MagistrateSearchAdapter implements SearchAdapter {
     const apiKey = getRuCaptchaKey();
     if (!apiKey) throw new Error('Для мировых судов нужен ключ RuCaptcha в .env');
 
-    const { fetchWithCaptcha: fwc } = await import('../../captcha/session.js');
-    const searchUrl = this.buildSearchUrl(req);
-    const html = await fwc({ url: searchUrl, apiKey });
-
-    if (isCaptchaPage(html)) {
-      throw new Error('Captcha loop: не удалось получить результаты поиска');
-    }
+    const { fetchMsudrfSearch } = await import('../../captcha/session.js');
+    const formUrl = buildFormUrl(req);
+    const fields = buildFields(req);
+    const html = await fetchMsudrfSearch({ formUrl, fields, apiKey });
 
     return parseResults(html, req);
   }

@@ -111,7 +111,7 @@ header nav a:hover { background: var(--surface-2); color: var(--text); }
 
 /* Tables */
 table { width: 100%; border-collapse: collapse; font-size: 13px; background: var(--surface); border-radius: 10px; overflow: hidden; transition: background .2s; }
-th { text-align: left; padding: 10px 12px; background: var(--bg); color: var(--text-muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; border-bottom: 2px solid var(--border); white-space: nowrap; }
+th { text-align: left; padding: 10px 12px; background: var(--bg); color: var(--text-muted); font-weight: 600; font-size: 11px; border-bottom: 2px solid var(--border); white-space: nowrap; }
 td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
 tr:hover td { background: var(--surface-hover); }
 th.sortable { cursor: pointer; user-select: none; }

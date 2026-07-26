@@ -1300,3 +1300,7 @@
 [2026-07-26T07:54:56.715Z] [INFO] GET /api/courts?q=2%20%D0%BF%D0%B5%D1%80%D0%BC%20%D0%B4%D0%B7%D0%B5%D1%80%D0%B6 → 200 {"durationMs":6}
 [2026-07-26T07:54:58.103Z] [INFO] GET /api/courts/59MS0002 → 304 {"durationMs":0}
 [2026-07-26T07:56:54.814Z] [INFO] POST /api/search/by-number → 200 {"durationMs":107372}
+[2026-07-26T08:16:38.924Z] [INFO] GET /search.html → 200 {"durationMs":3}
+[2026-07-26T08:16:38.932Z] [INFO] GET /theme.css → 200 {"durationMs":1}
+[2026-07-26T08:16:38.933Z] [INFO] GET /app.js → 200 {"durationMs":2}
+[2026-07-26T08:16:39.067Z] [INFO] GET /favicon.ico → 404 {"durationMs":2}

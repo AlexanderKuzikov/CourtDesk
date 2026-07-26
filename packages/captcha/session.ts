@@ -240,6 +240,115 @@ export async function fetchWithCaptcha(options: FetchWithCaptchaOptions): Promis
 
 export { fetchWithCaptcha as fetchMagistrateHtml };
 
+/**
+ * Поиск по мировым судам (*.msudrf.ru)
+ *
+ * msudrf имеет другую архитектуру, чем sudrf:
+ * - Нет <form method="get"> — поиск через AJAX/JS
+ * - Капча (kcaptchaForm) решается ОДИН раз на страницу
+ * - После капчи — форма поиска с вкладками и полями
+ * - Кнопка "Искать" — <input type="button" class="button-normal search">
+ * - Результаты в <div id="search_results">
+ */
+export async function fetchMsudrfSearch(options: {
+  formUrl: string;
+  fields: Record<string, string>;
+  apiKey: string;
+  debugDir?: string;
+}): Promise<string> {
+  const headless: boolean | 'shell' = process.env['PUPPETEER_HEADLESS'] === 'false' ? false : 'shell';
+  const browser = await puppeteer.launch({
+    headless,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-features=NetworkServiceInProcess',
+      '--ignore-certificate-errors',
+    ],
+  });
+
+  try {
+    const page = await browser.newPage();
+
+    // Шаг 1: открываем форму поиска (покажет kcaptchaForm)
+    await page.goto(options.formUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    let html = await page.content();
+
+    // Шаг 2: решаем капчу, если есть
+    if (html.includes('kcaptchaForm')) {
+      const client = new RuCaptchaClient({ apiKey: options.apiKey });
+      const src = await page.$eval(
+        'form#kcaptchaForm img',
+        (img: HTMLImageElement) => img.getAttribute('src') || '',
+      );
+      if (!src) throw new Error('Captcha image src not found');
+      const imageBase64 = await page.evaluate(async (imgSrc: string) => {
+        const res = await fetch(imgSrc, { credentials: 'include' });
+        if (!res.ok) throw new Error(`Captcha image fetch failed: HTTP ${res.status}`);
+        const buf = await res.arrayBuffer();
+        let binary = '';
+        const bytes = new Uint8Array(buf);
+        for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+        return btoa(binary);
+      }, src) as unknown as string;
+
+      const captchaText = await client.solveImage(imageBase64);
+
+      await page.locator('input[name="captcha-response"]').fill(captchaText);
+      await page.locator('form#kcaptchaForm button[type="submit"]').click();
+
+      // Ждём загрузки формы поиска (kcaptchaForm исчезла)
+      try {
+        await page.waitForFunction(() => {
+          const body = document.body?.innerHTML || '';
+          return body.includes('bookmark-content') && !body.includes('kcaptchaForm');
+        }, { timeout: 30000 });
+      } catch {
+        const after = await page.content();
+        if (isCaptchaPage(after)) {
+          throw new Error('Captcha loop: капча не решена после 1 попытки');
+        }
+      }
+    }
+
+    // Шаг 3: заполняем поля поиска
+    for (const [name, value] of Object.entries(options.fields)) {
+      if (value) {
+        await page.locator(`input[name="${name}"]`).fill(value).catch(() => {});
+      }
+    }
+
+    // Шаг 4: кликаем «Искать»
+    await page.locator('input.button-normal.search').click();
+
+    // Шаг 5: ждём появления результатов
+    try {
+      await page.waitForFunction(() => {
+        const el = document.querySelector('#search_results');
+        if (!el) return false;
+        const style = window.getComputedStyle(el);
+        return style.display !== 'none' && el.innerHTML.trim().length > 0;
+      }, { timeout: 30000 });
+    } catch {
+      // Таймаут — возможно результатов нет
+    }
+
+    const resultsHtml = await page.evaluate(() => {
+      const el = document.querySelector('#search_results');
+      return el ? el.innerHTML : '';
+    });
+
+    if (options.debugDir) {
+      ensureDir(options.debugDir);
+      writeFileSync(resolve(options.debugDir, 'msudrf-results.html'), resultsHtml, 'utf-8');
+    }
+
+    return resultsHtml || html;
+  } finally {
+    await browser.close().catch(() => {});
+  }
+}
+
 function ensureDir(dir: string): void {
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 }

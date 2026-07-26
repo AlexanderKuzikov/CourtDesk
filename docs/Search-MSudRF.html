@@ -1,0 +1,268 @@
+<div class="content">
+    <input type="hidden" id="operation" value="sf">
+    –<ul class="bookmarks">
+        <li id="schedule" class=""><span>Расписание <br>слушаний дел</span></li>
+        <li id="type_0" data-delo-id="1540006" class="">
+            <span>
+                Уголовные<br> дела </span>
+        </li>
+        <li id="type_1" data-delo-id="1540005" class="active">
+            <span>
+                Гражданские и административные дела </span>
+        </li>
+        <li id="type_2" data-delo-id="1500001">
+            <span>
+                Дела об административных правонарушениях </span>
+        </li>
+        <li id="type_3" data-delo-id="1610001">
+            <span>
+                Производство по<br>материалам </span>
+        </li>
+    </ul>
+    <div class="clr sp15 hide-on-mobile"></div>
+    <div class="form-container">
+        <!-- Расписание -->
+        <div id="bookmark_schedule" class="bookmark-content" style="display: none;">
+            <div class="schedule-date">
+                <span>Список дел, назначенных на дату</span>
+                <input type="text" class="text-input date-picker hasDatepicker" name="H_date" value="26.07.2026"
+                    id="dp1785053854741">
+                <input type="button" class="button-normal date-search" value="Показать">
+            </div>
+        </div>
+        <!-- Кримальные дела -->
+        <div id="bookmark_type_0" class="bookmark-content" style="display: none;">
+            <h2>Данные по делу</h2>
+            <label>Номер дела</label>
+            <div class="right">
+                <input type="text" name="u1_case__CASE_NUMBERSS" value="">
+            </div>
+            <div class="clr sp20"></div>
+            <label>Мировой судья</label>
+            <div class="right">
+                <input type="text" name="U1_CASE__JUDGE" class="select-values" value="">
+            </div>
+            <div class="clr sp20"></div>
+            <label>Дата рассмотрения дела</label>
+            <div class="right date-selector">
+                <input type="text" name="u1_case__RESULT_DATE1D" class="from hasDatepicker" placeholder="с" value=""
+                    id="dp1785053854742">
+                <input type="text" name="u1_case__RESULT_DATE2D" class="to hasDatepicker" placeholder="по" value=""
+                    id="dp1785053854743">
+            </div>
+            <div class="clr sp20"></div>
+            <label>Результат рассмотрения</label>
+            <div class="right">
+                <input type="text" name="U1_CASE__RESULT" class="select-values" value="">
+            </div>
+            <div class="clr sp20"></div>
+            <h2>Лица</h2>
+            <label>ФИО подсудимого (осужденного)</label>
+            <div class="right">
+                <input type="text" name="U1_DEFENDANT__NAMESS" value="">
+            </div>
+            <div class="clr sp20"></div>
+            <label class="two-lines">Основная статья <br><span>(по обвинению)</span></label>
+            <div class="right">
+                <input type="text" name="U1_DEFENDANT__LAW_ARTICLE" class="select-values" value="">
+            </div>
+            <div class="clr sp20"></div>
+            <label class="two-lines">Дата вынесения приговора <br><span>(определения, постановления)</span></label>
+            <div class="right date-selector">
+                <input type="text" name="U1_DEFENDANT__VERDICT_DATE1D" class="from hasDatepicker" placeholder="с"
+                    value="" id="dp1785053854744">
+                <input type="text" name="U1_DEFENDANT__VERDICT_DATE2D" class="to hasDatepicker" placeholder="по"
+                    value="" id="dp1785053854745">
+            </div>
+            <div class="clr sp20"></div>
+            <label class="two-lines">Приговор <br><span>(определение, постановление)</span></label>
+            <div class="right">
+                <input type="text" name="U1_DEFENDANT__RESULT" class="select-values" value="">
+            </div>
+            <div class="clr sp20"></div>
+            <h2>Стороны</h2>
+            <label>Вид лица, участвующего в деле</label>
+            <div class="right">
+                <input type="text" name="U1_PARTS__PARTS_TYPE" class="select-values" value="">
+            </div>
+            <div class="clr sp20"></div>
+            <label class="two-lines">Лицо, участвующее в деле <br><span>(ФИО, наименование)</span></label>
+            <div class="right">
+                <input type="text" name="U1_PARTS__NAMESS" value="">
+            </div>
+        </div>
+
+        <!-- Гражданские дела -->
+
+        <div id="bookmark_type_1" class="bookmark-content" style="display: block;">
+            <h2>Данные по делу</h2>
+            <label>Номер дела</label>
+            <div class="right">
+                <input type="text" name="g1_case__CASE_NUMBERSS" value="">
+            </div>
+            <div class="clr sp20"></div>
+            <!--
+		<label>Связанные дела</label>
+		<div class="right">
+			<input type="text" name="G1_CASE__MERGED_CASES">
+		</div>
+		<div class="clr sp20"></div>
+		-->
+            <label>Категория</label>
+            <div class="right">
+                <input type="text" name="G1_CASE__CATEGORY" value="" class="select-values">
+            </div>
+            <div class="clr sp20"></div>
+            <label>Председательствующий судья</label>
+            <div class="right">
+                <input type="text" name="G1_CASE__JUDGE" value="" class="select-values">
+            </div>
+            <div class="clr sp20"></div>
+            <label>Дело рассмотрено<br> <span>(выдан приказ)</span></label>
+            <div class="right date-selector">
+                <input type="text" name="g1_case__RESULT_DATE1D" value="" class="from hasDatepicker" placeholder="с"
+                    id="dp1785053854746">
+                <input type="text" name="g1_case__RESULT_DATE2D" value="" class="to hasDatepicker" placeholder="по"
+                    id="dp1785053854747">
+            </div>
+            <div class="clr sp20"></div>
+            <label>Результат рассмотрения</label>
+            <div class="right">
+                <input type="text" name="G1_CASE__RESULT" value="" class="select-values">
+            </div>
+            <div class="clr sp20"></div>
+            <h2>Стороны по делу (третьи лица)</h2>
+            <label class="two-lines">Вид лица,<br>участвующего в деле</label>
+            <div class="right">
+                <input type="text" name="G1_PARTS__PARTS_TYPE" value="" class="select-values">
+            </div>
+            <div class="clr sp20"></div>
+            <label class="two-lines">Лицо, участвующее в деле<br> <span>(ФИО, наименование)</span></label>
+            <div class="right">
+                <input type="text" name="G1_PARTS__NAMESS" value="">
+            </div>
+            <div class="clr sp20"></div>
+            <label class="two-lines">Требования <br><span>(Встречные требования)</span></label>
+            <div class="right">
+                <input type="text" name="G1_PARTS__REQUIREMENTSSS" value="">
+            </div>
+            <div class="clr sp20"></div>
+            <label class="two-lines">ИНН</label>
+            <div class="right">
+                <input type="text" name="G1_PARTS__INN_STRSS" value="">
+            </div>
+            <div class="clr sp20"></div>
+            <label class="two-lines">ОГРН/ОГРНИП</label>
+            <div class="right">
+                <input type="text" name="G1_PARTS__OGRN_STRSS" value="">
+            </div>
+        </div>
+
+        <!-- Административные дела -->
+
+        <div id="bookmark_type_2" class="bookmark-content" style="display: none;">
+            <h2>Данные по делу</h2>
+            <label>Номер дела</label>
+            <div class="right">
+                <input type="text" name="adm_case__CASE_NUMBERSS" value="">
+            </div>
+            <div class="clr sp20"></div>
+            <label>Передано в производство судье</label>
+            <div class="right">
+                <input type="text" name="adm_case__JUDGE" value="" class="select-values">
+            </div>
+            <div class="clr sp20"></div>
+            <label class="two-lines">Дата вынесения постановления <br><span>(определения) по делу</span></label>
+            <div class="right date-selector">
+                <input type="text" name="adm_case__RESULT_DATE1D" value="" class="from hasDatepicker" placeholder="с"
+                    id="dp1785053854748">
+                <input type="text" name="adm_case__RESULT_DATE2D" value="" class="to hasDatepicker" placeholder="по"
+                    id="dp1785053854749">
+            </div>
+            <div class="clr sp20"></div>
+            <label class="two-lines">Результат рассмотрения <br><span>(подготовки к рассмотрению)</span></label>
+            <div class="right">
+                <input type="text" name="ADM_CASE__RESULT" value="" class="select-values">
+            </div>
+            <div class="clr sp20"></div>
+            <!--<label class="two-lines">Порядковый номер<br>административного дела</label>
+			<div class="right">
+				<input type="text" name="ADM_CASE__SHORT_NUMBER" value="" class="select-values">
+			</div>
+			<div class="clr sp20"></div>-->
+
+            <label>Номер протокола об АП</label>
+            <div class="right">
+                <input type="text" name="adm_case__PR_NUMBERSS" value="">
+            </div>
+            <div class="clr sp20"></div>
+            <h2>Стороны по делу</h2>
+            <label>Вид участника производства</label>
+            <div class="right">
+                <input type="text" name="ADM_PARTS__PARTS_TYPE" value="" class="select-values">
+            </div>
+            <div class="clr sp20"></div>
+            <label class="two-lines">Сторона по делу <br><span>(ФИО, наименование)</span></label>
+            <div class="right">
+                <input type="text" name="adm_parts__NAMESS" value="">
+            </div>
+            <div class="clr sp20"></div>
+            <label>Главная статья (КоАП, ТК)</label>
+            <div class="right">
+                <input type="text" name="ADM_PARTS__LAW_ARTICLE" value="" class="select-values">
+            </div>
+            <div class="clr sp20"></div>
+            <label class="two-lines">Наименование вида<br>правонарушения</label>
+            <div class="right">
+                <input type="text" name="ADM_PARTS__BREAKING_LAW_TYPE" value="" class="select-values">
+            </div>
+        </div>
+
+        <!-- Материалы -->
+
+        <div id="bookmark_type_3" class="bookmark-content" style="display: none;">
+            <h2>Данные по делу</h2>
+            <label>Номер материала</label>
+            <div class="right">
+                <input type="text" name="m_case__CASE_NUMBERSS" value="">
+            </div>
+            <div class="clr sp20"></div>
+            <label>Судья</label>
+            <div class="right">
+                <input type="text" name="M_CASE__JUDGE" value="" class="select-values">
+            </div>
+            <div class="clr sp20"></div>
+            <label>Дата рассмотрения</label>
+            <div class="right date-selector">
+                <input type="text" name="m_case__RESULT_DATE1D" value="" class="from hasDatepicker" placeholder="с"
+                    id="dp1785053854750">
+                <input type="text" name="m_case__RESULT_DATE2D" value="" class="to hasDatepicker" placeholder="по"
+                    id="dp1785053854751">
+            </div>
+            <div class="clr sp20"></div>
+            <label>Результат рассмотрения</label>
+            <div class="right">
+                <input type="text" name="M_CASE__RESULT" value="" class="select-values">
+            </div>
+            <div class="clr sp20"></div>
+            <h2>Стороны</h2>
+            <label>Вид лица, участвующего в деле</label>
+            <div class="right">
+                <input type="text" name="M_PARTS__PARTS_TYPE" value="" class="select-values">
+            </div>
+            <div class="clr sp20"></div>
+            <label class="two-lines">Лицо, участвующее в деле <br><span>(ФИО, наименование)</span></label>
+            <div class="right">
+                <input type="text" name="M_PARTS__NAMESS" value="">
+            </div>
+        </div>
+        <div id="button_block" style="display: block;">
+            <div class="dashed-line sdp"></div>
+            <div class="button-holder">
+                <input type="button" value="Очистить форму" class="button-normal clear">
+                <input type="button" value="Искать" class="button-normal search">
+            </div>
+        </div>
+        <div id="search_results" style="display: none;"></div>
+    </div>
+</div>
