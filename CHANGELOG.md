@@ -53,9 +53,22 @@
 - `server.ts` — автостарт `startCron()` при запуске.
 - Настройки: `scheduleFull`, `retryIntervalHours`, `retryStaleHours`, `scheduleEnabled` — через UI и `PUT /api/settings`.
 
+### TUI (packages/tui/)
+
+- **Терминальный интерфейс на blessed** (не neo-blessed — сломан на Windows).
+- **5 попыток создания:**
+  1. neo-blessed → ошибка `fake` (node-pty не собирается на Windows). Отказ.
+  2. ANSI-самопал → неинтерактивен, Q не работает. Брошен.
+  3. blessed с `tags: true` → теги не рендерятся в `blessed.list` (баг blessed #400).
+  4. ANSI drawBox → рамки есть, навигации нет. Брошен.
+  5. **blessed (снова) — чистый список без тегов** → работает на Linux.
+- **Возможности:** таблица дел (номер/статус/суд/результат), вкладки (дела/запуск), детали дела (Enter), F4/F5/F6 для прогонов, авто-обновление 60с, выход по Q/Й/Ctrl+C.
+- **Ограничения:** на Windows глючно (стрелки, русская раскладка, blessed.list). Рекомендация: Linux/WSL.
+- **Файлы:** `packages/tui/index.ts`, `packages/tui/app.ts`, `packages/tui/fetch.ts`.
+
 ### API
 
-- **22 эндпоинта** (было 16 + 1 `GET /cases/:uid/card` в v0.4.0):
+- **23 эндпоинта** (было 16 + 1 `GET /cases/:uid/card` в v0.4.0):
   - `GET /api/parse/progress` — прогресс мониторинга
   - `GET /api/settings` — настройки расписания
   - `PUT /api/settings` — сохранить настройки

@@ -6,9 +6,17 @@
 
 ---
 
-## Открытых багов нет
+## Открытые баги (TUI)
 
-**Все 99 замечаний исправлены, закрыты или задокументированы как tech-debt.**
+> TUI создан в v0.5.0 и имеет известные проблемы на Windows.
+
+| ID | Severity | Файл | Описание | Статус |
+|----|----------|------|----------|--------|
+| TUI-001 | MEDIUM | `packages/tui/app.ts` | TUI глючит на Windows: `blessed.list` не рендерит теги, стрелки вверх/вниз работают не на всех терминалах, русская раскладка ломает Enter | 🔴 OPEN |
+| TUI-002 | LOW | `packages/tui/app.ts` | `tags: true` в `blessed.list` — баг blessed (issue #400), теги отображаются как текст | 🔴 OPEN (known issue) |
+| TUI-003 | LOW | `packages/tui/app.ts` | Нет авто-обновления фона при открытой карточке detail (detail скрывает list, refresh не обновляет) | 🔴 OPEN |
+
+**Все CR-замечания (99 из CR1–CR9) закрыты.**
 **4 tech-debt из CR1–CR9 закрыты в v0.5.0 (eslint, pino, party matching, Node engine).**
 
 ---
