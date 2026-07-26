@@ -2,11 +2,23 @@
   "name": "courtdesk",
   "version": "0.4.0",
   "description": "CRM-оркестратор поиска и мониторинга судебных дел РФ.",
-  "keywords": ["court", "sudrf", "msudrf", "legal", "monitoring", "crm", "russian-courts"],
+  "keywords": [
+    "court",
+    "sudrf",
+    "msudrf",
+    "legal",
+    "monitoring",
+    "crm",
+    "russian-courts"
+  ],
   "homepage": "https://github.com/AlexanderKuzikov/CourtDesk#readme",
-  "bugs": { "url": "https://github.com/AlexanderKuzikov/CourtDesk/issues" },
+  "bugs": {
+    "url": "https://github.com/AlexanderKuzikov/CourtDesk/issues"
+  },
   "license": "Apache-2.0",
-  "engines": { "node": ">=20.6.0" },
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "allowScripts": {
     "esbuild@0.28.1": true,
     "puppeteer@25.3.0": true
@@ -22,18 +34,24 @@
     "dev": "npx tsx --watch packages/api/server.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "npx tsc --noEmit"
+    "lint": "npx tsc --noEmit",
+    "lint:eslint": "eslint packages/"
   },
   "dependencies": {
     "cheerio": "^1.0.0",
     "express": "^5.2.1",
     "iconv-lite": "^0.7.3",
+    "pino": "^10.3.1",
     "puppeteer": "^25.3.0"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/node": "^24.13.3",
     "@types/supertest": "^6.0.2",
+    "@typescript-eslint/eslint-plugin": "^8.65.0",
+    "@typescript-eslint/parser": "^8.65.0",
+    "eslint": "^10.8.0",
+    "eslint-config-prettier": "^10.1.8",
     "supertest": "^7.0.0",
     "tsx": "^4.23.0",
     "typescript": "^7.0.2",

@@ -8,7 +8,7 @@ import { assertCourtUrl, CourtUrlError, isCaptchaPage } from '../core/errors.js'
 import { getRuCaptchaKey } from '../core/config.js';
 import { findHigherCourt, findRsCandidatesForMs, saveMsToRsMapping, extractRegion, setProgress } from '../core/index.js';
 import { getSettings } from '../store/settings.js';
-import type { WatchedCase, CaseHistoryEvent, Notification } from '../core/types.js';
+import type { WatchedCase, CaseHistoryEvent, Notification, SearchResult } from '../core/types.js';
 
 const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 const RATE_DELAY_MS = 1500;
@@ -111,6 +111,46 @@ async function processWaitingBatch(cases: WatchedCase[]): Promise<{ ok: number; 
   return { ok, fail };
 }
 
+/** Сравнить имя участника из waiting с участниками результата поиска */
+function matchParty(party: string, resultParties: { role: string; name: string }[]): number {
+  const q = party.toLowerCase().trim();
+  if (!q) return 0;
+  const qWords = q.split(/\s+/).filter(Boolean);
+  let best = 0;
+  for (const p of resultParties) {
+    const name = (p.name || '').toLowerCase().trim();
+    if (!name) continue;
+    // Точное совпадение всей строки
+    if (name === q) return 100;
+    // Имя начинается с искомого или наоборот
+    if (name.startsWith(q) || q.startsWith(name)) return 90;
+    // Фамилия (первое слово) совпадает
+    const nameFirst = name.split(/\s+/)[0] || '';
+    const qFirst = qWords[0] || '';
+    if (nameFirst === qFirst) {
+      // Сколько слов совпало
+      const nameWords = name.split(/\s+/);
+      const matches = qWords.filter(w => nameWords.includes(w)).length;
+      best = Math.max(best, 30 + matches * 20);
+    }
+  }
+  return best;
+}
+
+/** Выбрать наилучший результат по совпадению участника */
+function pickBestMatch(results: SearchResult[], party: string): SearchResult | null {
+  let best = null;
+  let bestScore = 0;
+  for (const r of results) {
+    const score = matchParty(party, r.parties || []);
+    if (score > bestScore) {
+      bestScore = score;
+      best = r;
+    }
+  }
+  return best;
+}
+
 // Обработка waiting-кейса: ищем дело по участнику + дате подачи
 async function processWaiting(c: WatchedCase): Promise<void> {
   const events = getEvents(c.uid);
@@ -146,7 +186,8 @@ async function processWaiting(c: WatchedCase): Promise<void> {
     return;
   }
 
-  const r = results[0]!;
+  // CR6-005: ищем наилучшее совпадение по участнику
+  const r = pickBestMatch(results, party) ?? results[0]!;
   updateCase(c.uid, {
     status: 'monitoring',
     url: r.caseUrl,
