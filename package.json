@@ -2,23 +2,11 @@
   "name": "courtdesk",
   "version": "0.5.1",
   "description": "CRM-оркестратор поиска и мониторинга судебных дел РФ.",
-  "keywords": [
-    "court",
-    "sudrf",
-    "msudrf",
-    "legal",
-    "monitoring",
-    "crm",
-    "russian-courts"
-  ],
+  "keywords": ["court", "sudrf", "msudrf", "legal", "monitoring", "crm", "russian-courts"],
   "homepage": "https://github.com/AlexanderKuzikov/CourtDesk#readme",
-  "bugs": {
-    "url": "https://github.com/AlexanderKuzikov/CourtDesk/issues"
-  },
+  "bugs": { "url": "https://github.com/AlexanderKuzikov/CourtDesk/issues" },
   "license": "Apache-2.0",
-  "engines": {
-    "node": ">=22.0.0"
-  },
+  "engines": { "node": ">=22.0.0" },
   "allowScripts": {
     "esbuild@0.28.1": true,
     "puppeteer@25.3.0": true
@@ -39,8 +27,6 @@
     "lint:eslint": "eslint packages/"
   },
   "dependencies": {
-    "@types/blessed": "^0.1.27",
-    "blessed": "^0.1.81",
     "cheerio": "^1.0.0",
     "express": "^5.2.1",
     "iconv-lite": "^0.7.3",
