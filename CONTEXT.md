@@ -7,7 +7,7 @@
 
 ## Статус
 
-**v0.5.0** — msudrf AJAX overhaul, UI polish (courtName, КАПС→капс, прогресс-бар, настройки), infra (eslint, pino, cron), party matching, error counters, sync parse. Node engine ≥22. 4 tech-debt закрыто.
+**v0.5.0** — msudrf AJAX overhaul, UI polish (courtName, КАПС→капс, прогресс-бар, настройки), infra (eslint, pino, cron), party matching, error counters, sync parse, TUI (blessed). Node engine ≥22. 4 tech-debt закрыто.
 
 | Компонент | Статус | Последнее изменение |
 |-----------|--------|---------------------|
@@ -34,6 +34,7 @@
 | eslint | ✅ Flat config (eslint.config.js) | 2026-07-26 |
 | pino | ✅ Structured logging | 2026-07-26 |
 | Cron scheduler | ✅ startCron/stopCron, настройки | 2026-07-26 |
+| TUI | ⚠️ Работает на Linux, глючно на Windows | 2026-07-26 |
 
 ---
 
@@ -66,6 +67,51 @@
 - **Участники:** парсятся из колонки «Категория/Лица» строки вида «ИСТЕЦ: ... ОТВЕТЧИК: ...» через regex.
 - **Архитектура:** `fetchMsudrfSearch()` в `captcha/session.ts` — отдельная функция, не переиспользует `fetchWithCaptcha` (AJAX-пайплайн иной).
 - **TLS:** `rejectUnauthorized: false` (используется `https.get`, не `fetch`).
+
+---
+
+## TUI (packages/tui/)
+
+Терминальный интерфейс для администраторов. Создан на **blessed** (не neo-blessed).
+
+### Стек
+- **blessed** v0.1.81 — библиотека терминального UI (ncurses-подобный API)
+- **fetch.ts** — `tuiFetch()` с AbortController (таймаут 5с)
+- **app.ts** — 99 строк: screen → header → thead → list → detail
+
+### Состояние
+- ✅ **Работает на Linux** — полная функциональность
+- ⚠️ **На Windows — глючно:** проблемы с русской раскладкой, стрелками, blessed.list
+- Рекомендация: запускать на Linux или WSL
+
+### Известные проблемы
+
+1. **blessed.list НЕ рендерит `tags: true`** — теги `{red-fg}...{/red-fg}` отображаются как текст (баг blessed). Решение: не использовать теги в элементах списка.
+2. **Стрелки вверх/вниз** — через `keys: true` у list, работает не на всех терминалах (на Windows Terminal — проблемы).
+3. **Стрелки влево/вправо** — переключение вкладок через `screen.key(['left'], ...)`.
+4. **Выход по Q в русской раскладке** — добавлены `й`/`Й` в обработчики (`screen.key(['q','Q','й','Й','C-c','C-d'])`).
+5. **Enter открывает карточку** — через `list.on('select')` и `screen.key(['enter'])`.
+6. **Курсор** — ручное скрытие `\x1b[?25l` / показ `\x1b[?25h` через `process.on('exit')`.
+
+### История создания (TUI — полная хроника страданий)
+
+| Попытка | Подход | Результат |
+|---------|--------|-----------|
+| 1 | **neo-blessed** | **Не работает на Windows** — ошибка `fake` (битая зависимость `node-pty` на Windows). Отказ. |
+| 2 | **ANSI-самопал** | Сырой `process.stdout.write` с ANSI-кодами. Неинтерактивен. `Q` не работает (только `process.stdin.on('data')`). Брошен. |
+| 3 | **blessed с вкладками + tags** | Вкладки есть. **Теги в `blessed.list` не рендерятся** — баг blessed (issue #400). Текст тегов виден как есть. |
+| 4 | **ANSI drawBox** | Рамки через `box.Draw`. Есть визуал. **Нет навигации** — клавиатура не обрабатывается нормально. |
+| 5 | **blessed (снова) — чистый список** | Теги убраны из `list.setItems()`. Форматирование через `pad()`. Enter открывает карточки. **ИТОГ: работает на Linux.** |
+
+### Управление
+- `1` / `←` — вкладка «Дела» (таблица)
+- `2` / `→` — вкладка «Запуск» (F4/F5/F6)
+- `Enter` — детали дела (на вкладке «Дела»)
+- `r` — обновить
+- `q` / `Q` / `й` / `Й` / `Ctrl+C` / `Ctrl+D` — выход
+- `F4` — полный прогон
+- `F5` — retry
+- `F6` — новые дела
 
 ---
 
@@ -157,6 +203,10 @@
 | CR6-017 | MEDIUM | 0 HTML fixtures in tests | Tech-debt |
 | CR6-020 | LOW | Intention vs Classification types | Tech-debt |
 
+| TUI-001 | MEDIUM | TUI глючит на Windows | blessed.list, стрелки, русская раскладка — регрессия на Windows Terminal |
+| TUI-002 | LOW | TUI теги не рендерятся | Баг blessed: `tags: true` не работает в `blessed.list` |
+| TUI-003 | LOW | TUI нет авто-обновления при открытой карточке | detail скрывает list, refresh не обновляет фон |
+
 ### Закрытые tech-debt
 
 | ID | Описание | Решение |
@@ -171,7 +221,7 @@
 ## Следующие шаги
 
 1. **WebSocket / SSE** — push-уведомления в браузер
-2. **TUI (neo-blessed)** — терминальный интерфейс для администраторов. Стек: Node.js + neo-blessed, горячие клавиши, таблица с фильтрацией/сортировкой, спиннеры.
+2. **TUI — стабилизация на Windows** — починить blessed.list, стрелки, русскую раскладку. Либо переписать на `termkit` / `ink`.
 3. **API token auth** — закрыть CR6-003
 4. **Puppeteer browser pool** — закрыть CR6-012
 
@@ -191,7 +241,7 @@
 | 2026-07-25 | CR7 fix: `success: true`→`false` в status.ts, `toIso()` битая ISO, dead code `err.message`, живая ссылка кэша, лимит `findCourtsByRegion`, матчинг uid, логи captcha, `&rarr;` унификация, `setInterval` cleanup. |
 | 2026-07-25 | CR8 — Captcha + Search overhaul. Исправлено 9 багов: `case_type`/`new` для appeal (искал в кассации); CP1251 декодинг (decodeURIComponent падал); waitForNetworkIdle → waitForNavigation; double-encoding CP1251; regex base64; поиск по УИД; полная карточка дела в UI; логгер; captcha для всех типов sudrf. |
 | 2026-07-25 | CR9 — Court Hierarchy & Grace Period. `findHigherCourt()`, `COURT_HIERARCHY` (MS→RS→OS→KJ), `CASSATION_MAP` (89 регионов → 9 кассац. судов), MS→RS кэш, `enforcedAt`, grace period 90 дней, поиск в вышестоящем по УИД. |
-| 2026-07-26 | **v0.5.0** — msudrf полностью переписан (AJAX, fetchMsudrfSearch, 5 колонок, парсинг участников из Категория/Лица). Убран КАПС из UI. Название суда (courtName) через findCourtByCodeOrSubdomain. Синхронный парсинг при ?parse=true. errorCount/lastError в WatchedCase. Прогресс-бар мониторинга (GET /api/parse/progress). Cron-планировщик (packages/scheduler/cron.ts, настройки). Party matching (pickBestMatch/matchParty). eslint flat config. pino structured logging. Node engine ≥22. |
+| 2026-07-26 | **v0.5.0** — msudrf полностью переписан (AJAX, fetchMsudrfSearch, 5 колонок, парсинг участников из Категория/Лица). Убран КАПС из UI. Название суда (courtName) через findCourtByCodeOrSubdomain. Синхронный парсинг при ?parse=true. errorCount/lastError в WatchedCase. Прогресс-бар мониторинга (GET /api/parse/progress). Cron-планировщик (packages/scheduler/cron.ts, настройки). Party matching (pickBestMatch/matchParty). eslint flat config. pino structured logging. Node engine ≥22. TUI (blessed): 5 попыток (neo-blessed failed → ANSI-самопал → blessed с тегами → drawBox → blessed чистый). На Linux работает, на Windows — глючно. |
 
 ---
 
@@ -210,6 +260,7 @@ courtdesk/
 │   ├── api/
 │   │   ├── routes/   — 20 эндпоинтов (+progress, +settings)
 │   │   └── middleware/
+│   ├── tui/          — терминальный интерфейс (blessed)
 │   └── viewer/       — дашборд + search.html (courtName, прогресс-бар, настройки)
 ├── .env.example
 ├── .gitattributes
