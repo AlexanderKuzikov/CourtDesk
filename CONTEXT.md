@@ -115,13 +115,14 @@
 
 ## Следующие шаги
 
-1. **WebSocket / SSE** — push-уведомления в браузер
-2. **Пагинация** — при росте числа дел > 200
-3. **eslint + @typescript-eslint** — закрыть CR5-009
-4. **Structured logging (pino)** — закрыть CR5-011
-5. **Scheduler cron** — автозапуск `runFull()` по расписанию
-6. **API token auth** — закрыть CR6-003
-7. **Party matching** — закрыть CR6-005
+1. **Web UI доработки** — доделать функционал и UX
+2. **TUI (neo-blessed)** — терминальный интерфейс для администраторов. Стек: Node.js + neo-blessed, горячие клавиши, таблица с фильтрацией/сортировкой, спиннеры.
+3. **WebSocket / SSE** — push-уведомления в браузер
+4. **eslint + @typescript-eslint** — закрыть CR5-009
+5. **Structured logging (pino)** — закрыть CR5-011
+6. **Scheduler cron** — автозапуск `runFull()` по расписанию
+7. **API token auth** — закрыть CR6-003
+8. **Party matching** — закрыть CR6-005
 
 ---
 
