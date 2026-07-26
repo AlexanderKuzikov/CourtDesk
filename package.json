@@ -31,6 +31,7 @@
   "type": "module",
   "scripts": {
     "start": "npx tsx packages/api/server.ts",
+    "tui": "npx tsx packages/tui/index.ts",
     "dev": "npx tsx --watch packages/api/server.ts",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -41,6 +42,8 @@
     "cheerio": "^1.0.0",
     "express": "^5.2.1",
     "iconv-lite": "^0.7.3",
+    "neo-blessed": "^0.2.0",
+    "neo-blessed-contrib": "^4.9.0",
     "pino": "^10.3.1",
     "puppeteer": "^25.3.0"
   },
