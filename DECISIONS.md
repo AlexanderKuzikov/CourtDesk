@@ -117,6 +117,48 @@ Trade-off: никакой персистентности — при переза
 
 ---
 
+## 2026-07-26: TUI — blessed вместо neo-blessed и самопала
+
+**Решение:** TUI создан на **blessed** v0.1.81. Не neo-blessed, не ANSI-самопал.
+
+**Обоснование:**
+
+**Почему не neo-blessed:**
+- neo-blessed — форк blessed с «исправлениями», но требует `node-pty` (системная зависимость на C++).
+- `node-pty` не собирается на Windows (ошибка `fake`: `process.stdout.isTTY = false` на Windows Terminal, плюс бинарные зависимости не компилируются).
+- neo-blessed на Linux работает, но Windows — primary dev-среда автора. Если TUI не работает на Windows, его нельзя тестировать.
+
+**Почему не самопал (ANSI-коды + process.stdin):**
+- Обработка клавиатуры в терминале — ад: RAW mode, CSI-последовательности (разная длина ESC-последовательностей на разных терминалах), `process.stdin.on('data')` — ненадёжно.
+- Скролл, выделение, фокус — всё нужно писать с нуля.
+- `screen.key()`, `list.on('select')`, `scrollbar`, `focus` из blessed — экономия ~1000 строк кода.
+
+**Почему blessed (а не termkit, ink, react-blessed):**
+- blessed — максимально лёгкий (zero system dependencies, чистый JS).
+- termkit — тяжелее, больше зависимостей, less stable на Windows.
+- ink / react-blessed — требуют React в рантайме, оверхед для 100-строчного TUI.
+
+**Trade-off:** blessed v0.1.81 не обновлялся с 2019 года. Баг с `tags: true` в `list` (issue #400) не исправлен. Но blessed — единственная библиотека терминального UI, которая работает на Windows без компиляции C++.
+
+## 2026-07-26: TUI — live-share сессия с пользователем для OBS-записи глюков
+
+**Решение:** Проведена live-share сессия (через VS Code Live Share) с пользователем на Windows для демонстрации и записи всех глюков TUI через OBS Studio.
+
+**Контекст:** TUI, созданный на blessed, на Linux работал, но на Windows — глючил. Нужно было:
+1. Задокументировать все глюки визуально.
+2. Понять, какие именно ошибки воспроизводятся на реальном Windows Terminal.
+3. Получить видео для потенциального баг-репорта в blessed.
+
+**Записано:**
+- Стрелки вверх/вниз не работают на Windows Terminal (но работают в ConEmu).
+- Теги `{bold}...{/bold}` в `header` отображаются как текст на Windows Terminal.
+- Русская раскладка: Enter не открывает карточку.
+- `screen.key(['enter'])` не срабатывает после переключения раскладки.
+
+**Вывод:** Windows Terminal имеет неполную совместимость с blessed (особенно в part of fullUnicode + CSI sequences). ConEmu работает лучше, но не идеально. Решение: документировать как known limitation, рекомендовать Linux/WSL для TUI.
+
+---
+
 ## Предыдущие решения (CR1–CR9)
 
 ### 2026-07-25: Grace period 90 дней для enforced дел (CR9)

@@ -3,7 +3,7 @@
 > Единый API-сервис для интеграции с CRM (1С) и параллельного Web UI.
 > Собирается из CourtSniffer (поиск), CourtFlow (мониторинг) и CourtDesk (intake).
 
-> **Обновлено 2026-07-24** по результатам CR6 (security, store integrity, UX).
+> **Обновлено 2026-07-26** по результатам CR6–CR9 + v0.5.0 (msudrf AJAX, TUI, eslint, pino, cron, party matching).
 
 ---
 
@@ -117,6 +117,11 @@ courtdesk/
 │   │   ├── notifications.ts # Уведомления + deleteNotificationsByCase
 │   │   └── json-store.ts  # Атомарная запись (tmp+rename, corrupt backup)
 │   │
+│   ├── tui/               # Терминальный интерфейс (blessed)
+│   │   ├── index.ts       # Точка входа
+│   │   ├── app.ts         # screen, list, detail, клавиши
+│   │   └── fetch.ts       # tuiFetch() с AbortController
+│   │
 │   └── api/               # Express-сервер
 │       ├── server.ts      # createApp() + CORS + graceful shutdown
 │       ├── routes/
@@ -203,10 +208,13 @@ Dashboard ──→ POST /api/parse/run { mode: 'full' }
 | `POST`| `/api/search/by-party` | Поиск по участникам |
 | `POST`| `/api/parse/url` | Парсинг карточки (assertCourtUrl) |
 | `POST`| `/api/parse/run` | Запуск прогона (202/409) |
+| `GET` | `/api/parse/progress` | Прогресс мониторинга |
 | `POST`| `/api/resolve` | Суд + номер → URL (builder) |
 | `GET` | `/api/courts` | Поиск судов |
 | `GET` | `/api/courts/:id` | Инфо о суде |
 | `POST`| `/api/intake` | Классификация текста |
+| `GET` | `/api/settings` | Настройки расписания |
+| `PUT` | `/api/settings` | Сохранить настройки |
 
 ### 6.2 Формат ответа
 ```typescript
@@ -285,8 +293,16 @@ waiting → monitoring → decision → enforced → archived
 - CR1–CR6 применены (70 замечаний закрыто)
 - Dashboard с управлением делами, search с мониторингом
 
-### Фаза 6: В работе
+### Фаза 6: v0.5.0 — выполнено ✅
+1. msudrf AJAX overhaul (полностью переписан) ✅
+2. TUI (blessed) — терминальный интерфейс ✅
+3. eslint + pino + cron — инфраструктура ✅
+4. Party matching (CR6-005) — закрыт ✅
+5. Синхронный парсинг, error counters, progress bar ✅
+6. UI: КАПС→капс, courtName, настройки расписания ✅
+
+### Фаза 7: План
 1. WebSocket / SSE — push-уведомления
-2. Пагинация при росте > 200 дел
+2. TUI — стабилизация на Windows
 3. API token auth (CR6-003)
-4. Party matching для waiting (CR6-005)
+4. Puppeteer browser pool (CR6-012)
