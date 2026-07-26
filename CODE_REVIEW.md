@@ -1,7 +1,7 @@
 # CODE REVIEW — CourtDesk
 
-> Consolidated: 2026-07-25
-> All 9 rounds of review with progress for each finding.
+> Consolidated: 2026-07-26
+> All 10 rounds of review with progress for each finding.
 
 ---
 
@@ -18,10 +18,11 @@
 | CR7 | 2026-07-25 | OpenCode Go | 10 | 9 fix + 1 doc | 0 |
 | CR8 | 2026-07-25 | OpenCode Go | 9 | 9 fix | 0 |
 | CR9 | 2026-07-25 | OpenCode Go | 10 | 10 fix | 0 |
-| **Итого** | | | **99** | **91 fix + 6 doc** | **2** |
+| CR10 | 2026-07-26 | Perplexity | 14 | 0 (pending) | 0 |
+| **Итого** | | | **113** | **91 fix + 6 doc** | **2** |
 | v0.5.0 | 2026-07-26 | — | — | **4 tech-debt закрыто** (eslint, pino, party matching, Node) | — |
 
-**Открытых критичных замечаний нет.** 4 tech-debt закрыты в v0.5.0 (CR5-009 eslint, CR5-011 pino, CR6-005 party matching, CR7-008 Node engine). Осталось 9 tech-debt + 3 OPEN TUI.
+**CR10 открыт.** 14 новых замечаний (1 CRITICAL, 4 HIGH, 6 MEDIUM, 3 LOW). Все касаются TUI и архитектуры. Ожидают исправления.
 
 | Метрика | Значение |
 |---------|----------|
@@ -34,39 +35,43 @@
 
 ---
 
-## CR1 — Первичное ревью (BUG-001..011) — ✅ Закрыт
+## CR10 — Perplexity TUI + Arch Audit (14 замечаний) — 2026-07-26
+
+**Статус:** OPEN. Все замечания требуют исправления.
+
+### TUI — packages/tui/app.ts
 
 | ID | Severity | Описание | Статус |
 |----|----------|----------|--------|
-| BUG-002 | CRITICAL | runNew() / fetchHtml('') | ✅ FIXED |
-| BUG-003 | HIGH | magistrate без captcha + CP1251 | ✅ FIXED |
-| BUG-004 | HIGH | PATCH без whitelist | ✅ FIXED |
-| BUG-006 | MEDIUM | deleteCase лишняя I/O | ✅ FIXED |
-| BUG-007 | MEDIUM | Node < 20.6 падает | ✅ FIXED |
-| BUG-008 | MEDIUM | runFull блокирует event loop | ✅ FIXED |
-| BUG-009 | MEDIUM | N×disk reads, нет cache | ✅ FIXED |
-| BUG-010 | LOW | CRLF endings | ✅ FIXED |
-| BUG-011 | LOW | Dynamic import iconv | ✅ FIXED |
-| BUG-001 | CRITICAL | Race condition | ✅ CLOSED (не воспр.) |
-| BUG-005 | HIGH | magistrate caseUrl | ✅ CLOSED (не воспр.) |
+| CR10-001 | CRITICAL | `blessed` dead-end: мёртвая библиотека (2015), blessed.list не рендерит `tags:true` (upstream bug #400), Windows ConPTY несовместимость. Единственный fix — миграция на `ink` или `@clack/prompts` | 🔴 OPEN |
+| CR10-002 | HIGH | `tags: true` в `blessed.list` не работает — весь error-display выводит raw `{red-fg}...{/red-fg}` как текст. Workaround до замены библиотеки: убрать все теги из `setItems()` | 🔴 OPEN |
+| CR10-003 | HIGH | `detail` не обновляется при авто-refresh: `render()` перерисовывает `list` под открытой карточкой, сама карточка устаревает. Нужен флаг `isDetailOpen` и отдельный path в `render()` | 🔴 OPEN |
+| CR10-004 | HIGH | Вкладка «ЗАПУСК» — заглушка: нет индикации запущенного прогона, нет `getProgress()`, нет обратной связи по F4/F5/F6. `runMode()` ждёт 1.5 сек hardcode и молча завершается | 🔴 OPEN |
+| CR10-005 | MEDIUM | Ширины колонок хардкодом (18, 12, 28, 24). `screen.width` не используется. На терминале <90 символов — wrap/overflow. Нужен `screen.on('resize', render)` + вычисляемые ширины | 🔴 OPEN |
+| CR10-006 | MEDIUM | Ручной ANSI `\x1b[?25l` конфликтует с `screen.program`: race condition состояния курсора. Нужно `screen.program.hideCursor()` / `screen.program.showCursor()` | 🔴 OPEN |
+| CR10-007 | MEDIUM | `setInterval(refresh, 60000)` без `clearInterval` при `screen.destroy()`. `tuiFetch` инициируется до проверки `destroyed = true` | 🔴 OPEN |
+| CR10-008 | MEDIUM | `any[]` вместо `WatchedCase[]` во всём TUI. `WatchedCase` существует в `core/types.ts` но не импортируется. Молчаливый breakage при изменении типа | 🔴 OPEN |
 
----
+### API — packages/api/
 
-## CR2 — Второе ревью (NEW-001..011) — ✅ Закрыт
+| ID | Severity | Описание | Статус |
+|----|----------|----------|--------|
+| CR10-009 | MEDIUM | Dynamic `import()` внутри hot-path request handler в `cases.ts` (`https`, `iconv-lite`, `captcha/session.js`). Антипаттерн — должны быть static imports наверху файла | 🔴 OPEN |
+| CR10-010 | MEDIUM | `POST /api/cases?parse=true` запускает Puppeteer синхронно в request handler без очереди и лимита. 10 параллельных запросов = 10 Chromium. Нужна очередь p-limit/bull | 🔴 OPEN |
 
-All 11 fixed in commit `cb120b2`.
+### Scheduler — packages/scheduler/cron.ts
 
----
+| ID | Severity | Описание | Статус |
+|----|----------|----------|--------|
+| CR10-011 | MEDIUM | `shouldRunFull` без `lastFullRunDate` guard: при задержке event loop тик может попасть в то же 5-минутное окно и запустить `runFull()` повторно | 🔴 OPEN |
+| CR10-012 | LOW | `_retryTimer` объявлен, очищается в `stopCron()`, но **нигде не присваивается**. Dead code, вводит в заблуждение | 🔴 OPEN |
 
-## CR3/CR4 — Perplexity-ревью (8+8) — ✅ Закрыт
+### Репозиторий / Инфраструктура
 
-CORS, shared fetchHtml, batch updateCase, graceful shutdown, persistent notifications, magistrate refactor, SEARCH_PARAMS constants.
-
----
-
-## CR5 — Perplexity-ревью (12 замечаний) — ✅ Закрыт
-
-Rate-delay, type safety, legalForceDate normalization, CORS, regex /iu, captcha retry, listCases multi-status, runFull guard, HOST env. 3 documented as trade-offs.
+| ID | Severity | Описание | Статус |
+|----|----------|----------|--------|
+| CR10-013 | LOW | `tui.log` и `tui-err.log` закоммичены в git (0 bytes сейчас, будут расти). Добавить в `.gitignore` | 🔴 OPEN |
+| CR10-014 | LOW | Monorepo без npm/pnpm workspaces: `blessed`, `puppeteer`, `express` — всё в одном `node_modules`. Нет изоляции зависимостей по пакетам | 🔴 OPEN |
 
 ---
 
@@ -77,13 +82,13 @@ Rate-delay, type safety, legalForceDate normalization, CORS, regex /iu, captcha 
 | ID | Severity | Описание | Статус |
 |----|----------|----------|--------|
 | CR9-001 | CRITICAL | `runFull` не обрабатывал `enforced` дела | ✅ FIXED |
-| CR9-002 | CRITICAL | `fetchHtml` в оркестраторе не детектил "Неверно указан проверочный код" | ✅ FIXED |
+| CR9-002 | CRITICAL | `fetchHtml` в оркестраторе не детектил «Неверно указан проверочный код» | ✅ FIXED |
 | CR9-003 | HIGH | Отсутствовала функция `findHigherCourt` | ✅ FIXED |
 | CR9-004 | HIGH | Не описана иерархия судов (MS→RS→OS→KJ) | ✅ FIXED |
 | CR9-005 | HIGH | Не задана привязка регионов к кассационным судам | ✅ FIXED |
 | CR9-006 | MEDIUM | MS→RS привязки не кэшировались на диск | ✅ FIXED |
 | CR9-007 | MEDIUM | `enforcedAt` не было в `WatchedCase` | ✅ FIXED |
-| CR9-008 | MEDIUM | `updateCase` не проставлял `enforcedAt` авто-матом | ✅ FIXED |
+| CR9-008 | MEDIUM | `updateCase` не проставлял `enforcedAt` автоматом | ✅ FIXED |
 | CR9-009 | LOW | Grace period 90 дней для `enforced` дел | ✅ FIXED |
 | CR9-010 | LOW | Поиск в вышестоящей инстанции по УИД через `searchByCaseUid` | ✅ FIXED |
 
@@ -155,15 +160,10 @@ Rate-delay, type safety, legalForceDate normalization, CORS, regex /iu, captcha 
 | UX-7 | CourtSniffer branding | ✅ FIXED → CourtDesk |
 | UX-8 | Test data in production UI | ✅ FIXED |
 
-### Cleaned up
-
-- Magistrate search adapter: dead `createMagistrateSession()` and `solveCaptchaOnPage()` removed
-- `GET /api/cases/:uid/events` — new endpoint for UI timeline
-
 ### Tech-debt (documented)
 
 | ID | Severity | Описание | Заметка |
-|----|----------|----------|---------|
+|----|----------|----------|---------| 
 | CR6-003 | CRITICAL | Zero authentication | COURTDESK_API_TOKEN в .env.example |
 | CR6-005 | HIGH | waiting → results[0] без матчинга | Нужен score/party matching |
 | CR6-010 | HIGH | TLS rejectUnauthorized: false | Trade-off для sudrf.ru wildcard |
@@ -175,3 +175,39 @@ Rate-delay, type safety, legalForceDate normalization, CORS, regex /iu, captcha 
 | CR6-018 | MEDIUM | captcha-debug not in .gitignore | Added |
 | CR6-019 | LOW | Version mismatch | ✅ FIXED (0.4.0) |
 | CR6-020 | LOW | Intention vs Classification types | Tech-debt |
+
+---
+
+## CR1 — Первичное ревью (BUG-001..011) — ✅ Закрыт
+
+| ID | Severity | Описание | Статус |
+|----|----------|----------|--------|
+| BUG-002 | CRITICAL | runNew() / fetchHtml('') | ✅ FIXED |
+| BUG-003 | HIGH | magistrate без captcha + CP1251 | ✅ FIXED |
+| BUG-004 | HIGH | PATCH без whitelist | ✅ FIXED |
+| BUG-006 | MEDIUM | deleteCase лишняя I/O | ✅ FIXED |
+| BUG-007 | MEDIUM | Node < 20.6 падает | ✅ FIXED |
+| BUG-008 | MEDIUM | runFull блокирует event loop | ✅ FIXED |
+| BUG-009 | MEDIUM | N×disk reads, нет cache | ✅ FIXED |
+| BUG-010 | LOW | CRLF endings | ✅ FIXED |
+| BUG-011 | LOW | Dynamic import iconv | ✅ FIXED |
+| BUG-001 | CRITICAL | Race condition | ✅ CLOSED (не воспр.) |
+| BUG-005 | HIGH | magistrate caseUrl | ✅ CLOSED (не воспр.) |
+
+---
+
+## CR2 — Второе ревью (NEW-001..011) — ✅ Закрыт
+
+All 11 fixed in commit `cb120b2`.
+
+---
+
+## CR3/CR4 — Perplexity-ревью (8+8) — ✅ Закрыт
+
+CORS, shared fetchHtml, batch updateCase, graceful shutdown, persistent notifications, magistrate refactor, SEARCH_PARAMS constants.
+
+---
+
+## CR5 — Perplexity-ревью (12 замечаний) — ✅ Закрыт
+
+Rate-delay, type safety, legalForceDate normalization, CORS, regex /iu, captcha retry, listCases multi-status, runFull guard, HOST env. 3 documented as trade-offs.
