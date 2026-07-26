@@ -35,6 +35,8 @@ function makeCase(overrides: Partial<WatchedCase> = {}): WatchedCase {
     lastChecked: null,
     createdAt: '2026-07-21T10:00:00.000Z',
     updatedAt: '2026-07-21T10:00:00.000Z',
+    errorCount: 0,
+    lastError: null,
     ...overrides,
   };
 }

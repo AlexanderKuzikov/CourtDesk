@@ -272,16 +272,24 @@ export async function fetchMsudrfSearch(options: {
 
     // Шаг 1: открываем форму поиска (покажет kcaptchaForm)
     await page.goto(options.formUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
-    let html = await page.content();
 
-    // Шаг 2: решаем капчу, если есть
-    if (html.includes('kcaptchaForm')) {
-      const client = new RuCaptchaClient({ apiKey: options.apiKey });
+    // Шаг 2: решаем капчу с retry (как fetchWithCaptcha)
+    const client = new RuCaptchaClient({ apiKey: options.apiKey });
+    const MAX_TRIES = 3;
+
+    for (let attempt = 1; attempt <= MAX_TRIES; attempt++) {
+      let pageHtml = await page.content();
+
+      // Если капчи нет — выходим из цикла
+      if (!pageHtml.includes('kcaptchaForm')) break;
+
+      // Читаем капчу
       const src = await page.$eval(
         'form#kcaptchaForm img',
         (img: HTMLImageElement) => img.getAttribute('src') || '',
       );
       if (!src) throw new Error('Captcha image src not found');
+
       const imageBase64 = await page.evaluate(async (imgSrc: string) => {
         const res = await fetch(imgSrc, { credentials: 'include' });
         if (!res.ok) throw new Error(`Captcha image fetch failed: HTTP ${res.status}`);
@@ -294,21 +302,26 @@ export async function fetchMsudrfSearch(options: {
 
       const captchaText = await client.solveImage(imageBase64);
 
+      // Заполняем капчу и отправляем
       await page.locator('input[name="captcha-response"]').fill(captchaText);
-      await page.locator('form#kcaptchaForm button[type="submit"]').click();
 
-      // Ждём загрузки формы поиска (kcaptchaForm исчезла)
-      try {
-        await page.waitForFunction(() => {
-          const body = document.body?.innerHTML || '';
-          return body.includes('bookmark-content') && !body.includes('kcaptchaForm');
-        }, { timeout: 30000 });
-      } catch {
-        const after = await page.content();
-        if (isCaptchaPage(after)) {
-          throw new Error('Captcha loop: капча не решена после 1 попытки');
-        }
-      }
+      // Ждём navigation/network после submit (POST → новая страница)
+      await Promise.all([
+        page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {}),
+        page.locator('form#kcaptchaForm button[type="submit"]').click(),
+      ]);
+    }
+
+    // Проверяем, решена ли капча после всех попыток
+    const afterCaptcha = await page.content();
+    if (afterCaptcha.includes('kcaptchaForm')) {
+      throw new Error('Captcha loop: капча не решена после ' + MAX_TRIES + ' попыток');
+    }
+
+    // Сохраняем состояние формы после капчи для отладки
+    if (options.debugDir) {
+      ensureDir(options.debugDir);
+      writeFileSync(resolve(options.debugDir, 'msudrf-form.html'), await page.content(), 'utf-8');
     }
 
     // Шаг 3: заполняем поля поиска
@@ -318,7 +331,7 @@ export async function fetchMsudrfSearch(options: {
       }
     }
 
-    // Шаг 4: кликаем «Искать»
+    // Шаг 4: кликаем «Искать» (AJAX)
     await page.locator('input.button-normal.search').click();
 
     // Шаг 5: ждём появления результатов
@@ -326,8 +339,12 @@ export async function fetchMsudrfSearch(options: {
       await page.waitForFunction(() => {
         const el = document.querySelector('#search_results');
         if (!el) return false;
-        const style = window.getComputedStyle(el);
-        return style.display !== 'none' && el.innerHTML.trim().length > 0;
+        try {
+          const style = window.getComputedStyle(el);
+          return style.display !== 'none' && el.innerHTML.trim().length > 0;
+        } catch {
+          return el.innerHTML.trim().length > 0;
+        }
       }, { timeout: 30000 });
     } catch {
       // Таймаут — возможно результатов нет
@@ -341,9 +358,10 @@ export async function fetchMsudrfSearch(options: {
     if (options.debugDir) {
       ensureDir(options.debugDir);
       writeFileSync(resolve(options.debugDir, 'msudrf-results.html'), resultsHtml, 'utf-8');
+      writeFileSync(resolve(options.debugDir, 'msudrf-page.html'), await page.content(), 'utf-8');
     }
 
-    return resultsHtml || html;
+    return resultsHtml || (await page.content());
   } finally {
     await browser.close().catch(() => {});
   }

@@ -1,7 +1,9 @@
 import { Router, type Request, type Response } from 'express';
-import { getCase, listCases, addCase, updateCase, deleteCase, getStats, deleteNotificationsByCase, deleteCard, getCard } from '../../store/index.js';
+import { getCase, listCases, addCase, updateCase, deleteCase, getStats, deleteNotificationsByCase, deleteCard, getCard, saveCard } from '../../store/index.js';
 import { addEvent as addHistoryEvent, getEvents as getCaseEvents, clearEvents } from '../../store/events.js';
-import { findCourtByCodeOrSubdomain } from '../../core/index.js';
+import { findCourtByCodeOrSubdomain, getRuCaptchaKey } from '../../core/index.js';
+import { getParseAdapter } from '../../parse/index.js';
+import { isCaptchaPage } from '../../core/errors.js';
 import type { WatchedCase, CaseStatus } from '../../core/types.js';
 
 const router = Router();
@@ -22,6 +24,7 @@ function strQuery(v: unknown): string | undefined {
 // uid, createdAt, courtId, courtType — неизменяемы.
 const PATCH_ALLOWED = new Set<keyof WatchedCase>([
   'status', 'result', 'legalForceDate', 'legalForceNotified', 'userId', 'url',
+  'errorCount', 'lastError',
 ]);
 
 // Список дел
@@ -59,25 +62,66 @@ router.get('/api/cases/:uid', (req: Request, res: Response) => {
 });
 
 // Добавить дело в мониторинг
-router.post('/api/cases', (req: Request, res: Response) => {
+router.post('/api/cases', async (req: Request, res: Response) => {
   try {
     const { url, courtId, courtCode, courtType, caseNumber, caseUid, userId } = req.body ?? {};
     if (!url || !courtId || !courtType || !caseNumber) {
       return fail(res, 'BAD_REQUEST', 'url, courtId, courtType, caseNumber обязательны');
     }
+    const uid = crypto.randomUUID();
+    const now = new Date().toISOString();
     const c: WatchedCase = {
-      uid: crypto.randomUUID(), url,
+      uid, url,
       courtId, courtCode: courtCode ?? courtId, courtType,
       number: caseNumber, caseUid: caseUid ?? null, status: 'monitoring',
       result: null, legalForceDate: null, legalForceNotified: false,
       enforcedAt: null, userId: userId ?? null, lastChecked: null,
-      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      createdAt: now, updatedAt: now,
+      errorCount: 0, lastError: null,
     };
     addCase(c);
     addHistoryEvent(c.uid, {
       uid: crypto.randomUUID(), caseUid: c.uid, type: 'added',
-      message: 'Добавлено в мониторинг', data: {}, createdAt: c.createdAt,
+      message: 'Добавлено в мониторинг', data: {}, createdAt: now,
     });
+
+    // Синхронный парсинг при ?parse=true
+    if (req.query['parse'] === 'true' || req.body?.parse) {
+      try {
+        const adapter = getParseAdapter(courtType);
+        let html = '';
+        const apiKey = getRuCaptchaKey();
+        // Пробуем fetch, при капче — Puppeteer
+        try {
+          const https = await import('https');
+          const iconv = await import('iconv-lite');
+          html = await new Promise<string>((resolve, reject) => {
+            https.default.get(url, { rejectUnauthorized: false, timeout: 60000, headers: { 'User-Agent': 'CourtDesk/0.1' } }, (res: any) => {
+              const chunks: Buffer[] = [];
+              res.on('data', (c: Buffer) => chunks.push(c));
+              res.on('end', () => {
+                resolve(iconv.default.decode(Buffer.concat(chunks), 'win1251'));
+              });
+            }).on('error', reject);
+          });
+        } catch { /* fall through */ }
+        if (!html || isCaptchaPage(html)) {
+          if (!apiKey) throw new Error('Требуется RuCaptcha для капчи');
+          const { fetchWithCaptcha } = await import('../../captcha/session.js');
+          html = await fetchWithCaptcha({ url, apiKey });
+        }
+        const card = await adapter.parse(html, url);
+        saveCard(uid, card);
+        // Обновляем caseUid из карточки
+        if (card.identifiers?.case_uid) updateCase(uid, { caseUid: card.identifiers.case_uid });
+        return ok(res, { ...c, card });
+      } catch (parseErr) {
+        console.error('[cases/add] parse error:', parseErr);
+        // Не фатально — дело уже добавлено в мониторинг
+        return ok(res, { ...c, parseError: errMsg(parseErr) });
+      }
+    }
+
     ok(res, c);
   } catch (e) { fail(res, 'STORE_ERROR', 'Ошибка добавления: ' + errMsg(e), 500); }
 });
@@ -96,6 +140,7 @@ router.post('/api/cases/wait', (req: Request, res: Response) => {
       result: null, legalForceDate: null, legalForceNotified: false,
       enforcedAt: null, userId: userId ?? null, lastChecked: null,
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      errorCount: 0, lastError: null,
     };
     addCase(c);
     addHistoryEvent(c.uid, {

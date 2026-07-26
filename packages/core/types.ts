@@ -124,6 +124,8 @@ export interface WatchedCase {
   lastChecked: string | null; // ISO
   createdAt: string;          // ISO
   updatedAt: string;          // ISO
+  errorCount: number;         // сколько раз подряд ошибка (сбрасывается при успехе)
+  lastError: string | null;   // последнее сообщение об ошибке
 }
 
 export interface CaseHistoryEvent {

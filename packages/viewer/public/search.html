@@ -30,6 +30,8 @@
     .monitor-btn { padding: 3px 10px; font-size: 11px; border: none; border-radius: 5px; cursor: pointer; background: var(--primary-bg); color: var(--primary); font-weight: 600; }
     .monitor-btn:hover { opacity: .8; }
     .monitor-btn.added { background: var(--success-bg); color: var(--success); cursor: default; }
+    .scan-bar { display: flex; align-items: center; gap: 10px; padding: 10px 16px; background: var(--primary-bg); border-radius: 8px; margin-bottom: 16px; font-size: 13px; color: var(--primary); }
+    .scan-bar .spinner { flex-shrink: 0; }
     .detail-card .case-num { font-size: 12px; color: var(--text-dim); margin-bottom: 16px; word-break: break-all; }
   </style>
 </head>
@@ -93,6 +95,10 @@
 
   <div class="main">
     <div id="resultInfo" class="result-count"></div>
+    <div class="scan-bar" id="scanBar" style="display:none">
+      <span class="spinner"></span>
+      <span id="scanStatus">Поиск...</span>
+    </div>
     <div class="results" id="resultsTable"></div>
     <div class="empty" id="emptyState">
       <h3>🔍 Поиск судебных дел</h3>
@@ -169,25 +175,29 @@ async function doSearch() {
   if (!courtCode) { showToast('Укажите код суда', 'error'); return; }
 
   const btn = document.getElementById('searchBtn');
+  const scanBar = document.getElementById('scanBar');
+  const scanStatus = document.getElementById('scanStatus');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Поиск…';
   document.getElementById('emptyState').style.display = 'none';
+  scanBar.style.display = 'flex';
+  scanStatus.textContent = 'Поиск...';
 
   try {
     let body, url;
     if (mode === 'case') {
       const num = document.getElementById('caseNumber').value.trim();
-      if (!num) { showToast('Введите номер дела', 'error'); btn.disabled = false; btn.innerHTML = '🔍 Найти'; return; }
+      if (!num) { showToast('Введите номер дела', 'error'); scanBar.style.display = 'none'; btn.disabled = false; btn.innerHTML = '🔍 Найти'; return; }
       body = { courtId: courtCode, caseNumber: num };
       url = '/api/search/by-number';
     } else if (mode === 'uid') {
       const uidVal = document.getElementById('caseUid').value.trim();
-      if (!uidVal) { showToast('Введите УИД', 'error'); btn.disabled = false; btn.innerHTML = '🔍 Найти'; return; }
+      if (!uidVal) { showToast('Введите УИД', 'error'); scanBar.style.display = 'none'; btn.disabled = false; btn.innerHTML = '🔍 Найти'; return; }
       body = { courtId: courtCode, caseUid: uidVal };
       url = '/api/search/by-case-uid';
     } else {
       const def = document.getElementById('defendant').value.trim();
-      if (!def) { showToast('Введите ФИО или название', 'error'); btn.disabled = false; btn.innerHTML = '🔍 Найти'; return; }
+      if (!def) { showToast('Введите ФИО или название', 'error'); scanBar.style.display = 'none'; btn.disabled = false; btn.innerHTML = '🔍 Найти'; return; }
       const from = document.getElementById('dateFrom').value;
       const to = document.getElementById('dateTo').value;
       body = { courtId: courtCode, defendant: def, from: from || undefined, to: to || undefined };
@@ -202,6 +212,7 @@ async function doSearch() {
   } catch (err) {
     document.getElementById('resultsTable').innerHTML = `<div class="empty"><h3>❌ Ошибка</h3><p>${esc(err.message)}</p></div>`;
   }
+  scanBar.style.display = 'none';
   btn.disabled = false;
   btn.innerHTML = '🔍 Найти';
 }
@@ -250,7 +261,7 @@ async function addToMonitor(idx) {
   const btn = document.querySelector(`.monitor-btn[data-idx="${idx}"]`);
   if (btn && btn.classList.contains('added')) return;
   try {
-    const res = await fetch('/api/cases', {
+    const res = await fetch('/api/cases?parse=true', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body:JSON.stringify({ url:r.caseUrl, courtId:r.courtId, courtCode:r.courtCode||r.courtId, courtType:r.courtType, caseNumber:r.caseNumber }),
     });
@@ -258,6 +269,8 @@ async function addToMonitor(idx) {
     if (!res.ok) throw new Error(json.error || 'Ошибка');
     showToast(`Дело ${r.caseNumber} добавлено в мониторинг`, 'success');
     if (btn) { btn.textContent = '✓'; btn.classList.add('added'); }
+    // Если пришла карточка — показываем сразу
+    if (json.data?.card) openDetail(allResults.indexOf(r));
   } catch (err) { showToast(err.message, 'error'); }
 }
 

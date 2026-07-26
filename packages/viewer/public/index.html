@@ -19,7 +19,9 @@
     .toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 8px; }
     .toolbar .actions { display: flex; gap: 8px; align-items: center; }
     .toolbar input[type="search"] { width: 220px; margin-bottom: 0; padding: 5px 10px; }
-    .action-btns { display: flex; gap: 4px; }
+    #casesTable td:last-child, .action-btns { vertical-align: middle; }
+    .action-btns { white-space: nowrap; }
+    .action-btns .icon-btn { display: inline-block; vertical-align: middle; }
     .icon-btn { padding: 3px 6px; border: none; border-radius: 4px; cursor: pointer; background: transparent; color: var(--text-dim); font-size: 14px; }
     .icon-btn:hover { background: var(--surface-2); color: var(--text); }
     .icon-btn.danger:hover { color: var(--danger); }
@@ -45,6 +47,9 @@
     .detail-card .ev-type { font-size: 12px; font-weight: 600; color: var(--primary); }
     .detail-card .ev-msg { font-size: 13px; color: var(--text); margin-top: 2px; }
     .detail-card .ev-time { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+    .scan-bar { display: none; align-items: center; gap: 10px; padding: 10px 16px; background: var(--primary-bg); border-radius: 8px; margin-bottom: 16px; font-size: 13px; color: var(--primary); }
+    .scan-bar.show { display: flex; }
+    .scan-bar .spinner { flex-shrink: 0; }
     @media (max-width: 640px) { .counters { grid-template-columns: repeat(2, 1fr); } .toolbar input[type="search"] { width: 100%; } }
   </style>
 </head>
@@ -59,6 +64,11 @@
 </header>
 <div class="container">
   <div class="counters" id="counters"></div>
+
+  <div class="scan-bar" id="scanBar">
+    <span class="spinner"></span>
+    <span id="scanStatus">Мониторинг...</span>
+  </div>
 
   <div class="toolbar">
     <div class="filter-tabs" id="filterTabs">
@@ -75,6 +85,7 @@
       <button class="btn btn-primary btn-sm" onclick="runMonitor()" id="runBtn">▶ Мониторинг</button>
       <a href="/search.html" class="btn btn-primary btn-sm">+ Дело</a>
       <button class="btn btn-secondary btn-sm" onclick="loadDashboard()" title="Обновить">🔄</button>
+      <button class="btn btn-secondary btn-sm" onclick="openSettings()" title="Настройки">⚙️</button>
     </div>
   </div>
 
@@ -98,6 +109,32 @@
 </div>
 
 <div class="toast" id="toast"></div>
+
+<div class="detail" id="settingsOverlay" onclick="if(event.target===this)closeSettings()">
+  <div class="detail-card" style="max-width:420px">
+    <button class="close-btn" onclick="closeSettings()">&times;</button>
+    <h2 style="margin-bottom:16px">⚙️ Настройки мониторинга</h2>
+    <div style="font-size:13px">
+      <label style="display:block;margin-bottom:4px;color:var(--text-muted)">Время полного прогона</label>
+      <input id="setScheduleFull" type="time" style="width:100%;margin-bottom:12px;padding:6px 10px">
+
+      <label style="display:block;margin-bottom:4px;color:var(--text-muted)">Retry каждые (часов)</label>
+      <input id="setRetryInterval" type="number" min="1" max="24" style="width:100%;margin-bottom:12px;padding:6px 10px">
+
+      <label style="display:block;margin-bottom:4px;color:var(--text-muted)">Stale-дела старше (часов)</label>
+      <input id="setRetryStale" type="number" min="1" max="168" style="width:100%;margin-bottom:12px;padding:6px 10px">
+
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:16px;cursor:pointer">
+        <input id="setEnabled" type="checkbox"> Автоматический мониторинг
+      </label>
+
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary btn-sm" onclick="saveSettings()" style="flex:1">Сохранить</button>
+        <button class="btn btn-secondary btn-sm" onclick="closeSettings()">Отмена</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script src="/app.js"></script>
 <script>
@@ -368,19 +405,59 @@ async function deleteCase(uid) {
 
 async function runMonitor() {
   const btn = document.getElementById('runBtn');
+  const scanBar = document.getElementById('scanBar');
+  const scanStatus = document.getElementById('scanStatus');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Запущен...';
   try {
     const res = await fetch('/api/parse/run', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({mode:'full'}) });
     const json = await res.json();
-    if (res.status === 409) { showToast('Прогон уже выполняется', 'error'); }
-    else if (!res.ok) { throw new Error(json.error || 'Ошибка'); }
-    else {
+    if (res.status === 409) {
+      showToast('Прогон уже выполняется', 'error');
+      scanBar.classList.add('show');
+      scanStatus.textContent = 'Мониторинг уже выполняется...';
+      // Пытаемся слушать прогресс текущего прогона
+      const poll = setInterval(async () => {
+        try {
+          const p = await (await fetch('/api/parse/progress')).json();
+          const d = p.data || {};
+          if (d.total > 0) scanStatus.textContent = `Мониторинг: ${d.processed}/${d.total} (ошибок: ${d.errors})`;
+          if (!d.running) { clearInterval(poll); scanBar.classList.remove('show'); }
+        } catch {}
+      }, 5000);
+      setTimeout(() => clearInterval(poll), 120000);
+    } else if (!res.ok) {
+      throw new Error(json.error || 'Ошибка');
+    } else {
       showToast('Мониторинг запущен', 'success');
+      scanBar.classList.add('show');
+      scanStatus.textContent = 'Мониторинг...';
       let polls = 0;
-      const poll = setInterval(() => { loadDashboard(); if (++polls > 24) { clearInterval(poll); } }, 5000);
+      const poll = setInterval(async () => {
+        await loadDashboard();
+        // Обновляем прогресс
+        try {
+          const p = await (await fetch('/api/parse/progress')).json();
+          const d = p.data || {};
+          if (d.total > 0) {
+            scanStatus.textContent = `Мониторинг: ${d.processed}/${d.total} (ошибок: ${d.errors})`;
+          }
+          if (!d.running) {
+            clearInterval(poll);
+            scanBar.classList.remove('show');
+            if (d.total > 0) showToast(`Мониторинг завершён: ${d.processed - d.errors} OK, ${d.errors} ошибок`, d.errors > 0 ? 'error' : 'success');
+          }
+        } catch {}
+        if (++polls > 48) {
+          clearInterval(poll);
+          scanBar.classList.remove('show');
+        }
+      }, 5000);
     }
-  } catch (err) { showToast(err.message, 'error'); }
+  } catch (err) {
+    showToast(err.message, 'error');
+    scanBar.classList.remove('show');
+  }
   setTimeout(() => { btn.disabled = false; btn.innerHTML = '▶ Мониторинг'; }, 5000);
 }
 
@@ -394,6 +471,35 @@ async function markAllRead() {
     if (unread.length) showToast('Все уведомления отмечены', 'success');
     loadDashboard();
   } catch { showToast('Ошибка', 'error'); }
+}
+
+// --- Настройки ---
+async function openSettings() {
+  try {
+    const r = await fetch('/api/settings');
+    const json = await r.json();
+    const s = json.data || {};
+    document.getElementById('setScheduleFull').value = s.scheduleFull || '03:00';
+    document.getElementById('setRetryInterval').value = s.retryIntervalHours ?? 3;
+    document.getElementById('setRetryStale').value = s.retryStaleHours ?? 6;
+    document.getElementById('setEnabled').checked = s.scheduleEnabled !== false;
+    document.getElementById('settingsOverlay').classList.add('open');
+  } catch { showToast('Ошибка загрузки настроек', 'error'); }
+}
+function closeSettings() { document.getElementById('settingsOverlay').classList.remove('open'); }
+async function saveSettings() {
+  try {
+    const body = {
+      scheduleFull: document.getElementById('setScheduleFull').value,
+      retryIntervalHours: parseInt(document.getElementById('setRetryInterval').value) || 3,
+      retryStaleHours: parseInt(document.getElementById('setRetryStale').value) || 6,
+      scheduleEnabled: document.getElementById('setEnabled').checked,
+    };
+    const r = await fetch('/api/settings', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+    if (!r.ok) throw new Error();
+    showToast('Настройки сохранены', 'success');
+    closeSettings();
+  } catch { showToast('Ошибка сохранения', 'error'); }
 }
 
 loadDashboard();

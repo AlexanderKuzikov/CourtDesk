@@ -22,3 +22,5 @@ export {
   encodeParam,
 } from './encoding.js';
 export { assertCourtUrl, CourtUrlError, isCaptchaPage } from './errors.js';
+export { getProgress, setProgress, resetProgress } from './progress.js';
+export type { ScanProgress } from './progress.js';

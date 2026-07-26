@@ -33,8 +33,9 @@ function buildFields(req: SearchRequest): Record<string, string> {
 
 /**
  * Парсинг таблицы результатов msudrf.
- * HTML — фрагмент из #search_results (таблица поиска ГАС «Правосудие»).
- * Колонки: № дела | Дата поступления | Категория | Судья | Дата решения | Результат | Вступление в силу
+ * HTML — фрагмент из #search_results.
+ * Колонки msudrf: № дела | Категория/Лица | Судья | Дата решения | Решение
+ * (отличается от sudrf, где 7 колонок с датой поступления и вступлением)
  */
 function parseResults(html: string, req: SearchRequest): SearchResult[] {
   const $ = cheerio.load(html);
@@ -45,22 +46,31 @@ function parseResults(html: string, req: SearchRequest): SearchResult[] {
 
   table.find('tr').slice(1).each((_, row) => {
     const cells = $(row).find('td');
-    if (cells.length < 5) return;
+    if (cells.length < 4) return;
     const link = cells.eq(0).find('a');
     const href = link.attr('href') || '';
     const num = link.text().trim().split(/\s+/)[0] || '';
-    const uidMatch = href.match(/case_uid=([a-f0-9-]+)/i);
+    const caseIdMatch = href.match(/case_id=(\d+)/i);
+    const partiesText = cells.eq(1).text().trim();
+    // Извлекаем истца/ответчика из колонки «Категория/Лица»
+    // Формат: "КАТЕГОРИЯ: ... ИСТЕЦ: ... ОТВЕТЧИК: ..." (разделители <br> в HTML, cheerio даёт пробелы)
+    const parties: { role: string; name: string }[] = [];
+    const istetsMatch = partiesText.match(/ИСТЕЦ:\s*(.+?)(?:\s+ОТВЕТЧИК:|$)/i);
+    const otvetchikMatch = partiesText.match(/ОТВЕТЧИК:\s*(.+?)$/i);
+    if (istetsMatch) parties.push({ role: 'Истец', name: istetsMatch[1].trim() });
+    if (otvetchikMatch) parties.push({ role: 'Ответчик', name: otvetchikMatch[1].trim() });
+
     results.push({
       caseNumber: num,
       caseUrl: href.startsWith('http') ? href : `https://${req.courtId}.msudrf.ru${href}`,
-      uid: uidMatch ? uidMatch[1] : '',
+      uid: caseIdMatch ? caseIdMatch[1] : '',
       courtCode: req.courtCode,
-      judge: cells.eq(3).text().trim() || null,
-      result: cells.eq(5).text().trim() || null,
-      legalForceDate: cells.eq(6).text().trim() || null,
-      filingDate: cells.eq(1).text().trim() || null,
-      decisionDate: cells.eq(4).text().trim() || null,
-      parties: [],
+      judge: cells.eq(2).text().trim() || null,
+      result: cells.eq(4).text().trim() || null,
+      legalForceDate: null,
+      filingDate: null,
+      decisionDate: cells.eq(3).text().trim() || null,
+      parties,
       courtId: req.courtId,
       courtType: 'magistrate',
     });

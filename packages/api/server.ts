@@ -10,6 +10,7 @@ import intakeRouter from './routes/intake.js';
 import statusRouter from './routes/status.js';
 import notificationsRouter from './routes/notifications.js';
 import resolveRouter from './routes/resolve.js';
+import settingsRouter from './routes/settings.js';
 import { errorHandler } from './middleware/error.js';
 import { logRequest } from '../core/logger.js';
 
@@ -47,6 +48,7 @@ export function createApp() {
   app.use(statusRouter);
   app.use(notificationsRouter);
   app.use(resolveRouter);
+  app.use(settingsRouter);
   app.use(express.static(PUBLIC_DIR));
   app.use(errorHandler);
   return app;
@@ -72,6 +74,8 @@ function gracefulShutdown(signal: string) {
 
 const server = app.listen(PORT, HOST, () => {
   console.log(`[courtdesk] API: http://${HOST}:${PORT}`);
+  // Автозапуск планировщика
+  import('../scheduler/cron.js').then(({ startCron }) => startCron()).catch(() => {});
 });
 
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));

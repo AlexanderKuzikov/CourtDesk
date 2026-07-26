@@ -1,11 +1,13 @@
 // Оркестратор мониторинга
+import https from 'https';
 import iconv from 'iconv-lite'; // статический импорт — BUG-011
 import { listCases, updateCase, addEvent, getCase, getEvents, addNotification, saveCard } from '../store/index.js';
 import { getParseAdapter } from '../parse/index.js';
 import { getSearchAdapter } from '../search/index.js';
 import { assertCourtUrl, CourtUrlError, isCaptchaPage } from '../core/errors.js';
 import { getRuCaptchaKey } from '../core/config.js';
-import { findHigherCourt, findRsCandidatesForMs, saveMsToRsMapping, extractRegion } from '../core/index.js';
+import { findHigherCourt, findRsCandidatesForMs, saveMsToRsMapping, extractRegion, setProgress } from '../core/index.js';
+import { getSettings } from '../store/settings.js';
 import type { WatchedCase, CaseHistoryEvent, Notification } from '../core/types.js';
 
 const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000;
@@ -18,7 +20,8 @@ function now(): string {
 
 function isStale(c: WatchedCase): boolean {
   if (!c.lastChecked) return true;
-  return Date.now() - new Date(c.lastChecked).getTime() > STALE_THRESHOLD_MS;
+  const thresholdMs = (getSettings().retryStaleHours || 24) * 60 * 60 * 1000;
+  return Date.now() - new Date(c.lastChecked).getTime() > thresholdMs;
 }
 
 // NEW-001 FIXED: caseUid передаётся первым параметром
@@ -62,6 +65,7 @@ export async function runNew(): Promise<{ ok: number; fail: number }> {
 async function processBatch(cases: WatchedCase[]): Promise<{ ok: number; fail: number }> {
   let ok = 0;
   let fail = 0;
+  setProgress({ total: cases.length });
   for (let i = 0; i < cases.length; i++) {
     const c = cases[i]!;
     try {
@@ -76,9 +80,14 @@ async function processBatch(cases: WatchedCase[]): Promise<{ ok: number; fail: n
         addEvent(c.uid, makeEvent(c.uid, 'archived', 'Заархивировано: URL не принадлежит судовой системе РФ'));
       } else {
         console.error(`[scheduler] fail ${c.uid} (${c.number}):`, err);
-        updateCase(c.uid, { status: 'error', lastChecked: now() });
+        updateCase(c.uid, {
+          status: 'error', lastChecked: now(),
+          errorCount: (c.errorCount ?? 0) + 1,
+          lastError: err instanceof Error ? err.message.slice(0, 200) : 'Unknown error',
+        });
       }
     }
+    setProgress({ processed: ok + fail, errors: fail });
     // RATE-001: пауза между запросами (не после последнего)
     if (i < cases.length - 1) await sleep(RATE_DELAY_MS);
   }
@@ -178,6 +187,8 @@ async function processOne(c: WatchedCase): Promise<void> {
 
   if (prev.status === 'error') {
     updates.status = 'monitoring';
+    updates.errorCount = 0;
+    updates.lastError = null;
   }
 
   // Проверка изменения результата
@@ -283,20 +294,30 @@ async function processOne(c: WatchedCase): Promise<void> {
 
 async function fetchHtml(url: string): Promise<string> {
   assertCourtUrl(url);
-  const res = await fetch(url, {
-    headers: { 'User-Agent': 'CourtDesk/0.1' },
-    signal: AbortSignal.timeout(60000),
+  const parsed = new URL(url);
+  const html = await new Promise<string>((resolve, reject) => {
+    https.get(url, {
+      rejectUnauthorized: false,
+      timeout: 120000,
+      headers: { 'User-Agent': 'CourtDesk/0.1' },
+    }, res => {
+      if (res.statusCode && res.statusCode >= 400) {
+        reject(new Error(`HTTP ${res.statusCode} — sudrf.ru временно недоступен`));
+        return;
+      }
+      const chunks: Buffer[] = [];
+      const ct = res.headers['content-type'] ?? '';
+      const cs = ct.match(/charset=([\w-]+)/i);
+      const encoding = (cs && cs[1]?.toLowerCase() === 'utf-8') ? 'utf8' : 'win1251';
+      res.on('data', (c: Buffer) => chunks.push(c));
+      res.on('end', () => {
+        try { resolve(iconv.decode(Buffer.concat(chunks), encoding)); }
+        catch { resolve(Buffer.concat(chunks).toString('utf8')); }
+      });
+    }).on('error', (err: Error) => {
+      reject(new Error(`Ошибка соединения с sudrf.ru: ${err.message}`));
+    }).on('timeout', function (this: any) { this.destroy(); reject(new Error('sudrf.ru временно недоступен (таймаут). Попробуйте позже.')); });
   });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const ct = res.headers.get('content-type') ?? '';
-  const charset = ct.includes('charset=utf-8') || ct.includes('charset=UTF-8') ? 'utf8' : 'win1251';
-  let html: string;
-  if (charset === 'utf8') {
-    html = await res.text();
-  } else {
-    const buf = await res.arrayBuffer();
-    html = iconv.decode(Buffer.from(buf), 'win1251');
-  }
 
   // Если капча или её ошибка — решаем через Puppeteer
   const NEEDS_CAPTCHA = 'Неверно указан проверочный код';
@@ -304,7 +325,7 @@ async function fetchHtml(url: string): Promise<string> {
     const apiKey = getRuCaptchaKey();
     if (apiKey) {
       const { fetchWithCaptcha } = await import('../captcha/session.js');
-      html = await fetchWithCaptcha({ url, apiKey });
+      return fetchWithCaptcha({ url, apiKey });
     }
   }
 

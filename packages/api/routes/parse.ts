@@ -7,6 +7,7 @@ import { getRuCaptchaKey } from '../../core/config.js';
 import { assertCourtUrl, isCaptchaPage } from '../../core/errors.js';
 import { runFull, runRetry, runNew } from '../../scheduler/index.js';
 import { saveCard } from '../../store/index.js';
+import { getProgress, setProgress, resetProgress } from '../../core/index.js';
 
 const router = Router();
 
@@ -94,18 +95,27 @@ router.post('/api/parse/run', (req: Request, res: Response) => {
   }
 
   _isRunning = true;
+  resetProgress();
+  setProgress({ running: true });
   res.status(202).json({ success: true, data: { status: 'started', mode: mode ?? 'full' } });
 
   runner()
     .then(result => {
       console.info(`[parse/run] mode=${mode ?? 'full'} done:`, result);
+      setProgress({ running: false, total: result.ok + result.fail, processed: result.ok + result.fail, errors: result.fail });
     })
     .catch(err => {
       console.error('[parse/run] background error:', err);
+      setProgress({ running: false, errors: 1 });
     })
     .finally(() => {
       _isRunning = false;
     });
+});
+
+// Прогресс мониторинга
+router.get('/api/parse/progress', (_req, res) => {
+  res.json({ success: true, data: getProgress() });
 });
 
 export default router;

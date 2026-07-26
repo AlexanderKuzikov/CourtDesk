@@ -9,7 +9,7 @@ const runNew = vi.fn(async () => ({ ok: 3, fail: 0 }));
 
 vi.mock('../../scheduler/index.js', () => ({ runFull, runRetry, runNew }));
 vi.mock('../../parse/index.js', () => ({ getParseAdapter: vi.fn() }));
-vi.mock('../../core/index.js', () => ({ findCourtByCodeOrSubdomain: vi.fn(() => null) }));
+vi.mock('../../core/index.js', () => ({ findCourtByCodeOrSubdomain: vi.fn(() => null), getProgress: vi.fn(() => ({ running: false, total: 0, processed: 0, errors: 0 })), setProgress: vi.fn(), resetProgress: vi.fn() }));
 vi.mock('../../captcha/session.js', () => ({ fetchMagistrateHtml: vi.fn() }));
 vi.mock('../../core/config.js', () => ({ getRuCaptchaKey: vi.fn(() => '') }));
 
