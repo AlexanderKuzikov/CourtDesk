@@ -2707,3 +2707,4 @@
 {"level":30,"time":1785072123398,"pid":26524,"hostname":"Ryzen","method":"GET","url":"/api/cases","status":200,"durationMs":4,"msg":"GET /api/cases -> 200"}
 {"level":30,"time":1785072248184,"pid":39784,"hostname":"Ryzen","method":"GET","url":"/api/cases","status":200,"durationMs":5,"msg":"GET /api/cases -> 200"}
 {"level":30,"time":1785074332134,"pid":24880,"hostname":"Ryzen","method":"GET","url":"/api/cases","status":200,"durationMs":5,"msg":"GET /api/cases -> 200"}
+{"level":30,"time":1785074882441,"pid":23652,"hostname":"Ryzen","method":"GET","url":"/api/cases","status":200,"durationMs":15,"msg":"GET /api/cases -> 200"}
