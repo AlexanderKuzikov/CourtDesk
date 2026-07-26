@@ -19,7 +19,7 @@ export function createDashboardView(parent: any): {
     top: 0,
     left: 0,
     width: '100%',
-    height: 6,
+    height: 7,
     tags: true,
     content: ' Загрузка...',
   });
@@ -27,7 +27,7 @@ export function createDashboardView(parent: any): {
   // Recent log area
   const logLabel = blessed.box({
     parent: container,
-    top: 6,
+    top: 7,
     left: 1,
     width: '100%-2',
     height: 1,
@@ -35,17 +35,28 @@ export function createDashboardView(parent: any): {
     style: { fg: 'cyan', bold: true },
   });
 
-  const logBox = blessed.log({
+  const logContent = blessed.box({
     parent: container,
-    top: 7,
+    top: 8,
     left: 1,
     width: '100%-2',
-    height: '100%-8',
+    height: '100%-9',
     tags: true,
     scrollable: true,
     alwaysScroll: true,
     scrollbar: { ch: '│', style: { fg: 'blue' } },
+    content: '',
   });
+
+  let logLines: string[] = [];
+  const MAX_LOG = 100;
+
+  function addLog(msg: string): void {
+    logLines.push(msg);
+    if (logLines.length > MAX_LOG) logLines = logLines.slice(-MAX_LOG);
+    logContent.setContent(logLines.join('\n'));
+    logContent.setScrollPerc(100);
+  }
 
   async function refresh(): Promise<void> {
     try {
@@ -78,15 +89,15 @@ export function createDashboardView(parent: any): {
       statsBox.setContent(content);
 
       // Log
-      logBox.log(`[${new Date().toLocaleTimeString()}] Обновлено: ${cases.length} дел`);
+      addLog(`[${new Date().toLocaleTimeString()}] Обновлено: ${cases.length} дел`);
       if (chronic.length > 0) {
         chronic.forEach((c: any) => {
-          logBox.log(`{red-fg}⚠ ХРОНИЧЕСКАЯ ОШИБКА (${c.errorCount}x): ${c.number} — ${c.lastError}{/red-fg}`);
+          addLog(`{red-fg}⚠ ХРОНИЧЕСКАЯ ОШИБКА (${c.errorCount}x): ${c.number} — ${c.lastError}{/red-fg}`);
         });
       }
     } catch {
       statsBox.setContent(' Не удалось подключиться к серверу\n Убедитесь, что сервер запущен на http://127.0.0.1:8767');
-      logBox.log('{red-fg}Ошибка соединения с API{/red-fg}');
+      addLog('{red-fg}Ошибка соединения с API{/red-fg}');
     }
   }
 

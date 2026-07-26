@@ -36,7 +36,7 @@ export function createMonitorView(parent: any): {
   });
 
   // Live log
-  const logBox = blessed.log({
+  const logContent = blessed.box({
     parent: container,
     top: 5,
     left: 1,
@@ -46,7 +46,18 @@ export function createMonitorView(parent: any): {
     scrollable: true,
     alwaysScroll: true,
     scrollbar: { ch: '│', style: { fg: 'blue' } },
+    content: '',
   });
+
+  let logLines: string[] = [];
+  const MAX_LOG = 200;
+
+  function addLog(msg: string): void {
+    logLines.push(msg);
+    if (logLines.length > MAX_LOG) logLines = logLines.slice(-MAX_LOG);
+    logContent.setContent(logLines.join('\n'));
+    logContent.setScrollPerc(100);
+  }
 
   let polling = false;
 
@@ -59,15 +70,15 @@ export function createMonitorView(parent: any): {
       });
       const json = await res.json();
       if (res.status === 409) {
-        logBox.log('{yellow-fg}⚠ Прогон уже выполняется{/yellow-fg}');
+        addLog('{yellow-fg}⚠ Прогон уже выполняется{/yellow-fg}');
       } else if (!res.ok) {
-        logBox.log(`{red-fg}❌ Ошибка: ${json.error}{/red-fg}`);
+        addLog(`{red-fg}❌ Ошибка: ${json.error}{/red-fg}`);
         return;
       } else {
-        logBox.log(`{green-fg}▶ Запущен ${mode}-прогон{/green-fg}`);
+        addLog(`{green-fg}▶ Запущен ${mode}-прогон{/green-fg}`);
       }
     } catch {
-      logBox.log('{red-fg}❌ Ошибка соединения{/red-fg}');
+      addLog('{red-fg}❌ Ошибка соединения{/red-fg}');
       return;
     }
 
@@ -88,7 +99,7 @@ export function createMonitorView(parent: any): {
           clearInterval(poll);
           polling = false;
           progressBox.setContent(` Прогресс: {green-fg}ЗАВЕРШЁН{/green-fg}  |  Обработано: ${p.processed}  |  Ошибок: {red-fg}${p.errors}{/red-fg}`);
-          logBox.log('{green-fg}✓ Прогон завершён{/green-fg}');
+          addLog('{green-fg}✓ Прогон завершён{/green-fg}');
         }
       } catch {
         // ignore
