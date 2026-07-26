@@ -35,6 +35,7 @@
 | pino | ✅ Structured logging | 2026-07-26 |
 | Cron scheduler | ✅ startCron/stopCron, настройки | 2026-07-26 |
 | TUI | ⚠️ Работает на Linux, глючно на Windows | 2026-07-26 |
+| Code Review | ✅ CR10 добавлен (14 замечаний, pending) | 2026-07-26 |
 
 ---
 
@@ -84,19 +85,21 @@
 - ⚠️ **На Windows — глючно:** проблемы с русской раскладкой, стрелками, blessed.list
 - Рекомендация: запускать на Linux или WSL
 
-### Известные проблемы
+### Известные проблемы (CR10)
 
-1. **blessed.list НЕ рендерит `tags: true`** — теги `{red-fg}...{/red-fg}` отображаются как текст (баг blessed). Решение: не использовать теги в элементах списка.
-2. **Стрелки вверх/вниз** — через `keys: true` у list, работает не на всех терминалах (на Windows Terminal — проблемы).
-3. **Стрелки влево/вправо** — переключение вкладок через `screen.key(['left'], ...)`.
-4. **Выход по Q в русской раскладке** — добавлены `й`/`Й` в обработчики (`screen.key(['q','Q','й','Й','C-c','C-d'])`).
-5. **Enter открывает карточку** — через `list.on('select')` и `screen.key(['enter'])`.
-6. **Курсор** — ручное скрытие `\x1b[?25l` / показ `\x1b[?25h` через `process.on('exit')`.
+1. **[CR10-001 CRITICAL] blessed — dead library:** последний коммит 2015, `blessed.list` не рендерит `tags: true` (upstream bug #400), Windows ConPTY несовместим. Единственный fix — миграция на `ink` или `@clack/prompts`.
+2. **[CR10-002 HIGH] tags в list:** `{red-fg}...{/red-fg}` выводится как raw text. Workaround до замены: убрать теги из `setItems()`.
+3. **[CR10-003 HIGH] detail не обновляется при auto-refresh:** `render()` перерисовывает `list` под открытой карточкой. Нужен флаг `isDetailOpen`.
+4. **[CR10-004 HIGH] Вкладка «ЗАПУСК» — заглушка:** нет `getProgress()`, нет обратной связи по F4/F5/F6. `runMode()` ждёт 1.5 сек hardcode.
+5. **[CR10-005 MEDIUM] Ширины колонок хардкодом:** (18, 12, 28, 24). `screen.width` не используется. Нужен `screen.on('resize', render)`.
+6. **[CR10-006 MEDIUM] Ручной ANSI vs blessed API:** `\x1b[?25l` конфликтует с `screen.program` — race condition курсора.
+7. **[CR10-007 MEDIUM] setInterval без cleanup:** `tuiFetch` инициируется до проверки `destroyed = true`.
+8. **[CR10-008 MEDIUM] any[] вместо WatchedCase[]:** тип есть в `core/types.ts`, но не импортируется в TUI.
 
 ### История создания (TUI — полная хроника страданий)
 
 | Попытка | Подход | Результат |
-|---------|--------|-----------|
+|---------|--------|-----------| 
 | 1 | **neo-blessed** | **Не работает на Windows** — ошибка `fake` (битая зависимость `node-pty` на Windows). Отказ. |
 | 2 | **ANSI-самопал** | Сырой `process.stdout.write` с ANSI-кодами. Неинтерактивен. `Q` не работает (только `process.stdin.on('data')`). Брошен. |
 | 3 | **blessed с вкладками + tags** | Вкладки есть. **Теги в `blessed.list` не рендерятся** — баг blessed (issue #400). Текст тегов виден как есть. |
@@ -183,9 +186,9 @@
 
 ## Баги
 
-> **99/99 закрыто.** Открытых замечаний нет.
+> **99/99 закрыто.** CR10 открыт: 14 замечаний (pending).
 > 4 tech-debt закрыты в v0.5.0: eslint (CR5-009), pino (CR5-011), party matching (CR6-005), Node engine (CR7-008).
-> Полная история — в BUG_REPORT.md
+> Полная история — в BUG_REPORT.md, CODE_REVIEW.md
 
 ---
 
@@ -203,9 +206,24 @@
 | CR6-017 | MEDIUM | 0 HTML fixtures in tests | Tech-debt |
 | CR6-020 | LOW | Intention vs Classification types | Tech-debt |
 
-| TUI-001 | MEDIUM | TUI глючит на Windows | blessed.list, стрелки, русская раскладка — регрессия на Windows Terminal |
-| TUI-002 | LOW | TUI теги не рендерятся | Баг blessed: `tags: true` не работает в `blessed.list` |
-| TUI-003 | LOW | TUI нет авто-обновления при открытой карточке | detail скрывает list, refresh не обновляет фон |
+**CR10 — новые (pending):**
+
+| ID | Приоритет | Описание | Заметка |
+|----|-----------|----------|---------|
+| CR10-001 | CRITICAL | blessed dead-end → миграция на ink | TUI не работает на Windows |
+| CR10-002 | HIGH | tags в blessed.list не рендерятся | Upstream bug #400, workaround: убрать теги |
+| CR10-003 | HIGH | detail не обновляется при auto-refresh | Нужен флаг isDetailOpen |
+| CR10-004 | HIGH | Вкладка «ЗАПУСК» — заглушка | Нет getProgress(), hardcode 1.5s |
+| CR10-005 | MEDIUM | Ширины колонок хардкодом | screen.width не используется |
+| CR10-006 | MEDIUM | Ручной ANSI конфликт с screen.program | Race condition курсора |
+| CR10-007 | MEDIUM | setInterval без clearInterval при destroy | tuiFetch инициируется до проверки |
+| CR10-008 | MEDIUM | any[] вместо WatchedCase[] в TUI | core/types.ts не импортируется |
+| CR10-009 | MEDIUM | Dynamic import() в hot-path | cases.ts — должны быть static imports |
+| CR10-010 | MEDIUM | Puppeteer без очереди при bulk POST | 10 параллельных = 10 Chromium |
+| CR10-011 | MEDIUM | shouldRunFull без lastFullRunDate guard | Double-fire при задержке event loop |
+| CR10-012 | LOW | _retryTimer dead variable | Объявлен, чистится, но не присваивается |
+| CR10-013 | LOW | tui.log / tui-err.log в git | Добавить в .gitignore |
+| CR10-014 | LOW | Monorepo без workspaces | Нет изоляции зависимостей по пакетам |
 
 ### Закрытые tech-debt
 
@@ -220,10 +238,12 @@
 
 ## Следующие шаги
 
-1. **WebSocket / SSE** — push-уведомления в браузер
-2. **TUI — стабилизация на Windows** — починить blessed.list, стрелки, русскую раскладку. Либо переписать на `termkit` / `ink`.
-3. **API token auth** — закрыть CR6-003
-4. **Puppeteer browser pool** — закрыть CR6-012
+1. **CR10 TUI** — CR10-001 (blessed → ink) закрывает CR10-002..008 автоматически
+2. **CR10 API/Scheduler** — CR10-009..012 (static imports, Puppeteer queue, scheduler guard, dead var)
+3. **CR10 Repo** — CR10-013..014 (.gitignore, workspaces)
+4. **WebSocket / SSE** — push-уведомления в браузер
+5. **API token auth** — закрыть CR6-003
+6. **Puppeteer browser pool** — закрыть CR6-012
 
 ---
 
@@ -242,6 +262,7 @@
 | 2026-07-25 | CR8 — Captcha + Search overhaul. Исправлено 9 багов: `case_type`/`new` для appeal (искал в кассации); CP1251 декодинг (decodeURIComponent падал); waitForNetworkIdle → waitForNavigation; double-encoding CP1251; regex base64; поиск по УИД; полная карточка дела в UI; логгер; captcha для всех типов sudrf. |
 | 2026-07-25 | CR9 — Court Hierarchy & Grace Period. `findHigherCourt()`, `COURT_HIERARCHY` (MS→RS→OS→KJ), `CASSATION_MAP` (89 регионов → 9 кассац. судов), MS→RS кэш, `enforcedAt`, grace period 90 дней, поиск в вышестоящем по УИД. |
 | 2026-07-26 | **v0.5.0** — msudrf полностью переписан (AJAX, fetchMsudrfSearch, 5 колонок, парсинг участников из Категория/Лица). Убран КАПС из UI. Название суда (courtName) через findCourtByCodeOrSubdomain. Синхронный парсинг при ?parse=true. errorCount/lastError в WatchedCase. Прогресс-бар мониторинга (GET /api/parse/progress). Cron-планировщик (packages/scheduler/cron.ts, настройки). Party matching (pickBestMatch/matchParty). eslint flat config. pino structured logging. Node engine ≥22. TUI (blessed): 5 попыток (neo-blessed failed → ANSI-самопал → blessed с тегами → drawBox → blessed чистый). На Linux работает, на Windows — глючно. |
+| 2026-07-26 | **CR10** — Perplexity TUI + Arch Audit. 14 новых замечаний: 1 CRITICAL (blessed dead-end), 3 HIGH (tags, detail refresh, ЗАПУСК-заглушка), 6 MEDIUM (ширины, ANSI, setInterval, any[], dynamic import, Puppeteer), 4 LOW (scheduler, dead var, gitignore, workspaces). CODE_REVIEW.md и CONTEXT.md обновлены. |
 
 ---
 
@@ -260,7 +281,7 @@ courtdesk/
 │   ├── api/
 │   │   ├── routes/   — 20 эндпоинтов (+progress, +settings)
 │   │   └── middleware/
-│   ├── tui/          — терминальный интерфейс (blessed)
+│   ├── tui/          — терминальный интерфейс (blessed, ⚠️ CR10-001: требует замены)
 │   └── viewer/       — дашборд + search.html (courtName, прогресс-бар, настройки)
 ├── .env.example
 ├── .gitattributes
@@ -270,7 +291,7 @@ courtdesk/
 ├── eslint.config.js  — flat config
 ├── ARCHITECTURE.md
 ├── CHANGELOG.md
-├── CODE_REVIEW.md
+├── CODE_REVIEW.md    — CR1..CR10
 ├── BUG_REPORT.md
 ├── DECISIONS.md
 └── CONTEXT.md
