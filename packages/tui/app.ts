@@ -1,191 +1,122 @@
 import blessed from 'blessed';
 import { tuiFetch } from './fetch.js';
 
-/* helpers */
-function esc(s: string | null | undefined): string { return (s ?? '').replace(/\{/g, '\\{').replace(/\}/g, '\\}'); }
-function pad(s: string, w: number): string { return s.padEnd(w, ' '); }
-function clip(s: string, max: number): string { return s.length <= max ? s : s.slice(0, Math.max(0, max - 1)) + '›'; }
-function sep(): string { return '│'; }
-
-type Tab = 'dashboard' | 'monitor' | 'cases';
-
-let tab: Tab = 'dashboard';
 let allCases: any[] = [];
-let allProgress: any = {};
-let allSettings: any = {};
 let destroyed = false;
+let tab = 0; // 0=дела, 1=монитор, 2=ошибки
 
-const COL = { num: 16, status: 12, court: 30, result: 25, errors: 8 };
+function pad(s: string, w: number): string { return (s ?? '—').padEnd(w).slice(0, w); }
+function sep(): string { return ' ' + '\u2502' + ' '; }
 
-/* screen */
-const screen = blessed.screen({ smartCSR: true, title: 'CourtDesk TUI', fullUnicode: true });
-
-/* widgets */
-const header = blessed.box({ parent: screen, top: 0, left: 0, width: '100%', height: 1, style: { bg: 'blue', fg: 'white' }, content: ' CourtDesk TUI' });
-const listHeader = blessed.box({ parent: screen, top: 1, left: 0, width: '100%', height: 1, tags: true, style: { bg: 'blue', fg: 'white', bold: true } });
-const casesList = blessed.list({ parent: screen, top: 2, left: 0, width: '100%', height: '100%-3', keys: true, vi: true, mouse: true, tags: true, scrollbar: { ch: ' ', track: { bg: 'grey' }, style: { inverse: true } }, style: { item: { fg: 'white', bg: 'black' }, selected: { bg: 'white', fg: 'black', bold: true } } });
-const statusbar = blessed.box({ parent: screen, bottom: 0, left: 0, width: '100%', height: 1, tags: true, style: { bg: 'blue', fg: 'white' } });
-
-/* detail modal */
-const detailBox = blessed.box({ parent: screen, top: 'center', left: 'center', width: 62, height: 20, border: { type: 'line' }, padding: { top: 1, left: 1, right: 1, bottom: 1 }, scrollable: true, alwaysScroll: true, keys: true, vi: true, mouse: true, tags: true, style: { border: { fg: 'blue' }, bg: 'black', fg: 'white' }, scrollbar: { ch: ' ', track: { bg: 'grey' }, style: { inverse: true } } });
-detailBox.hide();
-[listHeader, casesList, statusbar].forEach(el => el.show());
-
-/* render */
-function renderHeaderLine(): string {
-  return pad('Номер', COL.num) + sep() + pad('Статус', COL.status) + sep() + pad('Суд', COL.court) + sep() + pad('Результат', COL.result) + sep() + pad('Ошибки', COL.errors);
-}
-function renderCaseItem(c: any): string {
-  if (!c || typeof c !== 'object') return '';
-  const court = c.courtName || c.courtId || '—';
-  const errInfo = c.errorCount > 0 ? `{red-fg}[${c.errorCount}x]{/red-fg}` : '';
-  try {
-    return pad(clip(c.number || '—', COL.num - 1), COL.num) + sep() + pad(clip(c.status || '', COL.status - 1), COL.status) + sep() + pad(clip(court, COL.court - 1), COL.court) + sep() + pad(clip(c.result || '—', COL.result - 1), COL.result) + sep() + pad(errInfo, COL.errors);
-  } catch { return ''; }
+function fmtCase(c: any): string {
+  const icon = c.status === 'error' ? '{red-fg}●{/red-fg}' : c.status === 'enforced' ? '{magenta-fg}●{/magenta-fg}' : c.status === 'waiting' ? '{yellow-fg}○{/yellow-fg}' : '{green-fg}●{/green-fg}';
+  return `${icon} ${pad(c.number, 18)}${sep()}${pad(c.status, 12)}${sep()}${pad(c.courtName || c.courtId, 28)}${sep()}${pad(c.result, 24)}`;
 }
 
-function updateStatus(): void {
+const screen = blessed.screen({ smartCSR: true, title: 'CourtDesk', fullUnicode: true });
+const header = blessed.box({ parent: screen, top: 0, left: 0, width: '100%', height: 1, style: { bg: 'blue', fg: 'white' }, tags: true });
+const thead = blessed.box({ parent: screen, top: 1, left: 0, width: '100%', height: 1, tags: true, style: { bg: 'blue', fg: 'white', bold: true } });
+const list = blessed.list({ parent: screen, top: 2, left: 0, width: '100%', height: '100%-3', keys: true, vi: true, mouse: true, tags: true, scrollbar: { ch: ' ', style: { inverse: true } }, style: { item: { fg: 'white' }, selected: { fg: 'black', bg: 'white' } } });
+const detail = blessed.box({ parent: screen, top: 2, left: 2, width: '75%', height: '80%', border: { type: 'line' }, padding: { top: 1, left: 1 }, scrollable: true, alwaysScroll: true, keys: true, tags: true, style: { border: { fg: 'blue' }, fg: 'white' } });
+detail.hide();
+
+process.stdout.write('\x1b[?25l');
+process.on('exit', () => { try { process.stdout.write('\x1b[?25h'); } catch {} });
+
+function hideD(): void { detail.hide(); list.focus(); screen.render(); }
+
+function showD(idx: number): void {
+  const c = allCases[idx];
+  if (!c) return;
+  detail.setContent([
+    `{cyan-fg}{bold}№ ${c.number}{/bold}{/cyan-fg}`,
+    `Статус:     ${c.status}`,
+    `Суд:        ${c.courtName || c.courtId}`,
+    `Результат:  ${c.result || '—'}`,
+    `Вступление: ${c.legalForceDate || '—'}`,
+    `Ошибок:     ${c.errorCount || 0}`,
+    c.lastError ? `Ошибка:     ${c.lastError.slice(0, 80)}` : '',
+  ].join('\n'));
+  detail.setScroll(0);
+  detail.show(); detail.focus(); screen.render();
+}
+
+function renderTab(): void {
   const stats: Record<string, number> = {};
   allCases.forEach((c: any) => { stats[c.status] = (stats[c.status] || 0) + 1; });
-  const errors = allCases.filter((c: any) => c.status === 'error');
-  const chronic = errors.filter((c: any) => (c.errorCount || 0) >= 3);
-  const hint = tab === 'monitor' ? 'F4 Full  F5 Retry  F6 New  1 Дэшборд  q Выход' : 'Enter Детали  r Обновить  q Выход';
-  statusbar.setContent(` ${allCases.length} дел  |  oш:${errors.length} хр:${chronic.length}  |  ${hint}`);
-}
+  const errs = allCases.filter((c: any) => c.status === 'error');
+  const chr = errs.filter((c: any) => (c.errorCount || 0) >= 3);
 
-function renderDashboard(): void {
-  listHeader.setContent(renderHeaderLine());
-  const display = allCases.slice().reverse();
-  casesList.setItems(display.map((c: any) => renderCaseItem(c)));
-  updateStatus();
-}
-
-function renderMonitor(): void {
-  const p = allProgress;
-  const s = allSettings;
-  const lines: string[] = [];
-  lines.push(`{bold}ПРОГРЕСС:{/bold}`);
-  if (p?.running) {
-    lines.push(`  {yellow-fg}⏳{/yellow-fg}  ${p.processed}/${p.total}  |  {red-fg}${p.errors}{/red-fg} ошибок`);
-  } else if (p?.total > 0) {
-    lines.push(`  {green-fg}✓{/green-fg}  ${p.processed} дел, {red-fg}${p.errors}{/red-fg} ошибок`);
-  } else {
-    lines.push(`  {gray-fg}нет активного прогона{/gray-fg}`);
-  }
-  lines.push('');
-  lines.push(`{bold}РАСПИСАНИЕ:{/bold}`);
-  lines.push(`  Полный прогон:  ${s?.scheduleFull || '03:00'}`);
-  lines.push(`  Retry каждые:   ${s?.retryIntervalHours || 3} ч`);
-  lines.push(`  Stale-дела:     >${s?.retryStaleHours || 6} ч`);
-  lines.push(`  Автозапуск:     ${s?.scheduleEnabled ? '{green-fg}вкл{/green-fg}' : '{red-fg}выкл{/red-fg}'}`);
-  lines.push('');
-  lines.push(`{bold}УПРАВЛЕНИЕ:{/bold}`);
-  lines.push(`  {green-fg}F4{/green-fg}  Полный прогон  |  {yellow-fg}F5{/yellow-fg}  Retry  |  {cyan-fg}F6{/cyan-fg}  Новые дела`);
-  listHeader.setContent(`  ${'МОНИТОРИНГ'.padEnd(50)}`);
-  casesList.setItems(lines);
-  updateStatus();
-}
-
-function renderCases(): void {
-  const errors = allCases.filter((c: any) => c.status === 'error');
-  const chronic = errors.filter((c: any) => (c.errorCount || 0) >= 3);
-  const display = chronic.length > 0 ? chronic : errors.length > 0 ? errors : allCases.filter((c: any) => c.status !== 'archived');
-  listHeader.setContent(renderHeaderLine());
-  casesList.setItems(display.map((c: any) => renderCaseItem(c)));
-  updateStatus();
-}
-
-function showTab(t: Tab): void {
-  if (detailBox.visible) detailBox.hide();
-  tab = t;
-  if (t === 'dashboard') { listHeader.show(); renderDashboard(); }
-  else if (t === 'monitor') { renderMonitor(); listHeader.hide(); }
-  casesList.focus();
-  screen.render();
-}
-
-/* detail */
-function showDetail(idx: number): void {
-  const list = tab === 'dashboard' ? allCases : tab === 'cases' ? allCases.filter((c: any) => c.status === 'error') : allCases;
-  const c = list[idx];
-  if (!c) return;
-  const events = (c.events || []).slice(-10).map((e: any) => `  ${(e.eventDate || '').slice(0, 10)}  ${esc(e.eventName || '')}  ${esc(e.result || '')}`).join('\n');
-  detailBox.setContent([
-    `{cyan-fg}{bold}№ ${esc(c.number || '—')}{/bold}{/cyan-fg}`,
-    ``,
-    `{bold}Статус:{/bold}   ${c.status}`,
-    `{bold}Суд:{/bold}     ${esc(c.courtName || c.courtId || '')}`,
-    `{bold}Результат:{/bold} ${esc(c.result || '—')}`,
-    `{bold}Вступление:{/bold} ${c.legalForceDate || '—'}`,
-    `{bold}Ошибок:{/bold}   ${c.errorCount || 0}`,
-    c.lastError ? `{bold}Ошибка:{/bold}   ${esc(c.lastError.slice(0, 80))}` : '',
-    ``,
-    `{bold}События:{/bold}`,
-    events || '  {gray-fg}нет{/gray-fg}',
-  ].join('\n'));
-  detailBox.setScroll(0);
-  detailBox.show();
-  detailBox.focus();
-  screen.render();
-}
-function hideDetail(): void { detailBox.hide(); showTab(tab); }
-
-/* keys */
-function exitTui(): void { destroyed = true; try { screen.program.showCursor(); screen.destroy(); } catch {} process.exit(0); }
-
-// Работает в любой раскладке — q, й, Ctrl+C, Ctrl+D
-screen.key(['q', 'Q', 'C-c', 'C-d'], () => { if (detailBox.visible) { hideDetail(); return; } exitTui(); });
-detailBox.key(['escape', 'enter', 'return', 'q', 'Q', 'C-c', 'C-d'], () => hideDetail());
-screen.key(['escape'], () => { if (detailBox.visible) hideDetail(); });
-screen.key(['enter', 'return'], () => { if (detailBox.visible) hideDetail(); });
-screen.key(['1'], () => { if (!detailBox.visible) showTab('dashboard'); });
-screen.key(['2'], () => { if (!detailBox.visible) showTab('monitor'); });
-screen.key(['left'], () => { if (!detailBox.visible) showTab('dashboard'); });
-screen.key(['right'], () => { if (!detailBox.visible) showTab('monitor'); });
-screen.key(['r', 'R'], () => { if (!detailBox.visible) refresh(); });
-screen.key(['f4'], () => { if (!detailBox.visible) runMode('full'); });
-screen.key(['f5'], () => { if (!detailBox.visible) runMode('retry'); });
-screen.key(['f6'], () => { if (!detailBox.visible) runMode('new'); });
-casesList.on('select', (_item: any, idx: number) => {
-  if (detailBox.visible || tab === 'monitor') return;
-  showDetail(idx);
-});
-screen.on('resize', () => { if (!destroyed) screen.render(); });
-
-/* data */
-async function refresh(): Promise<void> {
-  try {
-    const [casesRes, progressRes, settingsRes] = await Promise.all([
-      tuiFetch('http://127.0.0.1:8767/api/cases').then(r => r.json()),
-      tuiFetch('http://127.0.0.1:8767/api/parse/progress').then(r => r.json()),
-      tuiFetch('http://127.0.0.1:8767/api/settings').then(r => r.json()),
+  if (tab === 0) {
+    thead.show();
+    thead.setContent(` {bold}${pad('Номер', 18)}${sep()}${pad('Статус', 12)}${sep()}${pad('Суд', 28)}${sep()}${pad('Результат', 24)}{/bold}`);
+    list.setItems(allCases.map(fmtCase));
+    header.setContent(` 1:Дела 2:Монитор  ${colorStatus(stats)} | Enter:детали r:обн q:вых`);
+  } else if (tab === 1) {
+    thead.hide();
+    header.setContent(` 1:Дела 2:Монитор  F4:full F5:retry F6:new  r:обн q:вых`);
+    list.setItems([
+      `{bold}МОНИТОРИНГ{/bold}`,
+      ``,
+      `  ${stats['monitoring'] ?? 0} дел в мониторинге`,
+      `  ${stats['waiting'] ?? 0} ожидают появления`,
+      `  ${stats['decision'] ?? 0} решений вынесено`,
+      `  {red-fg}${errs.length}{/red-fg} ошибок (${chr.length} хронических)`,
     ]);
+  }
+  screen.render();
+}
+
+function colorStatus(stats: Record<string, number>): string {
+  return `M:${stats['monitoring'] ?? 0} W:${stats['waiting'] ?? 0} D:${stats['decision'] ?? 0} E:${stats['enforced'] ?? 0}`;
+}
+
+function loadAndRender(): void {
+  tuiFetch('http://127.0.0.1:8767/api/cases').then(r => r.json()).then(j => {
     if (destroyed) return;
-    allCases = casesRes.data || [];
-    allProgress = progressRes.data || {};
-    allSettings = settingsRes.data || {};
-  } catch { /* ignore */ }
-  if (!destroyed) showTab(tab);
+    allCases = j.data || [];
+    renderTab();
+  }).catch(() => { if (!destroyed) { list.setItems(['{red-fg}Ошибка соединения{/red-fg}']); screen.render(); } });
 }
 
-async function runMode(mode: string): Promise<void> {
-  try {
-    await tuiFetch('http://127.0.0.1:8767/api/parse/run', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode }),
-    });
-  } catch {}
-  setTimeout(refresh, 1500);
+function runMode(m: string): void {
+  tuiFetch('http://127.0.0.1:8767/api/parse/run', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mode: m }),
+  }).then(() => setTimeout(loadAndRender, 1500)).catch(() => {});
 }
 
-/* init */
-process.stdout.write('\x1b[?25l'); // hide cursor
-process.on('exit', () => { try { process.stdout.write('\x1b[?25h'); } catch {} });
-process.on('SIGTERM', exitTui);
-process.on('SIGINT', exitTui);
-header.setContent(' CourtDesk TUI  |  1: дела 2: монитор  Ctrl+C: выход  r: обновить');
-showTab('dashboard');
-casesList.focus();
+detail.key(['escape', 'enter', 'return'], () => hideD());
+
+screen.on('keypress', (_ch: string, key: any) => {
+  if (!key) return;
+  // Выход: q в любой раскладке или Ctrl+C
+  if (key.name === 'q' || key.sequence === '\x03' || key.full === 'C-d') {
+    destroyed = true; try { screen.program.showCursor(); screen.destroy(); } catch {} process.exit(0);
+  }
+  // Esc без карточки игнорируется, с карточкой — закрыть
+  if (key.name === 'escape') { if (detail.visible) hideD(); return; }
+  // Enter: закрыть карточку / открыть дело
+  if (key.name === 'enter') {
+    if (detail.visible) { hideD(); return; }
+    if (tab === 0) showD((list as any).selected); // list.selected — индекс из blessed
+    return;
+  }
+  if (key.name === 'r') loadAndRender();
+  if (key.name === '1') { tab = 0; renderTab(); }
+  if (key.name === '2') { tab = 1; renderTab(); }
+  if (key.name === 'left') { tab = Math.max(0, tab - 1); renderTab(); }
+  if (key.name === 'right') { tab = Math.min(1, tab + 1); renderTab(); }
+  if (key.name === 'f4') runMode('full');
+  if (key.name === 'f5') runMode('retry');
+  if (key.name === 'f6') runMode('new');
+});
+screen.on('resize', () => screen.render());
+screen.key(['left'], () => { tab = Math.max(0, tab - 1); renderTab(); });
+screen.key(['right'], () => { tab = Math.min(1, tab + 1); renderTab(); });
+
+list.focus();
 screen.render();
-setTimeout(refresh, 300);
-setInterval(refresh, 30000);
+renderTab();
+loadAndRender();
+setInterval(loadAndRender, 60000);
