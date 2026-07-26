@@ -1,75 +1,83 @@
 /**
  * CourtDesk TUI — pure Node.js (readline + ANSI).
- * Без внешних зависимостей. Работает на Linux, macOS, Windows (ConPTY ≥ Win10 1903).
- * CR10-001: blessed удалён.
+ * Без внешних зависимостей. Linux / macOS / Windows ConPTY ≥ Win10 1903.
  */
 import * as readline from 'readline';
 import { tuiFetch } from './fetch.js';
 import type { WatchedCase } from '../core/types.js';
 
-// ──────────────────── ANSI helpers ────────────────────
+// ──────────────────── ANSI ────────────────────
 const ESC = '\x1b';
 const A = {
-  reset:    `${ESC}[0m`,
-  bold:     `${ESC}[1m`,
-  rev:      `${ESC}[7m`,     // инверсия (выделенная строка)
-  dim:      `${ESC}[2m`,
-  cyan:     `${ESC}[36m`,
-  yellow:   `${ESC}[33m`,
-  red:      `${ESC}[31m`,
-  green:    `${ESC}[32m`,
-  bgBlue:   `${ESC}[44m`,
-  fgWhite:  `${ESC}[97m`,
-  hide:     `${ESC}[?25l`,   // спрятать курсор
-  show:     `${ESC}[?25h`,   // показать курсор
-  cls:      `${ESC}[2J`,
-  home:     `${ESC}[H`,
-  altOn:    `${ESC}[?1049h`, // альтернативный буфер
-  altOff:   `${ESC}[?1049l`,
+  reset:   `${ESC}[0m`,
+  bold:    `${ESC}[1m`,
+  rev:     `${ESC}[7m`,
+  dim:     `${ESC}[2m`,
+  cyan:    `${ESC}[36m`,
+  yellow:  `${ESC}[33m`,
+  red:     `${ESC}[31m`,
+  green:   `${ESC}[32m`,
+  bgBlue:  `${ESC}[44m`,
+  white:   `${ESC}[97m`,
+  hide:    `${ESC}[?25l`,
+  show:    `${ESC}[?25h`,
+  cls:     `${ESC}[2J`,
+  home:    `${ESC}[H`,
+  altOn:   `${ESC}[?1049h`,
+  altOff:  `${ESC}[?1049l`,
 };
-const w = (s: string) => process.stdout.write(s);
-const col = (n: number) => `${ESC}[${n}G`;
-const row = (r: number, c = 1) => `${ESC}[${r};${c}H`;
-const clearLine = `${ESC}[2K`;
+const w   = (s: string) => process.stdout.write(s);
+const at  = (r: number, c = 1) => `${ESC}[${r};${c}H`;
+const eol = `${ESC}[2K`;
+const gto = (c: number) => `${ESC}[${c}G`;
 
 // ──────────────────── Состояние ────────────────────
-let allCases: WatchedCase[] = [];
-let cursor = 0;          // выделенная строка списка
-let scrollTop = 0;       // верхняя видимая строка
+let cases: WatchedCase[] = [];
+let cur   = 0;
+let vtop  = 0;   // scroll offset списка
 let tab: 'cases' | 'run' = 'cases';
-let mode: 'list' | 'detail' = 'list';
-let detailScroll = 0;
-let lastError = '';
-let refreshTimer: ReturnType<typeof setInterval> | null = null;
-let destroyed = false;
+let view: 'list' | 'detail' = 'list';
+let dScroll = 0; // scroll offset карточки
+let timer: ReturnType<typeof setInterval> | null = null;
+let dead = false;
 
-// ──────────────────── Размеры терминала ────────────────────
-function cols(): number { return process.stdout.columns || 120; }
-function rows(): number { return process.stdout.rows    || 30;  }
+// ──────────────────── Размеры ────────────────────
+const C = () => process.stdout.columns || 120;
+const R = () => process.stdout.rows    || 30;
 
-// ──────────────────── Текстовые утилиты ────────────────────
+// ──────────────────── Текст ────────────────────
+/** Обрезать/дополнить до w символов, без ANSI */
 function pad(s: string, w: number): string {
-  const str = s ?? '—';
-  if (str.length >= w) return str.slice(0, w - 1) + '…';
-  return str + ' '.repeat(w - str.length);
+  const t = s ?? '—';
+  if (t.length > w) return t.slice(0, w - 1) + '…';
+  return t + ' '.repeat(w - t.length);
 }
-function rpad(s: string, w: number): string {
-  return (s ?? '').padStart(w);
+
+/** Перенос строки по maxW символов, indent для всех кроме первой */
+function wrap(s: string, maxW: number, indent: string): string[] {
+  if (!s) return [''];
+  const lines: string[] = [];
+  let rem = s;
+  while (rem.length > 0) {
+    const chunk = rem.slice(0, maxW);
+    lines.push(lines.length === 0 ? chunk : indent + chunk);
+    rem = rem.slice(maxW);
+  }
+  return lines;
 }
 
 // ──────────────────── Ширины колонок ────────────────────
-function colWidths() {
-  const total = cols();
-  const num    = Math.min(22, Math.floor(total * 0.22));
-  const status = Math.min(12, Math.floor(total * 0.12));
-  const court  = Math.min(30, Math.floor(total * 0.28));
-  const sep    = 9; // 3× " │ "
-  const result = Math.max(10, total - num - status - court - sep);
+function cw() {
+  const t = C();
+  const num    = Math.min(24, Math.floor(t * 0.22));
+  const status = Math.min(12, Math.floor(t * 0.12));
+  const court  = Math.min(32, Math.floor(t * 0.28));
+  const result = Math.max(10, t - num - status - court - 9);
   return { num, status, court, result };
 }
 
-// ──────────────────── Статус-краска ────────────────────
-const STATUS_COLORS: Record<string, string> = {
+// ──────────────────── Цвета статуса ────────────────────
+const SC: Record<string, string> = {
   monitoring: A.cyan,
   waiting:    A.yellow,
   decision:   A.green,
@@ -77,192 +85,194 @@ const STATUS_COLORS: Record<string, string> = {
   error:      A.red,
   archived:   A.dim,
 };
-function statusColor(s: string): string {
-  return (STATUS_COLORS[s] ?? '') + s + A.reset;
-}
+function sc(s: string): string { return (SC[s] ?? '') + s + A.reset; }
 
-// ──────────────────── Рендер одной строки дела ────────────────────
-function fmtCase(c: WatchedCase, selected: boolean): string {
-  const cw = colWidths();
-  const court = (c as any).courtName || c.courtId || '—';
-  const num    = pad(c.number  || '—', cw.num);
-  const status = pad(c.status  || '',   cw.status);
-  const ct     = pad(court,             cw.court);
-  const res    = pad(c.result  ?? '—',  cw.result);
-  const line   = `${num} │ ${status} │ ${ct} │ ${res}`;
-  if (selected) return A.rev + A.bold + line + A.reset;
-  if (c.status === 'error') return A.red + line + A.reset;
+// ──────────────────── Строка списка ────────────────────
+function fmtCase(c: WatchedCase, sel: boolean): string {
+  const q  = cw();
+  const co = (c as any).courtName || c.courtId || '—';
+  const line = `${pad(c.number || '—', q.num)} │ ${pad(c.status || '', q.status)} │ ${pad(co, q.court)} │ ${pad(c.result ?? '—', q.result)}`;
+  if (sel)                                          return A.rev + A.bold + line + A.reset;
+  if (c.status === 'error')                          return A.red   + line + A.reset;
   if (c.status === 'decision' || c.status === 'enforced') return A.green + line + A.reset;
   return line;
 }
 
-// ──────────────────── Головные строки ────────────────────
+// ──────────────────── Header ────────────────────
 function drawHeader() {
-  const errors  = allCases.filter(c => c.status === 'error').length;
-  const total   = allCases.length;
-  const tabCases = tab === 'cases' ? A.rev + ' ДЕЛА ' + A.reset : ' ДЕЛА ';
-  const tabRun   = tab === 'run'   ? A.rev + ' ЗАПУСК ' + A.reset : ' ЗАПУСК ';
-  w(row(1) + clearLine + A.bgBlue + A.fgWhite + A.bold);
-  w(` CourtDesk v0.5.1 ${tabCases}${tabRun}  │  Дел: ${total}  Ош: ${errors}` + A.reset);
+  const err   = cases.filter(c => c.status === 'error').length;
+  const tCases = tab === 'cases' ? A.rev + ' ДЕЛА '   + A.reset + A.bgBlue + A.white : ' ДЕЛА ';
+  const tRun   = tab === 'run'   ? A.rev + ' ЗАПУСК ' + A.reset + A.bgBlue + A.white : ' ЗАПУСК ';
+  w(at(1) + eol + A.bgBlue + A.white + A.bold +
+    ` CourtDesk  ${tCases} ${tRun}   │  Дел: ${cases.length}  Ош: ${err}` + A.reset);
 }
 
 function drawThead() {
-  const cw = colWidths();
-  w(row(2) + clearLine + A.bgBlue + A.fgWhite + A.bold);
-  w(` ${pad('ШИФР/НОМЕР', cw.num)} │ ${pad('СТАТУС', cw.status)} │ ${pad('СУД', cw.court)} │ ${pad('РЕШЕНИЕ', cw.result)}` + A.reset);
+  const q = cw();
+  w(at(2) + eol + A.bgBlue + A.white + A.bold +
+    ` ${pad('№ / НОМЕР', q.num)} │ ${pad('СТАТуС', q.status)} │ ${pad('СУД', q.court)} │ ${pad('РЕШЕНИЕ', q.result)}` + A.reset);
 }
 
-// ──────────────────── Главный рендер ────────────────────
-function render() {
-  if (destroyed) return;
-  w(A.hide);
-
-  if (mode === 'detail') {
-    renderDetail();
-    w(A.show);
-    return;
-  }
-
-  drawHeader();
-
-  if (tab === 'cases') {
-    drawThead();
-    renderList();
-    drawFooter('\u2191\u2193:выбор  Enter:карточка  r:обн  2:запуск  q:выход');
-  } else {
-    renderRunTab();
-    drawFooter('F4:полный  F5:retry  F6:новые  1:дела  q:выход');
-  }
-
-  w(A.show);
+function drawFooter(hint: string) {
+  // длина hint без ANSI-кодов (они не занимают место)
+  const bare = hint.replace(/\x1b\[[0-9;]*m/g, '');
+  const pad2 = ' '.repeat(Math.max(0, C() - bare.length - 2));
+  w(at(R()) + eol + A.bgBlue + A.white + ` ${hint}${pad2}` + A.reset);
 }
 
-// ──────────────────── Список дел ────────────────────
+// ──────────────────── Список ────────────────────
 function renderList() {
-  const listRows = rows() - 3; // header + thead + footer
-  // скроллинг
-  if (cursor < scrollTop) scrollTop = cursor;
-  if (cursor >= scrollTop + listRows) scrollTop = cursor - listRows + 1;
+  const lh = R() - 3;
+  if (cur < vtop) vtop = cur;
+  if (cur >= vtop + lh) vtop = cur - lh + 1;
 
-  for (let i = 0; i < listRows; i++) {
-    const idx = scrollTop + i;
-    w(row(3 + i) + clearLine);
-    if (idx < allCases.length) {
-      w(' ' + fmtCase(allCases[idx], idx === cursor));
-    }
+  for (let i = 0; i < lh; i++) {
+    const idx = vtop + i;
+    w(at(3 + i) + eol);
+    if (idx < cases.length) w(' ' + fmtCase(cases[idx], idx === cur));
   }
-  // строка статуса при пустом списке
-  if (allCases.length === 0) {
-    w(row(4) + clearLine + A.dim + '  (дел нет. Запустите API: npm start)' + A.reset);
+  if (cases.length === 0) {
+    w(at(4) + eol + A.dim + '  (Дел нет. Запустите API: npm start)' + A.reset);
   }
   // скроллбар
-  if (allCases.length > listRows) {
-    const pct = scrollTop / (allCases.length - listRows);
-    const barH = listRows;
-    const thumbPos = Math.round(pct * (barH - 1));
-    for (let i = 0; i < barH; i++) {
-      w(row(3 + i) + col(cols()) + (i === thumbPos ? A.rev + '█' + A.reset : A.dim + '│' + A.reset));
+  if (cases.length > lh) {
+    const pct      = vtop / (cases.length - lh);
+    const thumbPos = Math.round(pct * (lh - 1));
+    for (let i = 0; i < lh; i++) {
+      w(at(3 + i) + gto(C()) +
+        (i === thumbPos ? A.rev + '█' + A.reset : A.dim + '│' + A.reset));
     }
   }
 }
 
-// ──────────────────── Карточка дела ────────────────────
-function buildDetailLines(c: WatchedCase): string[] {
-  const court = (c as any).courtName || c.courtId || '—';
+// ──────────────────── Карточка ────────────────────
+
+/** Очищенная длина строки (без ANSI) */
+function visLen(s: string): number {
+  return s.replace(/\x1b\[[0-9;]*m/g, '').length;
+}
+
+function buildDetail(c: WatchedCase): string[] {
+  const termW = C();
+  const co    = (c as any).courtName || c.courtId || '—';
+
+  // заголовок ─ ширина трактуется по содержимому, не по termW
+  const title = `══ ДЕЛО: ${c.number || '—'} `;
+  const fill  = '═'.repeat(Math.max(2, termW - title.length - 1));
   const lines: string[] = [
-    A.cyan + A.bold + `══ ДЕЛО: ${c.number || '—'} ` + '═'.repeat(Math.max(0, cols() - 12 - (c.number?.length || 1))) + A.reset,
+    A.cyan + A.bold + title + fill + A.reset,
     '',
-    `  Суд:          ${A.cyan}${court}${A.reset}`,
-    `  Статус:        ${statusColor(c.status || '')}`,
-    `  Результат:      ${c.result || '—'}`,
-    `  Вступление:    ${c.legalForceDate || '—'}`,
-    `  УИД:           ${c.caseUid || '—'}`,
-    `  ID внутри:      ${c.uid}`,
-    `  Последнее обн.: ${c.lastChecked || 'не проверялось'}`,
-    `  Добавлено:      ${c.createdAt?.slice(0, 10) || '—'}`,
-    `  Ошибок:       ${c.errorCount || 0}`,
   ];
+
+  // метки — выровняны по левому полю (18 сим)
+  const LW = 18; // ширина метки
+  const VW = termW - LW - 4; // доступная ширина значения
+  const indent = ' '.repeat(LW + 4);
+
+  function field(label: string, value: string, color = ''): void {
+    const lbl = ('  ' + label + ':').padEnd(LW + 3);
+    const valLines = wrap(value || '—', VW, indent);
+    lines.push(`${lbl} ${color}${valLines[0]}${color ? A.reset : ''}`);
+    for (let i = 1; i < valLines.length; i++) lines.push(valLines[i]);
+  }
+
+  field('Суд',          co,                       A.cyan);
+  field('Статус',       c.status || '—',          sc(c.status || ''));
+  field('Результат',     c.result || '—');
+  field('Вступление',   c.legalForceDate || '—');
+  field('УИД',          c.caseUid || '—');
+  field('Внутренний ID',  c.uid);
+  field('Посл. проверка', c.lastChecked || 'не выполнялась');
+  field('Добавлено',    c.createdAt?.slice(0, 10) || '—');
+  field('Ошибок',      String(c.errorCount || 0));
+
   if (c.lastError) {
     lines.push('');
-    lines.push(`  ${A.red}Последняя ошибка:${A.reset}`);
-    // перенос длинных строк
-    const maxW = cols() - 4;
-    const err = c.lastError;
-    for (let i = 0; i < err.length; i += maxW) {
-      lines.push('    ' + err.slice(i, i + maxW));
-    }
+    field('Посл. ошибка',  c.lastError, A.red);
   }
+
   if (c.url) {
     lines.push('');
-    lines.push(`  ${A.dim}URL: ${c.url}${A.reset}`);
+    // URL переносим по termW-4 символам (без ANSI в узлах)
+    const urlLines = wrap(c.url, termW - 4, '    ');
+    lines.push(A.dim + '  URL:');
+    for (const ul of urlLines) lines.push('    ' + ul + A.reset);
   }
+
   return lines;
 }
 
 function renderDetail() {
-  const c = allCases[cursor];
-  if (!c) { mode = 'list'; render(); return; }
+  const c = cases[cur];
+  if (!c) { view = 'list'; render(); return; }
 
-  const dLines = buildDetailLines(c);
-  const visibleRows = rows() - 2; // header + footer
+  const dl  = buildDetail(c);
+  const vis = R() - 2; // строк header + footer
+
+  // коррекция смещения вниз если дошли до конца
+  const maxScroll = Math.max(0, dl.length - vis);
+  if (dScroll > maxScroll) dScroll = maxScroll;
 
   drawHeader();
 
-  // отображаем строки
-  for (let i = 0; i < visibleRows; i++) {
-    const li = detailScroll + i;
-    w(row(2 + i) + clearLine);
-    if (li < dLines.length) w(dLines[li]);
+  for (let i = 0; i < vis; i++) {
+    const li = dScroll + i;
+    w(at(2 + i) + eol);
+    if (li < dl.length) w(dl[li]);
   }
 
   // скроллбар
-  if (dLines.length > visibleRows) {
-    const pct = detailScroll / (dLines.length - visibleRows);
-    const barH = visibleRows;
-    const thumbPos = Math.round(pct * (barH - 1));
-    for (let i = 0; i < barH; i++) {
-      w(row(2 + i) + col(cols()) + (i === thumbPos ? A.rev + '█' + A.reset : A.dim + '│' + A.reset));
+  if (dl.length > vis) {
+    const pct = dScroll / maxScroll;
+    const tp  = Math.round(pct * (vis - 1));
+    for (let i = 0; i < vis; i++) {
+      w(at(2 + i) + gto(C()) +
+        (i === tp ? A.rev + '█' + A.reset : A.dim + '│' + A.reset));
     }
   }
 
-  drawFooter(`↑↓:скролл  Esc/q:назад  [${cursor + 1}/${allCases.length}]`);
+  drawFooter(`↑↓:скролл  Esc/q:назад  [дело ${cur + 1}/${cases.length}]`);
 }
 
 // ──────────────────── Вкладка ЗАПУСК ────────────────────
-function renderRunTab() {
-  const baseRow = 3;
-  w(row(baseRow)     + clearLine + A.bold + '  ЗАПУСК МОНИТОРИНГА' + A.reset);
-  w(row(baseRow + 1) + clearLine);
-  w(row(baseRow + 2) + clearLine + `  ${A.yellow}F4${A.reset}  — Полный прогон (все дела)`);
-  w(row(baseRow + 3) + clearLine + `  ${A.yellow}F5${A.reset}  — Retry (только ошибочные)`);
-  w(row(baseRow + 4) + clearLine + `  ${A.yellow}F6${A.reset}  — Новые дела (waiting)`);
-  w(row(baseRow + 5) + clearLine);
-  // чистим остаток экрана
-  for (let i = baseRow + 6; i < rows() - 1; i++) w(row(i) + clearLine);
+function renderRun() {
+  const br = 3;
+  w(at(br)     + eol + A.bold + '  ЗАПУСК МОНИТОРИНГА' + A.reset);
+  w(at(br + 1) + eol);
+  w(at(br + 2) + eol + `  ${A.yellow}F4${A.reset}  — Полный прогон (все дела)`);
+  w(at(br + 3) + eol + `  ${A.yellow}F5${A.reset}  — Retry (только ошибочные)`);
+  w(at(br + 4) + eol + `  ${A.yellow}F6${A.reset}  — Новые дела (waiting)`);
+  for (let i = br + 5; i < R() - 1; i++) w(at(i) + eol);
 }
 
-// ──────────────────── Footer ────────────────────
-function drawFooter(hint: string) {
-  w(row(rows()) + clearLine + A.bgBlue + A.fgWhite);
-  w(` ${hint}` + ' '.repeat(Math.max(0, cols() - hint.length - 2)) + A.reset);
+// ──────────────────── Главный рендер ────────────────────
+function render() {
+  if (dead) return;
+  w(A.hide);
+  if (view === 'detail') { renderDetail(); w(A.show); return; }
+  drawHeader();
+  if (tab === 'cases') {
+    drawThead();
+    renderList();
+    drawFooter('↑↓:выбор  Enter:карточка  r:обн  2:запуск  q:вых');
+  } else {
+    renderRun();
+    drawFooter('F4:полный  F5:retry  F6:новые  1:дела  q:вых');
+  }
+  w(A.show);
 }
 
-// ──────────────────── API refresh ────────────────────
+// ──────────────────── API ────────────────────
 function refresh(): void {
   tuiFetch('http://127.0.0.1:8767/api/cases')
     .then(r => r.json())
     .then((j: { data?: WatchedCase[] }) => {
-      if (destroyed) return;
-      allCases = j.data || [];
-      if (cursor >= allCases.length) cursor = Math.max(0, allCases.length - 1);
-      lastError = '';
+      if (dead) return;
+      cases = j.data || [];
+      if (cur >= cases.length) cur = Math.max(0, cases.length - 1);
       render();
     })
-    .catch((e: unknown) => {
-      if (destroyed) return;
-      lastError = e instanceof Error ? e.message : 'API недоступен';
-      render();
-    });
+    .catch(() => { if (!dead) render(); });
 }
 
 function runMode(m: string): void {
@@ -270,98 +280,80 @@ function runMode(m: string): void {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ mode: m }),
-  })
-    .then(() => {
-      setTimeout(refresh, 1500);
-    })
-    .catch(() => {});
+  }).then(() => setTimeout(refresh, 1500)).catch(() => {});
 }
 
 // ──────────────────── Клавиатура ────────────────────
-function handleKey(str: string, key: readline.Key): void {
-  const k = key.name;
-  const ctrl = key.ctrl;
+function key(str: string, k: readline.Key): void {
+  const ctrl = k.ctrl;
+  const nm   = k.name;
 
-  // выход — всегда
-  if (ctrl && (k === 'c' || k === 'd')) { exit(); return; }
-  if (mode === 'list') {
-    if (k === 'q' || str === 'q' || str === 'й' || str === 'Й' || str === 'Q') { exit(); return; }
-  }
+  if (ctrl && (nm === 'c' || nm === 'd')) { quit(); return; }
 
-  if (mode === 'detail') {
-    // скроллинг карточки
-    if (k === 'up')   { detailScroll = Math.max(0, detailScroll - 1); render(); return; }
-    if (k === 'down') {
-      const c = allCases[cursor];
+  if (view === 'detail') {
+    if (nm === 'up')     { dScroll = Math.max(0, dScroll - 1); render(); return; }
+    if (nm === 'down') {
+      const c = cases[cur];
       if (c) {
-        const max = Math.max(0, buildDetailLines(c).length - (rows() - 2));
-        detailScroll = Math.min(max, detailScroll + 1);
+        const max = Math.max(0, buildDetail(c).length - (R() - 2));
+        dScroll   = Math.min(max, dScroll + 1);
       }
       render(); return;
     }
-    // закрыть карточку
-    if (k === 'escape' || k === 'q' || str === 'q' || str === 'й') {
-      mode = 'list'; render(); return;
+    if (nm === 'pageup')   { dScroll = Math.max(0, dScroll - (R() - 4)); render(); return; }
+    if (nm === 'pagedown') {
+      const c = cases[cur];
+      const max = c ? Math.max(0, buildDetail(c).length - (R() - 2)) : 0;
+      dScroll = Math.min(max, dScroll + (R() - 4));
+      render(); return;
+    }
+    if (nm === 'escape' || nm === 'q' || str === 'q' || str === 'й') {
+      view = 'list'; render(); return;
     }
     return;
   }
 
-  // —— режим list ——
-  if (k === 'up')    { cursor = Math.max(0, cursor - 1); render(); return; }
-  if (k === 'down')  { cursor = Math.min(allCases.length - 1, cursor + 1); render(); return; }
-  if (k === 'pageup')   { cursor = Math.max(0, cursor - (rows() - 4)); render(); return; }
-  if (k === 'pagedown') { cursor = Math.min(allCases.length - 1, cursor + (rows() - 4)); render(); return; }
-  if (k === 'home') { cursor = 0; scrollTop = 0; render(); return; }
-  if (k === 'end')  { cursor = Math.max(0, allCases.length - 1); render(); return; }
-
-  // открыть карточку
-  if (k === 'return' || k === 'enter') {
-    if (tab === 'cases' && allCases.length > 0) {
-      mode = 'detail'; detailScroll = 0; render();
-    }
+  // ─ list mode ─
+  if (nm === 'q' || str === 'q' || str === 'Q' || str === 'й' || str === 'Й') { quit(); return; }
+  if (nm === 'up')       { cur = Math.max(0, cur - 1); render(); return; }
+  if (nm === 'down')     { cur = Math.min(cases.length - 1, cur + 1); render(); return; }
+  if (nm === 'pageup')   { cur = Math.max(0, cur - (R() - 4)); render(); return; }
+  if (nm === 'pagedown') { cur = Math.min(cases.length - 1, cur + (R() - 4)); render(); return; }
+  if (nm === 'home')     { cur = 0; vtop = 0; render(); return; }
+  if (nm === 'end')      { cur = Math.max(0, cases.length - 1); render(); return; }
+  if (nm === 'return' || nm === 'enter') {
+    if (tab === 'cases' && cases.length > 0) { view = 'detail'; dScroll = 0; render(); }
     return;
   }
-
-  // вкладки
-  if (str === '1' || k === 'left')  { tab = 'cases'; render(); return; }
-  if (str === '2' || k === 'right') { tab = 'run';   render(); return; }
-
-  // обновить
-  if (str === 'r') { refresh(); return; }
-
-  // F-клавиши
-  if (k === 'f4') { runMode('full');  return; }
-  if (k === 'f5') { runMode('retry'); return; }
-  if (k === 'f6') { runMode('new');   return; }
+  if (str === '1' || nm === 'left')  { tab = 'cases'; render(); return; }
+  if (str === '2' || nm === 'right') { tab = 'run';   render(); return; }
+  if (str === 'r')  { refresh(); return; }
+  if (nm === 'f4')  { runMode('full');  return; }
+  if (nm === 'f5')  { runMode('retry'); return; }
+  if (nm === 'f6')  { runMode('new');   return; }
 }
 
-// ──────────────────── Инициализация / выход ────────────────────
-function exit(): void {
-  if (destroyed) return;
-  destroyed = true;
-  if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+// ──────────────────── Инициализация ────────────────────
+function quit(): void {
+  if (dead) return;
+  dead = true;
+  if (timer) { clearInterval(timer); timer = null; }
   w(A.show + A.altOff + A.reset);
-  process.stdin.setRawMode(false);
+  if (process.stdin.isTTY) process.stdin.setRawMode(false);
   process.stdin.pause();
   process.exit(0);
 }
 
-process.on('SIGINT',  exit);
-process.on('SIGTERM', exit);
-process.on('exit', () => { w(A.show + A.altOff); });
+process.on('SIGINT',  quit);
+process.on('SIGTERM', quit);
+process.on('exit', () => { try { w(A.show + A.altOff); } catch {} });
+process.stdout.on('resize', () => { w(A.cls + A.home); render(); });
 
-// обработка изменения размеров терминала
-process.stdout.on('resize', () => {
-  w(A.cls + A.home);
-  render();
-});
-
-// включаем raw-режим и альтернативный буфер
 if (process.stdin.isTTY) process.stdin.setRawMode(true);
 readline.emitKeypressEvents(process.stdin);
-process.stdin.on('keypress', handleKey);
+process.stdin.on('keypress', key);
 
-w(A.altOn + A.cls + A.home + A.hide);
+w(A.altOn + A.cls + A.home);
 render();
 refresh();
-refreshTimer = setInterval(refresh, 60_000);
+timer = setInterval(refresh, 60_000);
