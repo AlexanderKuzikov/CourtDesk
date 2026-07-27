@@ -7,246 +7,129 @@
 
 ## Статус
 
-**v0.5.1** — CR10: 10 из 14 замечаний закрыто (commit 79a607b). TUI типизирован, курсор через blessed API, resize-адаптация, setInterval cleanup, scheduler guard, dead var убран, *.log в .gitignore, static imports в cases.ts.
+**v0.5.2 (doc state)** — после CR10 выполнен полный отказ от blessed/neo-blessed. Текущий TUI — чистый Node.js (`readline` + ANSI), без внешних TUI-зависимостей.
 
 | Компонент | Статус | Последнее изменение |
 |-----------|--------|---------------------|
 | Архитектура | ✅ Утверждена | ARCHITECTURE.md |
-| API-контракты | ✅ Утверждены (22 эндпоинта) | CONTEXT.md |
-| Core (типы) | ✅ errorCount, lastError, ScanProgress | 2026-07-26 |
+| API-контракты | ✅ Утверждены | CONTEXT.md |
+| Core (типы) | ✅ errorCount, lastError, enforcedAt | 2026-07-26 |
 | Security (URL allowlist) | ✅ assertCourtUrl | CR6-002 |
 | Store integrity | ✅ corrupt backup + throw | CR6-001 |
 | Captcha | ✅ msudrf AJAX + sudrf form | 2026-07-26 |
-| Search | ✅ msudrf полностью переписан (AJAX) | 2026-07-26 |
-| Parse | ✅ Синхронный парсинг при добавлении | 2026-07-26 |
-| Intake | ✅ Исправлено | CR5-005 |
-| Scheduler | ✅ Cron-планировщик + double-fire guard | 2026-07-26 |
-| Store | ✅ Каскадное удаление + settings | CR6-016 + new |
-| API | ✅ 22 эндпоинта, static imports | 2026-07-26 |
-| Tests | ✅ tsc clean | Vitest |
-| tsconfig | ✅ moduleResolution: Node16 | INFRA-001 |
-| CI | ✅ tsc --noEmit | .github/workflows/ci.yml |
-| Viewer (Dashboard) | ✅ Прогресс-бар, настройки расписания, courtName | 2026-07-26 |
-| Viewer (Search) | ✅ msudrf поиск, КАПС убран | 2026-07-26 |
-| Court Hierarchy | ✅ CR9 — findHigherCourt, CASSATION_MAP, MS→RS кэш | 2026-07-25 |
-| Grace Period | ✅ 90 дней для enforced дел | 2026-07-25 |
-| Party Matching | ✅ pickBestMatch, matchParty | 2026-07-26 |
-| eslint | ✅ Flat config (eslint.config.js) | 2026-07-26 |
-| pino | ✅ Structured logging | 2026-07-26 |
-| Cron scheduler | ✅ startCron/stopCron, guard double-fire | 2026-07-26 |
-| TUI | ⚠️ blessed (Linux ✅, Windows ⚠️) — CR10-001 open | 2026-07-26 |
-| .gitignore | ✅ *.log добавлены (CR10-013) | 2026-07-26 |
-| Code Review | ✅ CR10: 10/14 fix, 4 open | 2026-07-26 |
+| Search | ✅ msudrf переписан (AJAX) | 2026-07-26 |
+| Parse | ✅ sync parse при добавлении | 2026-07-26 |
+| Scheduler | ✅ cron + double-fire guard | 2026-07-26 |
+| Store | ✅ каскадное удаление + settings | CR6-016 |
+| API | ✅ реализовано | static imports, progress, settings |
+| Viewer (Dashboard) | ✅ courtName, progress bar, schedule settings | 2026-07-26 |
+| Viewer (Search) | ✅ исправлен и очищен | 2026-07-26 |
+| Court Hierarchy | ✅ CR9 закрыт | 2026-07-25 |
+| Party Matching | ✅ pickBestMatch | 2026-07-26 |
+| eslint | ✅ flat config | 2026-07-26 |
+| pino | ✅ structured logging | 2026-07-26 |
+| Dependency audit | ✅ TUI-vuln ветка удалена | 2026-07-26 |
+| TUI | ✅ rewrite без blessed | 2026-07-26 |
+| TUI UX | ⚠️ в активной доводке, но уже без UUID/ISO/double-status | 2026-07-26 |
+| Docs sync | ✅ CHANGELOG/CODE_REVIEW/CONTEXT обновлены | 2026-07-27 |
 
 ---
 
-## Архитектура сайтов судов
+## TUI — текущее состояние
 
-### sudrf.ru (районные, апелляционные, кассационные суды)
+### Архитектура
 
-- **Форма:** `<form method="get">` — параметры в URL query string.
-- **Captcha:** встроена в форму поиска (`input#captcha`), изображение в data URI (base64).
-- **Результаты:** HTML-таблица, 7 колонок:
+Текущий TUI больше **не** использует `blessed`, `neo-blessed`, `neo-blessed-contrib` или `@types/blessed`.
 
-| № дела | Дата поступления | Категория | Судья | Дата решения | Результат | Вступление |
-|--------|-----------------|-----------|-------|-------------|-----------|------------|
+Он реализован на:
+- `readline.emitKeypressEvents(process.stdin)`
+- `process.stdin.setRawMode(true)`
+- прямом ANSI-рендере (`cursor`, `clear line`, `alternate screen buffer`, colors)
+- `fetch()` через `tuiFetch()` с AbortController timeout
 
-- **Парсинг:** `parseResults` из `search/shared.ts` — Cheerio, разбор `tr`/`td`.
-- **Encoding:** CP1251 (php-формы), ручной percent-декодер в `captcha/session.ts`.
-- **Проблема:** фоновые счётчики не дают `waitForNetworkIdle` — используется `waitForNavigation`.
+### Почему старая ветка признана провальной
 
-### msudrf.ru (мировые суды)
+Старый TUI-стек создавал не локальные баги, а системный мусор:
+- blessed не рендерил теги корректно;
+- карточка открывалась нестабильно;
+- UI содержал технические идентификаторы, бесполезные админу;
+- даты были в сыром ISO-формате;
+- вкладка запуска не давала понятной обратной связи;
+- Windows-совместимость оставалась токсичной зоной.
 
-- **Форма:** Нет `<form method="get">`. Поиск через AJAX/JavaScript.
-- **Captcha:** отдельная страница `kcaptchaForm` — решается **один раз на сессию** (POST → новая страница).
-- **После капчи:** форма поиска с вкладками (типы дел), поля: номер, стороны, дата, УИД.
-- **Кнопка «Искать»:** `<input type="button" class="button-normal search">` — AJAX-запрос.
-- **Результаты:** `<div id="search_results">` (изначально скрыт, `display:none`), 5 колонок:
+### Что исправлено в текущей реализации
 
-| № дела | Категория/Лица | Судья | Дата решения | Решение |
-|--------|---------------|-------|-------------|--------|
+- detail card больше не показывает UUID/УИД в основных полях;
+- статус переведён в русский человекочитаемый вид;
+- устранён баг `monitoringmonitoring` / `enforcedenforced`;
+- даты форматируются как `DD.MM.YYYY` и `DD.MM.YYYY HH:MM`;
+- есть лог запуска во вкладке `ЗАПУСК`;
+- повторный запуск блокируется, пока идёт текущий run;
+- поддержаны scroll/navigation keys.
 
-- **Участники:** парсятся из колонки «Категория/Лица» строки вида «ИСТЕЦ: ... ОТВЕТЧИК: ...» через regex.
-- **Архитектура:** `fetchMsudrfSearch()` в `captcha/session.ts` — отдельная функция, не переиспользует `fetchWithCaptcha` (AJAX-пайплайн иной).
-- **TLS:** `rejectUnauthorized: false` (используется `https.get`, не `fetch`).
+### Что всё ещё открыто
 
----
-
-## TUI (packages/tui/)
-
-Терминальный интерфейс для администраторов. Создан на **blessed** (не neo-blessed).
-
-### Стек
-- **blessed** v0.1.81 — библиотека терминального UI (ncurses-подобный API)
-- **fetch.ts** — `tuiFetch()` с AbortController (таймаут 5с)
-- **app.ts** — screen → header → thead → list → detail
-
-### Состояние
-- ✅ **Работает на Linux** — полная функциональность
-- ⚠️ **На Windows — глючно:** проблемы с русской раскладкой, стрелками, blessed.list
-- Рекомендация: запускать на Linux или WSL
-
-### CR10 — исправлено (commit 79a607b)
-
-| ID | Fix |
-|----|-----|
-| CR10-002 | Теги убраны из `setItems()` — error-message без raw `{red-fg}` |
-| CR10-003 | Флаг `isDetailOpen` — `render()` не перерисовывает список под открытой карточкой |
-| CR10-005 | `getColWidths(screen.width)` + `screen.on('resize', render)` — адаптивные колонки |
-| CR10-006 | `screen.program.hideCursor()/showCursor()` вместо raw ANSI |
-| CR10-007 | `refreshTimer` ref + `clearInterval` при выходе |
-| CR10-008 | `WatchedCase[]` вместо `any[]`, импорт из `core/types.ts` |
-
-### CR10 — открытые (pending)
-
-| ID | Severity | Описание |
-|----|----------|----------|
-| CR10-001 | CRITICAL | `blessed` dead-end → миграция на `ink` (отдельный sprint) |
-| CR10-004 | HIGH | Вкладка «ЗАПУСК» — заглушка, нет progress polling |
-
-### История создания (TUI — полная хроника страданий)
-
-| Попытка | Подход | Результат |
-|---------|--------|-----------|
-| 1 | **neo-blessed** | **Не работает на Windows** — ошибка `fake` (битая зависимость `node-pty` на Windows). Отказ. |
-| 2 | **ANSI-самопал** | Сырой `process.stdout.write` с ANSI-кодами. Неинтерактивен. `Q` не работает (только `process.stdin.on('data')`). Брошен. |
-| 3 | **blessed с вкладками + tags** | Вкладки есть. **Теги в `blessed.list` не рендерятся** — баг blessed (issue #400). Текст тегов виден как есть. |
-| 4 | **ANSI drawBox** | Рамки через `box.Draw`. Есть визуал. **Нет навигации** — клавиатура не обрабатывается нормально. |
-| 5 | **blessed (снова) — чистый список** | Теги убраны из `list.setItems()`. Форматирование через `pad()`. Enter открывает карточки. **ИТОГ: работает на Linux.** |
-
-### Управление
-- `1` / `←` — вкладка «Дела» (таблица)
-- `2` / `→` — вкладка «Запуск» (F4/F5/F6)
-- `Enter` — детали дела (на вкладке «Дела»)
-- `r` — обновить
-- `q` / `Q` / `й` / `Й` / `Ctrl+C` / `Ctrl+D` — выход
-- `F4` — полный прогон
-- `F5` — retry
-- `F6` — новые дела
+| ID | Приоритет | Описание |
+|----|-----------|----------|
+| TUI-O1 | HIGH | нет полноценного progress polling из `/api/parse/progress` |
+| TUI-O2 | MEDIUM | нужен дополнительный UX-polish по layout/цветам/плотности интерфейса |
+| TUI-O3 | MEDIUM | нужен regression-набор тестов/фикстур для TUI rendering |
 
 ---
 
-## Use cases (утверждено)
-
-### UC-0: Дашборд
-- Счётчики: monitoring, waiting, decision, вступило сегодня — `GET /api/status` ✅
-- Фильтры по статусу: Все / Мониторинг / Ожидание / Решение / Вступило / Ошибка / Архив ✅
-- Таблица дел с действиями: детали, архивировать, удалить ✅
-- Кнопка «Запустить мониторинг» — `POST /api/parse/run` ✅
-- **Прогресс-бар** — поллинг `GET /api/parse/progress`, отображение processed/total/errors ✅
-- **Настройки расписания** — модалка `scheduleFull`, `retryIntervalHours`, `retryStaleHours` ✅
-- Уведомления о событиях — `GET /api/notifications` ✅
-- Авто-обновление каждые 30с ✅
-- **Название суда** — колонка «Суд» отображает `courtName` вместо subdomain ✅
-
-### UC-1: Добавить новое дело (через поиск)
-- Кнопка «+📋» в результатах поиска → `POST /api/cases` ✅
-- **Синхронный парсинг** при `?parse=true` — карточка загружается сразу ✅
-
-### UC-2: Следить за делом
-- Автоматический мониторинг через scheduler ✅
-- **Cron-планировщик** — автозапуск `runFull()` по расписанию ✅
-
-### UC-3: Отслеживать появление дела
-- Форма «Отслеживать появление» в search.html → `POST /api/cases/wait` ✅
-- `runNew()` через `searchByParty` ✅
-- **Party matching** — `pickBestMatch` вместо `results[0]` ✅
-
-### UC-4: Отслеживание решения и вступления
-- `await sleep(RATE_DELAY_MS)` перед `searchByCaseNumber` на `decision`-делах ✅
-- `legalForceDate` нормализуется к `YYYY-MM-DD` при записи ✅
-- Error recovery: успешный прогон сбрасывает `status: 'error'` → `'monitoring'` ✅
-
-### UC-5: Детали дела
-- Timeline событий в modal — `GET /api/cases/:uid` + `GET /api/cases/:uid/events` ✅
-- Архивирование / возврат / удаление ✅
-
-### UC-6: CRM-запросы (1С)
-
----
-
-## API-контракты (утверждено)
-
-| # | Запрос | Назначение | Статус |
-|---|--------|-----------|--------|
-| 1 | `GET /api/status` | Счётчики + здоровье | ✅ |
-| 2 | `GET /api/cases` | Список дел (с `courtName`) | ✅ |
-| 3 | `GET /api/cases/:uid` | Карточка дела (с `courtName`) | ✅ |
-| 4 | `POST /api/cases` | Добавить в мониторинг (`?parse=true`) | ✅ |
-| 5 | `PATCH /api/cases/:uid` | Обновить разрешённые поля | ✅ |
-| 6 | `DELETE /api/cases/:uid` | Удалить (каскадно: events + notifications + card) | ✅ CR6-016 |
-| 7 | `POST /api/cases/wait` | Отслеживать появление | ✅ |
-| 8 | `POST /api/resolve` | Суд + номер → ссылка (URL builder) | ✅ CR6-009 |
-| 9 | `POST /api/search/by-number` | Поиск по номеру | ✅ |
-| 10 | `POST /api/search/by-party` | Поиск по участникам | ✅ |
-| 11 | `POST /api/parse/url` | Парсинг URL (assertCourtUrl) | ✅ CR6-002 |
-| 12 | `GET /api/courts?q=` | Поиск судов | ✅ |
-| 13 | `GET /api/courts/:id` | Инфо о суде | ✅ |
-| 14 | `GET /api/notifications` | Уведомления | ✅ |
-| 15 | `POST /api/parse/run` | Асинхр парсинг (202) + 409 | ✅ CR6-013 |
-| 16 | `GET /api/cases/:uid/events` | События дела (timeline) | ✅ |
-| 17 | `GET /api/cases/:uid/card` | Полная карточка дела (CaseCard) | ✅ |
-| 18 | `GET /api/parse/progress` | Прогресс текущего прогона | ✅ NEW |
-| 19 | `GET /api/settings` | Настройки расписания | ✅ NEW |
-| 20 | `PUT /api/settings` | Сохранить настройки | ✅ NEW |
-
----
-
-## Баги
-
-> **101/103 закрыто.** CR10: 4 open (CR10-001, CR10-004, CR10-010, CR10-014).
-> 4 tech-debt закрыты в v0.5.0: eslint (CR5-009), pino (CR5-011), party matching (CR6-005), Node engine (CR7-008).
-> Полная история — в BUG_REPORT.md, CODE_REVIEW.md
-
----
-
-## Tech-debt (открытые, не критичные)
+## Актуальные open-проблемы
 
 | ID | Приоритет | Описание | Заметка |
 |----|-----------|----------|---------|
-| CR10-001 | CRITICAL | blessed dead-end → миграция на ink | TUI не работает на Windows |
-| CR10-004 | HIGH | Вкладка «ЗАПУСК» — заглушка | Нет getProgress(), hardcode 1.5s |
-| CR10-010 | MEDIUM | Puppeteer без очереди при bulk POST | 10 параллельных = 10 Chromium |
-| CR10-014 | LOW | Monorepo без workspaces | Нет изоляции зависимостей по пакетам |
-| CR5-008 | LOW | tmp/rename без fsync | Документированный trade-off |
-| CR6-003 | MEDIUM | Zero authentication | COURTDESK_API_TOKEN в .env.example |
-| CR6-010 | LOW | TLS rejectUnauthorized: false | Trade-off для sudrf.ru wildcard |
-| CR6-012 | LOW | Puppeteer browser pool | Single-session на magistrate |
-| CR6-014 | LOW | Subdomain коллизии в справочнике | 3 дубликата, 1914 без subdomain |
-| CR6-011 | MEDIUM | RuCaptcha softId placement | Игнорируется API, non-breaking |
-| CR6-015 | MEDIUM | parsePublishInfo HH:MM:SS | Edge case |
-| CR6-017 | MEDIUM | 0 HTML fixtures in tests | Tech-debt |
-| CR6-020 | LOW | Intention vs Classification types | Tech-debt |
-
-### Закрытые tech-debt
-
-| ID | Описание | Решение |
-|----|----------|---------|
-| CR5-009 | Нет eslint | eslint.config.js (flat config) + @typescript-eslint |
-| CR5-011 | console.log вместо pino | core/logger.ts — pino dual-transport |
-| CR6-005 | waiting → results[0] без матчинга | pickBestMatch + matchParty в orchestrator.ts |
-| CR7-008 | `process.loadEnvFile()` требует Node ≥21 | Node engine ≥22.0.0 в package.json |
-| CR10-002 | tags в blessed.list не рендерятся | Теги убраны из setItems() |
-| CR10-003 | detail не обновляется при auto-refresh | Флаг isDetailOpen |
-| CR10-005 | Ширины колонок хардкодом | getColWidths(screen.width) + resize |
-| CR10-006 | Ручной ANSI курсор | screen.program.hideCursor/showCursor |
-| CR10-007 | setInterval без cleanup | clearInterval при выходе |
-| CR10-008 | any[] вместо WatchedCase[] | Импорт типа + типизация |
-| CR10-009 | Dynamic import() в hot-path | Static imports наверху cases.ts |
-| CR10-011 | shouldRunFull double-fire | _lastFullRunDate guard |
-| CR10-012 | _retryTimer dead variable | Удалён |
-| CR10-013 | tui.log в git | *.log в .gitignore |
+| TUI-O1 | HIGH | Run tab без live progress polling | log есть, progress bar нет |
+| API-O1 | MEDIUM | Puppeteer без очереди при bulk sync parse | нужен `p-limit`/очередь |
+| INFRA-O1 | LOW | Monorepo без workspaces | нет изоляции пакетов |
+| SEC-O1 | MEDIUM | Zero-auth API | требуется токен/мидлварь |
+| TEST-O1 | MEDIUM | Нет отдельного regression-suite для TUI | высокий риск повторных UI-регрессий |
+| CR6-010 | LOW | TLS `rejectUnauthorized: false` | осознанный trade-off |
+| CR6-014 | LOW | Subdomain коллизии в справочнике | legacy data issue |
 
 ---
 
-## Следующие шаги
+## Use cases
 
-1. **CR10-001** — мигрировать TUI с `blessed` на `ink` (закрывает CR10-004 автоматически)
-2. **CR10-010** — очередь p-limit для Puppeteer sync-parse при bulk POST
-3. **CR10-014** — npm/pnpm workspaces для изоляции пакетов
-4. **WebSocket / SSE** — push-уведомления в браузере
-5. **API token auth** — закрыть CR6-003
-6. **Puppeteer browser pool** — закрыть CR6-012
+### UC-0: Дашборд
+- Счётчики, фильтры, таблица дел, действия, прогресс-бар, расписание, уведомления, автообновление — ✅
+
+### UC-1: Добавить новое дело
+- `POST /api/cases`, включая `?parse=true` — ✅
+
+### UC-2: Следить за делом
+- scheduler / cron / retry / full-run — ✅
+
+### UC-3: Отслеживать появление дела
+- `POST /api/cases/wait`, party matching — ✅
+
+### UC-4: Отслеживание решения и вступления
+- `legalForceDate`, `enforcedAt`, grace period — ✅
+
+### UC-5: Детали дела
+- Web UI: modal + timeline — ✅
+- TUI: human-readable detail card — ✅
+
+---
+
+## API-контракты
+
+Основные endpoints сохранены и актуальны, включая:
+- `/api/status`
+- `/api/cases`
+- `/api/cases/:uid`
+- `/api/cases/:uid/events`
+- `/api/cases/:uid/card`
+- `/api/search/by-number`
+- `/api/search/by-party`
+- `/api/resolve`
+- `/api/parse/url`
+- `/api/parse/run`
+- `/api/parse/progress`
+- `/api/settings`
+- `/api/notifications`
 
 ---
 
@@ -254,49 +137,37 @@
 
 | Дата | Изменение |
 |------|-----------|
-| 2026-07-17 | Создан репозиторий, intake-модуль + 18 тестов |
-| 2026-07-21 | BUG-001..011 + search/parse/store/scheduler/captcha |
-| 2026-07-22 | NEW-001..011, CR4-001..008, CR5-001..012 (50 багов закрыто) |
-| 2026-07-23 | CR6 — CODE_REVIEW6.md от Cursor Agent (20 замечаний) |
-| 2026-07-24 | CR6 применён: security, store integrity, route dups, archived race, error recovery. UX/UI: dashboard с управлением, search с мониторингом. Dead code cleanup. Documentation. |
-| 2026-07-25 | UX/UI v2: смена тем (dark/light), пагинация, сортировка, поиск по таблице, печать, mark-all-read, Esc-close. theme.css + app.js shared. CourtUrlError → авто-архивация. |
-| 2026-07-25 | CR7 — OpenCode Deep Audit (10 замечаний: 9 исправлено, 1 задокументировано). |
-| 2026-07-25 | CR7 fix: `success: true`→`false` в status.ts, `toIso()` битая ISO, dead code `err.message`, живая ссылка кэша, лимит `findCourtsByRegion`, матчинг uid, логи captcha, `&rarr;` унификация, `setInterval` cleanup. |
-| 2026-07-25 | CR8 — Captcha + Search overhaul. Исправлено 9 багов: `case_type`/`new` для appeal (искал в кассации); CP1251 декодинг (decodeURIComponent падал); waitForNetworkIdle → waitForNavigation; double-encoding CP1251; regex base64; поиск по УИД; полная карточка дела в UI; логгер; captcha для всех типов sudrf. |
-| 2026-07-25 | CR9 — Court Hierarchy & Grace Period. `findHigherCourt()`, `COURT_HIERARCHY` (MS→RS→OS→KJ), `CASSATION_MAP` (89 регионов → 9 касс. судов), MS→RS кэш, `enforcedAt`, grace period 90 дней, поиск в вышестоящем по УИД. |
-| 2026-07-26 | **v0.5.0** — msudrf полностью переписан (AJAX, fetchMsudrfSearch, 5 колонок, парсинг участников из Категория/Лица). Убран КАПС из UI. Название суда (courtName) через findCourtByCodeOrSubdomain. Синхронный парсинг при ?parse=true. errorCount/lastError в WatchedCase. Прогресс-бар мониторинга (GET /api/parse/progress). Cron-планировщик (packages/scheduler/cron.ts, настройки). Party matching (pickBestMatch/matchParty). eslint flat config. pino structured logging. Node engine ≥22. TUI (blessed): 5 попыток (neo-blessed failed → ANSI-самопал → blessed с тегами → drawBox → blessed чистый). На Linux работает, на Windows — глючно. |
-| 2026-07-26 | **CR10** — Perplexity TUI + Arch Audit. 14 замечаний: 1 CRITICAL (blessed dead-end), 3 HIGH (tags, detail refresh, ЗАПУСК-заглушка), 6 MEDIUM (ширины, ANSI, setInterval, any[], dynamic import, Puppeteer), 4 LOW (scheduler, dead var, gitignore, workspaces). CODE_REVIEW.md и CONTEXT.md обновлены. |
-| 2026-07-26 | **CR10 fix** (commit 79a607b) — 10 из 14 закрыто: WatchedCase[] в TUI, screen.program cursor API, isDetailOpen флаг, getColWidths+resize, setInterval cleanup, static imports в cases.ts, _lastFullRunDate guard в cron, _retryTimer удалён, *.log в .gitignore. Open: CR10-001 (blessed→ink), CR10-004 (ЗАПУСК), CR10-010 (Puppeteer queue), CR10-014 (workspaces). |
+| 2026-07-21 .. 2026-07-25 | CR1–CR9: security, search, parse, hierarchy, UI, store integrity |
+| 2026-07-26 | v0.5.0: msudrf AJAX rewrite, progress API, settings, sync parse, party matching, eslint, pino |
+| 2026-07-26 | `79a607b`: частичные CR10 patch fixes |
+| 2026-07-26 | `885224d`: удалены `neo-blessed` / `neo-blessed-contrib` |
+| 2026-07-26 | `bf9096e`: полный rewrite TUI на `readline` + ANSI |
+| 2026-07-26 | `2e1c1c6`: удалены `blessed` и `@types/blessed` |
+| 2026-07-26 | `52fcc40`: fix detail-card layout |
+| 2026-07-26 | `626ffae`: человекочитаемая карточка, даты, run tab, удаление UUID из UI |
+| 2026-07-27 | документация синхронизирована с фактическим кодом |
 
 ---
 
 ## Структура проекта
 
-```
+```text
 courtdesk/
 ├── packages/
-│   ├── core/         — типы, справочник судов, конфиг, errors, logger, progress
-│   ├── captcha/       — Puppeteer + RuCaptcha + fetchMsudrfSearch
-│   ├── search/       — адаптеры поиска + shared.ts (magistrate переписан)
-│   ├── parse/        — адаптеры парсинга карточек
-│   ├── intake/       — classify() (regex /iu)
-│   ├── scheduler/    — orchestrator + cron.ts (guard double-fire)
-│   ├── store/        — cases, events, notifications, cards, settings
+│   ├── core/
+│   ├── captcha/
+│   ├── search/
+│   ├── parse/
+│   ├── intake/
+│   ├── scheduler/
+│   ├── store/
 │   ├── api/
-│   │   ├── routes/   — 22 эндпоинта (+progress, +settings, static imports)
-│   │   └── middleware/
-│   ├── tui/          — терминальный интерфейс (blessed, ⚠️ CR10-001: требует замены на ink)
-│   └── viewer/       — дашборд + search.html (courtName, прогресс-бар, настройки)
-├── .env.example
-├── .gitattributes
-├── package.json      — Node ≥22, pino, eslint
-├── tsconfig.json
-├── vitest.config.ts
-├── eslint.config.js  — flat config
+│   ├── tui/          — readline + ANSI, без blessed
+│   └── viewer/
 ├── ARCHITECTURE.md
-├── CHANGELOG.md
-├── CODE_REVIEW.md    — CR1..CR10 (101/113 fix)
 ├── BUG_REPORT.md
-├── DECISIONS.md
-└── CONTEXT.md
+├── CHANGELOG.md
+├── CODE_REVIEW.md
+├── CONTEXT.md
+└── package.json
 ```

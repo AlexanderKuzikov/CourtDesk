@@ -4,6 +4,70 @@
 
 ---
 
+## [0.5.2] — 2026-07-26
+
+### TUI — полный разворот архитектуры
+
+- **Отказ от blessed / neo-blessed:** TUI полностью переписан на чистый Node.js (`readline` + ANSI), без внешних TUI-зависимостей.
+- **Удалены зависимости:** `neo-blessed`, `neo-blessed-contrib`, `blessed`, `@types/blessed` удалены из `package.json`.
+- **Причина:** стек blessed/neo-blessed оказался архитектурно тупиковым: проблемы Windows ConPTY, отсутствие нормального рендера тегов в list, нестабильное поведение карточек и клавиатуры.
+- **Коммиты:**
+  - `885224d` — удалены `neo-blessed` / `neo-blessed-contrib`, версия поднята до `0.5.1`
+  - `bf9096e` — полный rewrite TUI на `readline` + ANSI
+  - `2e1c1c6` — удалены `blessed` и `@types/blessed`
+
+### TUI — исправления UX и структуры
+
+- **Карточка дела переработана под администратора:**
+  - убраны технические UUID/УИД из основной карточки,
+  - показаны только человекочитаемые поля: номер дела, суд, статус, результат, дата вступления в силу, дата добавления, последняя проверка,
+  - ISO-таймстампы заменены на `DD.MM.YYYY` / `DD.MM.YYYY HH:MM`.
+- **Исправлен баг двойного статуса:** `monitoringmonitoring` / `enforcedenforced` больше не выводятся; статус рендерится один раз, человекочитаемым русским текстом.
+- **Исправлена detail-card layout:** выравнивание меток, перенос длинных строк и URL, очистка хвостовых пустых строк, корректный separator.
+- **Добавлен run log во вкладке «ЗАПУСК»:** теперь есть явное состояние `выполняется`, лог завершения/ошибки, блокировка повторного запуска во время активного run.
+- **Добавлены/исправлены клавиши:** `↑↓`, `PageUp/PageDown`, `Home/End`, `Enter`, `Esc`, `1/2`, `F4/F5/F6`, `q`, `Ctrl+C`, `Ctrl+D`.
+- **Коммиты:**
+  - `52fcc40` — выравнивание detail card, перенос URL, cleanup пустых строк, separator width
+  - `626ffae` — человекочитаемая карточка, форматирование дат, удаление UUID из UI, рабочая вкладка запуска
+
+### TUI — что именно сломано было и почему
+
+- Blessed-ветка не просто «выглядела плохо», а была системно непригодна:
+  - `tags: true` в списках не давал цветной рендер, теги отображались как текст,
+  - карточка не обновлялась корректно при refresh,
+  - ручной ANSI конфликтовал с internal cursor handling,
+  - `setInterval` не чистился,
+  - размеры колонок были захардкожены,
+  - на Windows поведение было нестабильным.
+- Даже после частичных CR10-фиксов blessed оставался тупиком, поэтому решение зафиксировано как **полный отказ от blessed**, а не «ещё одна серия патчей».
+
+### Dependency / security
+
+- Источник `npm audit`-алертов локализован: уязвимости тянулись через старые TUI-зависимости (`neo-blessed*`).
+- После удаления TUI-зависимостей класс проблем по этой ветке устранён.
+- Версия проекта поднята с `0.5.0` до `0.5.1`, далее фактическое состояние документации соответствует ветке после TUI rewrite (условно `0.5.2-doc-state`).
+
+### Документация
+
+- Полностью обновлены `CHANGELOG.md`, `CODE_REVIEW.md`, `CONTEXT.md`.
+- Зафиксированы:
+  - хронология TUI rewrite,
+  - реальные ошибки UX/UI,
+  - исправления detail card,
+  - причины отказа от technical identifiers в интерфейсе,
+  - текущие open-проблемы после rewrite.
+
+---
+
+## [0.5.1] — 2026-07-26
+
+### Dependency cleanup
+
+- Удалены `neo-blessed` и `neo-blessed-contrib` — источник уязвимостей в `npm audit`.
+- Версия поднята до `0.5.1`.
+
+---
+
 ## [0.5.0] — 2026-07-26
 
 ### msudrf — полностью переписан
@@ -53,22 +117,9 @@
 - `server.ts` — автостарт `startCron()` при запуске.
 - Настройки: `scheduleFull`, `retryIntervalHours`, `retryStaleHours`, `scheduleEnabled` — через UI и `PUT /api/settings`.
 
-### TUI (packages/tui/)
-
-- **Терминальный интерфейс на blessed** (не neo-blessed — сломан на Windows).
-- **5 попыток создания:**
-  1. neo-blessed → ошибка `fake` (node-pty не собирается на Windows). Отказ.
-  2. ANSI-самопал → неинтерактивен, Q не работает. Брошен.
-  3. blessed с `tags: true` → теги не рендерятся в `blessed.list` (баг blessed #400).
-  4. ANSI drawBox → рамки есть, навигации нет. Брошен.
-  5. **blessed (снова) — чистый список без тегов** → работает на Linux.
-- **Возможности:** таблица дел (номер/статус/суд/результат), вкладки (дела/запуск), детали дела (Enter), F4/F5/F6 для прогонов, авто-обновление 60с, выход по Q/Й/Ctrl+C.
-- **Ограничения:** на Windows глючно (стрелки, русская раскладка, blessed.list). Рекомендация: Linux/WSL.
-- **Файлы:** `packages/tui/index.ts`, `packages/tui/app.ts`, `packages/tui/fetch.ts`.
-
 ### API
 
-- **23 эндпоинта** (было 16 + 1 `GET /cases/:uid/card` в v0.4.0):
+- **23 эндпоинта**:
   - `GET /api/parse/progress` — прогресс мониторинга
   - `GET /api/settings` — настройки расписания
   - `PUT /api/settings` — сохранить настройки
@@ -104,80 +155,6 @@
 - **CR6-013**: `_isRunning = true` перемещён до `res.status(202)` — устранён TOCTOU в guard (`api/routes/parse.ts`)
 - **CR6-016**: `DELETE /api/cases/:uid` теперь каскадно чистит events и notifications (`api/routes/cases.ts`, `store/notifications.ts`)
 
-#### UX/UI — Dashboard
-
-- Дашборд: фильтры по статусу (Все / Мониторинг / Ожидание / Решение / Вступило / Ошибка / Архив) с счётчиками
-- Дашборд: кнопка «Запустить мониторинг» (`POST /api/parse/run`) с polling обновления
-- Дашборд: детали дела в modal — карточка + timeline событий (`GET /api/cases/:uid` + `GET /api/cases/:uid/events`)
-- Дашборд: архивирование (PATCH → `archived`), возврат из архива, удаление (с confirm)
-- Дашборд: авто-обновление каждые 30с, обработка ошибок соединения
-
-#### UX/UI — Search
-
-- Поиск: исправлены API-пути и unwrap (CR6-007)
-- Поиск: кнопка «В мониторинг» (+📋) в каждой строке результатов → `POST /api/cases`
-- Поиск: форма «Отслеживать появление» → `POST /api/cases/wait`
-- Поиск: `<input type="date">` вместо text с placeholder
-- Поиск: убраны тестовые данные (Кислицин, 59RS0007, быстрые тесты)
-- Поиск: брендинг изменён с "CourtSniffer" на "CourtDesk"
-- Поиск: toast-уведомления вместо alert
-
-#### Cleanup
-
-- Magistrate search adapter: удалены мёртвые `createMagistrateSession()` и `solveCaptchaOnPage()` — дубликаты `captcha/session.ts`
-- `GET /api/cases/:uid/events` — новый эндпоинт для timeline событий в UI
-- `version` синхронизирована: package.json / health = 0.4.0
-
----
-
-## [0.4.0] — CR7-CR9
-
-### CR7 — Deep Audit Fixes (10 замечаний)
-
-- **CR7-001**: `success: true` → `false` при HTTP 500 в `/api/status` (`status.ts`)
-- **CR7-002**: `toIso()` — битая ISO дата (двойные `:00`) (`parse/adapters/shared.ts`)
-- **CR7-003**: Dead code `err.message === 'timeout'` удалён (`search/shared.ts`)
-- **CR7-004**: `listNotifications()` возвращает копию массива, а не живую ссылку (`store/notifications.ts`)
-- **CR7-005**: `findCourtsByRegion` — добавлен `.slice(0, 50)` (`core/courts.ts`)
-- **CR7-006**: Матчинг `r.uid === c.uid` убран, только `r.caseNumber === c.number` (`scheduler/orchestrator.ts`)
-- **CR7-007**: `waitForNetworkIdle().catch(() => {})` — логируем ошибки (`captcha/session.ts`)
-- **CR7-009**: `&rarr;` унифицирован на ` → ` во всех адаптерах (`parse/adapters/`)
-- **CR7-010**: `setInterval` чистится при `visibilitychange` (`viewer/index.html`)
-
-### CR8 — Captcha & Search Overhaul (9 замечаний)
-
-- **CR8-001/002**: Исправлены `case_type` (0→1) и `new` (0→5) для апелляции — поиск шёл в кассацию
-- **CR8-003**: CP1251 percent-декодер: ручной парсинг вместо `decodeURIComponent` (падал на невалидных UTF-8)
-- **CR8-004**: `waitForNetworkIdle` → `waitForNavigation` на sudrf (фоновые счетчики не давали network idle)
-- **CR8-005**: Double-encoding CP1251 через `page.goto()` → DOM-заполнение + `checkForm` submit
-- **CR8-006**: Regex base64 — пробел после `base64,` в data URI
-- **CR8-007**: `parseResults` — проверка `<div id="error">`
-- **CR8-008**: `isCaptchaPage` — добавлен маркер "Неверно указан проверочный код"
-- **CR8-009**: `SEARCH_PARAMS` — добавлен `new_` параметр (0/5 для картотеки)
-
-### CR9 — Court Hierarchy & Grace Period (10 замечаний)
-
-- **CR9-001**: `runFull` — добавлен `'enforced'` в список статусов
-- **CR9-002**: `fetchHtml` в оркестраторе — проверка "Неверно указан проверочный код"
-- **CR9-003**: `findHigherCourt()` — новая функция в `core/courts.ts`
-- **CR9-004**: `COURT_HIERARCHY` — иерархия MS→RS→OS→KJ
-- **CR9-005**: `CASSATION_MAP` — 89 регионов → 9 кассационных судов
-- **CR9-006**: `saveMsToRsMapping()` — кэш MS→RS привязок на диск
-- **CR9-007**: `enforcedAt` — новое поле в `WatchedCase`
-- **CR9-008**: `updateCase` — авто-простановка `enforcedAt`
-- **CR9-009**: `ENFORCED_GRACE_MS` — 90 дней grace period для enforced дел
-- **CR9-010**: `searchByCaseUid` — поиск в вышестоящей инстанции по УИД
-
-### Tech-debt (без изменений)
-
-| ID | Описание | Заметка |
-|----|----------|---------|
-| CR6-003 | Zero authentication | `COURTDESK_API_TOKEN` в .env.example — реализация в отдельном sprint |
-| CR6-005 | waiting → `results[0]` без матчинга | Нужен score/party matching |
-| CR6-010 | TLS `rejectUnauthorized: false` | Осознанный trade-off для sudrf.ru wildcard |
-| CR6-009 | eslint — tech-debt | Отложен с CR5-009 |
-| CR6-011 | Structured logging | Отложен с CR5-011 |
-
 ---
 
 ## [0.3.0] — 2026-07-22
@@ -188,18 +165,12 @@
 - Viewer dashboard (UC-0), SEARCH_PARAMS constants
 - CODE_REVIEW4.md, CODE_REVIEW5.md, BUG_REPORT.md
 
-### Fixed
-- CR4-001..008, NEW-001..011, CR5-001..012
-
 ---
 
 ## [0.2.0] — 2026-07-22
 
 ### Added
 - Дашборд UC-0, /api/status, /api/notifications, persistent notifications, POST /api/resolve
-
-### Fixed
-- NEW-001..011, INFRA-001..004
 
 ---
 
