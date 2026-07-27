@@ -50,7 +50,7 @@
 |----|-----------|----------|---------|
 | TUI-O1 | HIGH | Run tab без live progress polling | log есть, progress bar нет |
 | API-O1 | MEDIUM | Puppeteer без очереди при bulk sync parse | нужен `p-limit`/очередь |
-| SEC-O1 | MEDIUM | Zero-auth API | требуется токен/мидлварь |
+| SEC-O1 | MEDIUM | Zero-auth API | ⏸ отложено — решение 2026-07-27 |
 | INFRA-O1 | LOW | Monorepo без workspaces | нет изоляции пакетов |
 | TEST-O1 | MEDIUM | Нет regression-тестов для TUI | высокий риск регрессий |
 
@@ -90,6 +90,7 @@
 | 2026-07-27 | **API тесты**: 57→94 тестов. Добавлены health, search, courts, intake, settings, progress, расширены cases. |
 | 2026-07-27 | **docs/CRM-INTEGRATION.md**: обновлён под v0.5.2 — 25 эндпоинтов, новые поля (errorCount, lastError, enforcedAt, courtName), sync parse, примеры. |
 | 2026-07-27 | **docs migration**: ARCHITECTURE.md, BUG_REPORT.md, CHANGELOG.md, CODE_REVIEW.md, CONTEXT.md, DECISIONS.md перемещены в docs/. |
+| 2026-07-27 | **SEC-O1 отложен**: API auth не делаем. Решение зафиксировано в CONTEXT.md. |
 
 ---
 
