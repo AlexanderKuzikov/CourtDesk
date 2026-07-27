@@ -4,6 +4,38 @@
 
 ---
 
+## 2026-07-27: Go — единая UI-платформа (вместо Node.js TUI)
+
+**Решение:** UI-клиент (TUI + Web) переводится на Go. Бэкенд (API, store, scheduler, search, parse) остаётся на Node.js.
+
+**Архитектура:**
+```
+Node.js API (:8767) ← HTTP ↔ Go-бинарник (`courtdesk-ui`)
+                             ├── TUI (Bubble Tea, `--tui`)
+                             └── Web UI (html/template + go:embed, default)
+```
+
+**Почему не Node.js для TUI:**
+- **ConPTY** — прослойка эмуляции терминала поверх Win32 API, через которую Node.js общается с консолью. Глючит: alt-screen не переключается, resize не шлёт, raw mode сбрасывается.
+- **Ink 7 + React 19** — `fullScreen: true` не работает на Windows (не переключает alt-screen), `height="100%"` не прибивает статус-бар к низу, `flexGrow={1}` не растягивает контент.
+- **Raw ANSI (readline)** — работает, но: alt-screen нестабилен, курсор (inverse) не на всю строку, F-keys не ловятся, resize не обрабатывается.
+- **`ffi-napi`** — технически может вызывать Win32 API из Node.js, но: требует компиляции C++, нет готового TUI-фреймворка на этом, сложность не оправдана.
+
+**Почему Go + Bubble Tea:**
+- Bubble Tea работает с консолью напрямую через Win32 API (`kernel32.dll`), ConPTY не задействован. Alt-screen, resize, F-keys, мышь — из коробки.
+- Один статический бинарник без зависимостей (7 MB). Кроссплатформенная компиляция одной командой: `GOOS=linux go build`.
+- `go:embed` позволяет встроить HTML/CSS/JS Web UI в тот же бинарник.
+- На Linux — работает через ANSI (crossterm), стабильнее чем любой Node.js-вариант.
+
+**Почему Node.js бэкенд не трогается:**
+- Кодовая база 5k+ строк, 94 теста, отлажена.
+- cheerio/puppeteer/pino — зрелые библиотеки без аналогов в Go такого же качества.
+- Интеграция с 1С, REST-контракты — не меняются.
+
+**Trade-off:** Два рантайма (Node.js + Go) на сервере. GitHub CI, деплой — два артефакта. Принято: Go-бинарник — независимый клиент, не требует Node.js для работы.
+
+---
+
 ## 2026-07-26: msudrf AJAX — отдельный пайплайн (не sudrf)
 
 **Решение:** msudrf использует `fetchMsudrfSearch()` в `captcha/session.ts` — отдельную функцию, не переиспользует `fetchWithCaptcha`.

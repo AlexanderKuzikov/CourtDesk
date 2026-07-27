@@ -31,8 +31,9 @@
 | eslint | ✅ flat config | 2026-07-26 |
 | pino | ✅ structured logging | 2026-07-26 |
 | Dependency audit | ✅ TUI-vuln ветка удалена | 2026-07-26 |
-| TUI | ✅ rewrite без blessed | 2026-07-26 |
-| TUI UX | ⚠️ в активной доводке | 2026-07-26 |
+| TUI (Node, deprecated) | ✅ readline+ANSI | 2026-07-26 |
+| TUI (Go, актуальный) | 🆕 Bubble Tea — Win32 API, стабильно | 2026-07-27 |
+| Go CLI/Web binary | 🆕 единый .exe (web + tui) на Go | 2026-07-27 |
 | API tests | ✅ 94 тестов, покрытие всех эндпоинтов | 2026-07-27 |
 | Docs | ✅ docs/ почищен, CRM-INTEGRATION обновлён | 2026-07-27 |
 
@@ -87,9 +88,42 @@
 
 ## TUI — текущее состояние
 
-Полный отказ от blessed/neo-blessed. Текущий TUI — чистый Node.js (`readline` + ANSI), 0 внешних TUI-зависимостей.
+**v0.5.1 — `packages/tui/` (Node.js, deprecated):** Чистый Node.js (`readline` + ANSI), 0 внешних TUI-зависимостей. Работает, но статус-бар не прибивается к низу на Windows, курсор (selection) не на всю строку, alt-screen нестабилен.
 
-Статус: ⚠️ требует кардинальной переработки (сейчас полное говно).
+**v0.7.0 — `packages/tui-go/` (Go, актуальный):** Go-бинарник на Bubble Tea. Работает напрямую через Win32 API (без ConPTY), alt-screen из коробки, курсор на всю строку, статус-бар внизу, F-keys, resize. На Linux работает через ANSI (crossterm). Один .exe без зависимостей.
+
+Текущее состояние TUI (Go): список дел, детали + события, добавление/удаление, прогон (full/retry/new), уведомления, фильтр по номеру/суду/статусу.
+
+---
+
+## Go UI — архитектура (plan)
+
+### Концепция
+
+CourtDesk UI переходит на Go как единую платформу для двух интерфейсов:
+
+| Режим | Команда | Назначение |
+|-------|---------|------------|
+| **Web-сервер** | `courtdesk-ui` | HTTP-сервер, отдаёт статику + админский Web UI |
+| **TUI** | `courtdesk-ui --tui` | Alt-screen TUI (Bubble Tea) для SSH/терминала без браузера |
+
+**Принципы:**
+
+- Go-бинарник — **клиент** к существующему Node.js API (http://127.0.0.1:8767/api). Бэкенд не трогается.
+- Один исходный код на Go — общая бизнес-логика (списки, детали, управление) между Web и TUI.
+- `go:embed` — HTML/CSS/JS статика внутри бинарника, второй процесс не нужен.
+- Порт по умолчанию: `8768` (не конфликтует с API :8767).
+
+### Что входит (база)
+
+- **Web UI:** `/` — дашборд, `/search` — поиск, `/settings` — настройки. Возврат к vanilla HTML+JS (как в `packages/viewer/public/`) или `html/template` + htmx.
+- **TUI:** список дел, детали + события, добавление/удаление, прогон (full/retry/new), уведомления, фильтр.
+- **Один .exe** — кроссплатформенный (Windows/Linux), без зависимостей, 7 MB.
+
+### Отношение к существующему Node.js Web UI
+
+Существующий `packages/viewer/public/` (vanilla JS, Terminal layout, Skins) **остаётся** как фронтенд к Node API (:8767).
+Go-бинарник — **альтернативный** UI, в первую очередь для администрирования по SSH, во вторую — лёгкий Web UI без Node.js на сервере.
 
 ---
 
@@ -99,11 +133,16 @@
 |----|-----------|----------|---------|
 | WEBUI-O1..O15 | HIGH/MED | 15 гэпов из PROMPT_WEBUI.md — все не закрыты | см. «Web UI open-проблемы» выше |
 | TUI-O1 | HIGH | Run tab без live progress polling | log есть, progress bar нет |
+| GOUI-O1 | HIGH | TUI (Go) требует кардинальной доработки UI | курсор, цвета, скролл, прокрутка |
+| GOUI-O2 | MED | Web-режим (--serve) не реализован | только TUI пока |
+| GOUI-O3 | MED | Go-бинарник не использует go:embed | статика отдельно |
+| GOUI-O4 | LOW | Нет автозапуска API при старте Go-бинарника | сейчас требует npm start |
 | API-O1 | MEDIUM | Puppeteer без очереди при bulk sync parse | нужен `p-limit`/очередь |
 | SEC-O1 | MEDIUM | Zero-auth API | ⏸ отложено — решение 2026-07-27 |
 | INFRA-O1 | LOW | Monorepo без workspaces | нет изоляции пакетов |
 | TEST-O1 | MEDIUM | Нет regression-тестов для TUI/UI | высокий риск регрессий |
 | TEST-O2 | LOW | Нет UI-тестов (Playwright есть в dep, smoke-тестов 0) | terminal.js/dashboard/search без автоматизации |
+| TEST-O3 | LOW | Нет тестов для Go-бинарника | go test — 0 файлов |
 
 ---
 
@@ -143,6 +182,8 @@
 | 2026-07-27 | **docs migration**: ARCHITECTURE.md, BUG_REPORT.md, CHANGELOG.md, CODE_REVIEW.md, CONTEXT.md, DECISIONS.md перемещены в docs/. |
 | 2026-07-27 | **SEC-O1 отложен**: API auth не делаем. Решение зафиксировано в CONTEXT.md. |
 | 2026-07-27 | **v0.6.0 Web UI — Terminal + Skins**: новый layout `terminal.html` + `terminal.js` (Bloomberg-style, vim-keys, multi-sort, saved views, statusline). Skin-axis в `theme.css` — 3 варианта оформления (corporate/Бумага/compact) ортогонально `data-theme`. `app.js` — skin-switcher с реестром и swatch. `index.html`/`search.html` — inline `_t()` от FOUC, ссылка «Терминал» в nav. **Гэпы PROMPT_WEBUI.md (O1-O15) НЕ закрыты** — открыты как WEBUI-O1..O15. |
+| 2026-07-27 | **Go TUI (v0.7.0)**: `packages/tui-go/` — Go-бинарник на Bubble Tea. Отказ от Node.js для UI (Ink/ConPTY нестабильны на Windows). Работает через Win32 API напрямую, статус-бар внизу, alt-screen, F-keys. Список дел, детали+события, добавление/удаление, прогон, уведомления, фильтр. Кроссплатформенная компиляция (win/linux), 7 MB .exe. |
+| 2026-07-27 | **Решение: Go — UI-платформа**: TUI-прототип подтвердил стабильность. Планируется единый Go-бинарник для Web UI (`courtdesk-ui`) и TUI (`--tui`). Node.js бэкенд не трогается. Решение зафиксировано в docs/CONTEXT.md и docs/DECISIONS.md. |
 
 ---
 
@@ -162,7 +203,12 @@ courtdesk/
 │   ├── api/
 │   │   ├── routes/     — 25 эндпоинтов (+тесты)
 │   │   └── middleware/
-│   ├── tui/            — readline + ANSI, без blessed
+│   ├── tui/            — readline + ANSI, без blessed (deprecated)
+│   ├── tui-go/         — Go TUI (Bubble Tea) + Web UI (plan)
+│   │   ├── main.go     — единая точка входа
+│   │   ├── go.mod      — Go модуль
+│   │   ├── courtdesk-tui.exe     — Windows бинарник (7 MB)
+│   │   └── courtdesk-tui-linux-amd64  — Linux бинарник (7 MB)
 │   └── viewer/
 │       └── public/     — Web UI без бандлера
 │           ├── index.html       — дашборд (разметка + inline JS 370 строк)

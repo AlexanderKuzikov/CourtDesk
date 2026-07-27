@@ -3,7 +3,7 @@
 > Единый API-сервис для интеграции с CRM (1С) и параллельного Web UI.
 > Собирается из CourtSniffer (поиск), CourtFlow (мониторинг) и CourtDesk (intake).
 
-> **Обновлено 2026-07-26** по результатам CR6–CR9 + v0.5.0 (msudrf AJAX, TUI, eslint, pino, cron, party matching).
+> **Обновлено 2026-07-27** — добавлена Go UI-архитектура (TUI + Web), решение Go вместо Node.js для UI.
 
 ---
 
@@ -117,10 +117,17 @@ courtdesk/
 │   │   ├── notifications.ts # Уведомления + deleteNotificationsByCase
 │   │   └── json-store.ts  # Атомарная запись (tmp+rename, corrupt backup)
 │   │
-│   ├── tui/               # Терминальный интерфейс (blessed)
+│   ├── tui/               # Терминальный интерфейс (blessed, deprecated)
 │   │   ├── index.ts       # Точка входа
 │   │   ├── app.ts         # screen, list, detail, клавиши
 │   │   └── fetch.ts       # tuiFetch() с AbortController
+│   │
+│   ├── tui-go/            # Go TUI (Bubble Tea) + Web UI (plan)
+│   │   ├── main.go        # Bubble Tea TUI (1144 строк)
+│   │   ├── go.mod         # Go модуль
+│   │   ├── go.sum
+│   │   ├── courtdesk-tui.exe    # Windows бинарник (7 MB)
+│   │   └── courtdesk-tui-linux-amd64 # Linux бинарник (7 MB)
 │   │
 │   └── api/               # Express-сервер
 │       ├── server.ts      # createApp() + CORS + graceful shutdown
@@ -267,9 +274,54 @@ Node.js однопоточен, но `await fetchHtml()` освобождает 
 
 ---
 
-## 9. Scheduler
+## 9. Go UI — клиентский слой (в разработке)
 
-### 9.1 Режимы
+### 9.1 Концепция
+
+```text
+HTTP :8767                      HTTP :8768
+┌──────────────┐               ┌───────────────────┐
+│ Node.js API  │ ←─ REST ──→   │ Go-бинарник       │
+│ (Express)    │               │ (courtdesk-ui)    │
+│              │               │                   │
+│ store/search │               │ ├── Web UI (--serve)
+│ parse/cron   │               │ └── TUI   (--tui)  │
+└──────────────┘               └───────────────────┘
+```
+
+- Go-бинарник — **клиент** к Node.js API. Бэкенд не изменяется.
+- Один исходный код, два режима: Web (HTTP-сервер статики) и TUI (Bubble Tea).
+- `go:embed` — статика внутри бинарника, ноль внешних файлов.
+
+### 9.2 Почему Go, а не Node.js
+
+| Фактор | Node.js TUI | Go TUI |
+|--------|------------|--------|
+| Win32 API | Через ConPTY (глючит) | Прямые вызовы `kernel32.dll` |
+| Alt-screen | Нестабилен | Из коробки |
+| F-keys / resize | Через ConPTY (потери) | Нативные события |
+| Размер | 200+ MB + Node.js | 7 MB статический .exe |
+| Кроссплатформенность | Только сборка под свою ОС | `GOOS=linux go build` |
+
+### 9.3 Текущий прототип
+
+**`packages/tui-go/main.go`** — Bubble Tea TUI (1144 строк):
+- Список дел (номер, суд, участники, статус, дата)
+- Детали дела + события (timeline)
+- Добавление/удаление дел
+- Прогон (full/retry/new)
+- Уведомления
+- Фильтр по номеру/суду/cтатусу
+- Поиск
+- F-keys: F2=прогон, F3=добавить, F5=обновить, F10=выход
+
+Планируется: Web-режим (`--serve`) с админским интерфейсом (html/template).
+
+---
+
+## 10. Scheduler
+
+### 10.1 Режимы
 
 | Режим | Что делает |
 |-------|-----------|
@@ -277,7 +329,7 @@ Node.js однопоточен, но `await fetchHtml()` освобождает 
 | **retry** | Устаревшие monitoring + error |
 | **new** | waiting → searchByParty |
 
-### 9.2 Lifecycle дел
+### 10.2 Lifecycle дел
 ```
 waiting → monitoring → decision → enforced → archived
                 ↑           |          |
@@ -286,7 +338,7 @@ waiting → monitoring → decision → enforced → archived
 
 ---
 
-## 10. Стратегия миграции
+## 11. Стратегия миграции
 
 ### Фаза 1–5: Выполнено ✅
 - Фундамент, поиск, парсинг, оркестрация, API, инфраструктура
@@ -301,8 +353,10 @@ waiting → monitoring → decision → enforced → archived
 5. Синхронный парсинг, error counters, progress bar ✅
 6. UI: КАПС→капс, courtName, настройки расписания ✅
 
-### Фаза 7: План
-1. WebSocket / SSE — push-уведомления
-2. TUI — стабилизация на Windows
-3. API token auth (CR6-003)
-4. Puppeteer browser pool (CR6-012)
+### Фаза 7: Текущая — Go UI (2026-07-27)
+1. **Go TUI прототип** — Bubble Tea, Win32 API, список/детали/добавление/удаление/прогон/уведомления ✅
+2. **Go Web UI** — `--serve` режим, `go:embed` статика, порт :8768 ⏳
+3. **Один бинарник** — объединение TUI + Web в `courtdesk-ui` ⏳
+4. WebSocket / SSE — push-уведомления (отложено)
+5. API token auth (CR6-003) (отложено)
+6. Puppeteer browser pool (CR6-012) (отложено)
