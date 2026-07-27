@@ -11,7 +11,7 @@ interface TabLayoutProps {
 
 export default function TabLayout({ tabs, active, onSelect, children }: TabLayoutProps) {
   return (
-    <Box flexDirection="column" height="100%">
+    <Box flexDirection="column" flexGrow={1}>
       {/* Tab bar */}
       <Box>
         {tabs.map(t => {
@@ -19,19 +19,13 @@ export default function TabLayout({ tabs, active, onSelect, children }: TabLayou
           const label = t.count !== undefined ? `${t.label} (${t.count})` : t.label;
           return (
             <Box key={t.id} marginRight={1}>
-              <Text
-                inverse={sel}
-                bold={sel}
-                color={sel ? undefined : 'blue'}
-                wrap="truncate-end"
-              >
-                {sel ? ` ${label} ` : ` ${label} `}
-              </Text>
+              <Text inverse={sel} bold={sel}>{` ${label} `}</Text>
             </Box>
           );
         })}
       </Box>
 
+      {/* Content */}
       <Box flexDirection="column" flexGrow={1}>
         {children}
       </Box>

@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useRef, useMemo } from 'react';
-import { Box, Text, useInput } from 'ink';
+import React, { useState, useMemo } from 'react';
+import { Box, Text, useInput, useStdout } from 'ink';
 import type { WatchedCase } from '../types.js';
 
 interface CaseListProps {
@@ -11,59 +11,37 @@ interface CaseListProps {
 }
 
 const STATUS_RU: Record<string, string> = {
-  waiting:    'Ожидание',
+  waiting:    'Ожидание  ',
   monitoring: 'Мониторинг',
-  decision:   'Решено',
-  enforced:   'В силе',
-  archived:   'Архив',
-  error:      'Ошибка',
+  decision:   'Решено    ',
+  enforced:   'В силе    ',
+  archived:   'Архив     ',
+  error:      'Ошибка    ',
 };
 
-const STATUS_COLOR: Record<string, string> = {
-  waiting:    'yellow',
-  monitoring: 'cyan',
-  decision:   'green',
-  enforced:   'green',
-  archived:   'gray',
-  error:      'red',
-};
+// Строка целиком — собирается как одна строка, селект = inverse всей строки
+function rowText(c: WatchedCase, sel: boolean, w: number): string {
+  const courtName = (c as any).courtName || c.courtId || '—';
+  // Ширина колонок в символах
+  const numW   = Math.min(26, Math.floor(w * 0.22));
+  const statW  = Math.min(14, Math.floor(w * 0.14));
+  const courtW = Math.min(32, Math.floor(w * 0.28));
+  const resW   = Math.max(10, w - numW - statW - courtW - 5);
 
-function fmtDate(iso: string | null | undefined): string {
-  if (!iso) return '—';
-  if (/^\d{2}\.\d{2}\.\d{4}$/.test(iso)) return iso;
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
-}
+  const num   = (c.number || '—').padEnd(numW).slice(0, numW);
+  const stat  = (STATUS_RU[c.status] || c.status).padEnd(statW).slice(0, statW);
+  const court = courtName.padEnd(courtW).slice(0, courtW);
+  const result = (c.result || '—').padEnd(resW).slice(0, resW);
 
-function truncate(s: string, w: number): string {
-  if (!s) return '—';
-  if (s.length <= w) return s;
-  return s.slice(0, w - 1) + '…';
-}
-
-interface ColumnWidths {
-  num: number;
-  status: number;
-  court: number;
-  result: number;
-}
-
-function calcCols(total: number): ColumnWidths {
-  const num    = Math.min(26, Math.floor(total * 0.22));
-  const status = Math.min(14, Math.floor(total * 0.14));
-  const court  = Math.min(32, Math.floor(total * 0.28));
-  const result = Math.max(10, total - num - status - court - 8);
-  return { num, status, court, result };
+  return ` ${num} ${stat} ${court} ${result}`;
 }
 
 export default function CaseList({ cases, selected, onSelect, onEnter, onDelete }: CaseListProps) {
+  const { stdout } = useStdout();
   const [filter, setFilter] = useState('');
   const [searchMode, setSearchMode] = useState(false);
-  const [vtop, setVtop] = useState(0);
-  const rowsRef = useRef(0);
 
-  const cols = useMemo(() => calcCols(80), []); // will update on render
+  const termW = stdout.columns || 80;
 
   const filtered = useMemo(() => {
     if (!filter) return cases;
@@ -71,100 +49,45 @@ export default function CaseList({ cases, selected, onSelect, onEnter, onDelete 
     return cases.filter(c =>
       c.number.toLowerCase().includes(q) ||
       c.courtId?.toLowerCase().includes(q) ||
-      (c as any).courtName?.toLowerCase().includes(q)
+      ((c as any).courtName ?? '').toLowerCase().includes(q)
     );
   }, [cases, filter]);
 
-  // Actual columns based on terminal width (approximated via render)
-  const getCols = useCallback(() => {
-    // We can't get terminal width directly in Ink easily without useWindowSize
-    // Using a default that works
-    return calcCols(80);
-  }, []);
+  // Высота списка = всё что помещается минус 4 строки (таббар, заголовок, статус, футер)
+  const listH = Math.max(3, (stdout.rows || 24) - 5);
+  const cur = Math.max(0, Math.min(selected, filtered.length - 1));
 
-  // Recalc on each render using available width
-  const actualCols = getCols();
-
-  const listHeight = 20; // approximated
-
-  // Clamp selection to filtered list
-  const safeSelected = Math.min(selected, filtered.length - 1);
-
-  // Scroll
-  const cur = Math.min(safeSelected, Math.max(0, safeSelected));
-  const vtopAdjusted = Math.max(0, Math.min(vtop, Math.max(0, filtered.length - listHeight)));
-  const showVtop = cur < vtopAdjusted ? cur : cur >= vtopAdjusted + listHeight ? cur - listHeight + 1 : vtopAdjusted;
+  // Скролл — держим cur в видимой области
+  const maxVtop = Math.max(0, filtered.length - listH);
+  const vtop = Math.max(0, Math.min(cur - Math.floor(listH / 2), maxVtop));
 
   useInput((input, key) => {
     if (searchMode) {
-      if (key.escape || key.return) {
-        setSearchMode(false);
-        return;
-      }
-      if (key.backspace || key.delete) {
-        setFilter(f => f.slice(0, -1));
-        return;
-      }
-      if (input.length === 1 && !key.ctrl) {
-        setFilter(f => f + input);
-      }
+      if (key.escape || key.return) { setSearchMode(false); return; }
+      if (key.backspace || key.delete) { setFilter(f => f.slice(0, -1)); return; }
+      if (input.length === 1 && !key.ctrl) { setFilter(f => f + input); return; }
       return;
     }
-
-    if (key.upArrow) {
-      onSelect(Math.max(0, selected - 1));
-      return;
-    }
-    if (key.downArrow) {
-      onSelect(Math.min(filtered.length - 1, selected + 1));
-      return;
-    }
-    if (key.pageUp) {
-      onSelect(Math.max(0, selected - listHeight));
-      return;
-    }
-    if (key.pageDown) {
-      onSelect(Math.min(filtered.length - 1, selected + listHeight));
-      return;
-    }
-    if (key.home) {
-      onSelect(0);
-      return;
-    }
-    if (key.end) {
-      onSelect(filtered.length - 1);
-      return;
-    }
-    if (key.return) {
-      if (filtered.length > 0) onEnter();
-      return;
-    }
-    if (input === '/' || input === 'и') {
-      setSearchMode(true);
-      setFilter('');
-      return;
-    }
-    if (key.delete && selected >= 0 && selected < filtered.length) {
-      onDelete(filtered[selected].uid);
-      return;
-    }
+    if (key.upArrow)    { onSelect(Math.max(0, cur - 1)); return; }
+    if (key.downArrow)  { onSelect(Math.min(filtered.length - 1, cur + 1)); return; }
+    if (key.pageUp)     { onSelect(Math.max(0, cur - listH)); return; }
+    if (key.pageDown)   { onSelect(Math.min(filtered.length - 1, cur + listH)); return; }
+    if (key.home)       { onSelect(0); return; }
+    if (key.end)        { onSelect(Math.max(0, filtered.length - 1)); return; }
+    if (key.return)     { if (filtered.length > 0) onEnter(); return; }
+    if (input === '/' || input === 'и') { setSearchMode(true); setFilter(''); return; }
+    if (key.delete && filtered.length > 0) { onDelete(filtered[cur].uid); return; }
   });
 
   if (!cases.length) {
-    return (
-      <Box flexDirection="column" paddingY={1}>
-        <Text dimColor>  Дел нет. Запустите API: npm start</Text>
-      </Box>
-    );
+    return <Text>  Дел нет. Запустите API: npm start</Text>;
   }
 
-  const shown = filtered.slice(showVtop, showVtop + listHeight);
-  const scrollPct = filtered.length > listHeight ? showVtop / (filtered.length - listHeight) : 0;
-  const scrollPos = Math.round(scrollPct * (listHeight - 1));
+  const shown = filtered.slice(vtop, vtop + listH);
+  const totalW = termW;
 
   return (
     <Box flexDirection="column" flexGrow={1}>
-      {/* Search bar */}
       {searchMode && (
         <Box>
           <Text bold>/</Text>
@@ -173,67 +96,47 @@ export default function CaseList({ cases, selected, onSelect, onEnter, onDelete 
         </Box>
       )}
 
-      {/* Header */}
-      <Box>
-        <Box width={actualCols.num + 2}>
-          <Text bold underline>№ ДЕЛА</Text>
-        </Box>
-        <Box width={actualCols.status + 2}>
-          <Text bold underline>СТАТУС</Text>
-        </Box>
-        <Box width={actualCols.court + 2}>
-          <Text bold underline>СУД</Text>
-        </Box>
-        <Box flexGrow={1}>
-          <Text bold underline>РЕШЕНИЕ</Text>
-        </Box>
+      {/* Заголовок */}
+      <Box paddingLeft={1}>
+        <Text dimColor bold>
+          {` ${'№ ДЕЛА'.padEnd(Math.min(26, Math.floor(totalW * 0.22)))} ${'СТАТУС'.padEnd(Math.min(14, Math.floor(totalW * 0.14)))} ${'СУД'.padEnd(Math.min(32, Math.floor(totalW * 0.28)))} ${'РЕШЕНИЕ'}`}
+        </Text>
       </Box>
 
+      {/* Строки */}
       <Box flexDirection="column" flexGrow={1}>
         {shown.map((c, i) => {
-          const idx = showVtop + i;
+          const idx = vtop + i;
           const sel = idx === cur;
-          const courtName = (c as any).courtName || c.courtId || '—';
-          const statusColor = STATUS_COLOR[c.status] || undefined;
-          const statusLabel = STATUS_RU[c.status] || c.status;
-          const num = truncate(c.number || '—', actualCols.num);
-          const court = truncate(courtName, actualCols.court);
-          const result = truncate(c.result || '—', actualCols.result);
+          const text = rowText(c, sel, totalW);
 
+          // Для выбранной строки — inverse, для ошибок — красный
+          const statusColor = c.status === 'error' && !sel ? 'red' : undefined;
           return (
-            <Box key={c.uid}>
-              <Box width={actualCols.num + 2}>
-                {sel ? <Text inverse bold>{num}</Text> : <Text bold>{num}</Text>}
-              </Box>
-              <Box width={actualCols.status + 2}>
-                <Text color={statusColor}>{statusLabel}</Text>
-              </Box>
-              <Box width={actualCols.court + 2}>
-                <Text>{court}</Text>
-              </Box>
-              <Box flexGrow={1}>
-                <Text color={sel ? undefined : c.status === 'error' ? 'red' : undefined}>{result}</Text>
-              </Box>
+            <Box key={c.uid} paddingLeft={1}>
+              <Text inverse={sel} color={statusColor} wrap="truncate-end">{text}</Text>
             </Box>
           );
         })}
 
-        {/* Scroll indicator */}
-        {filtered.length > listHeight && (
-          <Box>
+        {/* Скроллбар */}
+        {filtered.length > listH && (
+          <Box paddingLeft={1}>
             <Text dimColor>
-              {Array.from({ length: listHeight }, (_, i) =>
-                i === scrollPos ? '█' : '│'
-              ).join('')}
+              {Array.from({ length: listH }, (_, i) => {
+                const pct = vtop / Math.max(1, filtered.length - listH);
+                const tp = Math.round(pct * (listH - 1));
+                return i === tp ? '█' : '│';
+              }).join('')}
             </Text>
           </Box>
         )}
 
-        {/* Count */}
-        <Box marginTop={1}>
+        {/* Счётчик */}
+        <Box paddingLeft={1} marginTop={1}>
           <Text dimColor>
             {filter ? `Найдено: ${filtered.length} из ${cases.length}` : `Всего: ${cases.length}`}
-            {filter && '  [Esc] сбросить фильтр'}
+            {filter && '  [Esc] сброс'}
           </Text>
         </Box>
       </Box>
