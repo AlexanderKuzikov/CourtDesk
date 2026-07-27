@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="dark" data-skin="corporate">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CourtDesk — Терминал</title>
+  <link rel="stylesheet" href="/theme.css">
+  <script>function _t(){var s=localStorage.getItem('courtdesk-theme'),m=matchMedia('(prefers-color-scheme: light)').matches;document.documentElement.setAttribute('data-theme',s||(m?'light':'dark'));var sk=localStorage.getItem('courtdesk-skin');if(sk==='legal'||sk==='compact')document.documentElement.setAttribute('data-skin',sk)}_t()</script>
+  <style>
+    body { font-family: var(--skin-tabular); }
+    .t-app { display: flex; flex-direction: column; height: calc(100vh - 60px); }
+    .t-cmd { display: flex; align-items: center; gap: 8px; padding: 6px 14px; background: var(--surface); border-bottom: 1px solid var(--border); color: var(--text-muted); font-family: var(--skin-tabular); font-size: 12px; flex-shrink: 0; }
+    .t-cmd .prompt { color: var(--primary); font-weight: 700; }
+    .t-cmd .mode { color: var(--success); font-weight: 700; min-width: 76px; }
+    .t-cmd .mode.search { color: var(--primary); }
+    .t-cmd .mode.cmd { color: var(--warning); }
+    .t-cmd input { flex: 1; background: transparent; border: none; color: var(--text); font-family: var(--skin-tabular); font-size: 12px; padding: 0; margin: 0; }
+    .t-cmd input:focus { outline: none; }
+    .t-cmd .count { color: var(--text-dim); white-space: nowrap; }
+    .t-cmd .hint { color: var(--text-dim); white-space: nowrap; font-size: 11px; }
+
+    .t-filters { display: flex; gap: 4px; padding: 5px 14px; background: var(--bg); border-bottom: 1px solid var(--border); flex-wrap: wrap; flex-shrink: 0; }
+    .t-filters .pill { padding: 2px 8px; border-radius: var(--skin-radius-sm); font-size: 11px; background: transparent; border: 1px solid var(--border); color: var(--text-muted); cursor: pointer; font-family: var(--skin-tabular); line-height: 1.4; }
+    .t-filters .pill:hover { color: var(--text); border-color: var(--text-dim); }
+    .t-filters .pill.active { background: var(--primary-bg); border-color: var(--primary); color: var(--primary); }
+    .t-filters .pill .n { opacity: .7; margin-left: 4px; font-weight: 700; }
+    .t-filters .pill .k { opacity: .5; margin-left: 5px; font-size: 10px; }
+
+    .t-grid { flex: 1; display: grid; grid-template-columns: 1fr 280px; min-height: 0; }
+    .t-grid.log-hidden { grid-template-columns: 1fr; }
+    .t-grid.log-hidden .t-log { display: none; }
+    .t-table { overflow: auto; background: var(--bg); position: relative; }
+    .t-table table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; background: var(--surface); }
+    .t-table thead { position: sticky; top: 0; z-index: 2; }
+    .t-table th { padding: 6px 10px; background: var(--surface); color: var(--text-muted); font-weight: 600; font-size: 11px; border-bottom: 1px solid var(--border); user-select: none; cursor: pointer; font-family: var(--skin-tabular); text-align: left; white-space: nowrap; transition: color .12s; }
+    .t-table th:hover { color: var(--primary); }
+    .t-table th.sort { color: var(--primary); }
+    .t-table td { padding: 4px 10px; border-bottom: 1px solid var(--border); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .t-table tbody tr { cursor: pointer; transition: background .08s; }
+    .t-table tbody tr:hover td { background: var(--surface-hover); }
+    .t-table tbody tr.sel td { background: var(--primary-bg); }
+    .t-table tbody tr.sel td:first-child { box-shadow: inset 2px 0 0 var(--primary); }
+    .t-table td.idx { color: var(--text-dim); font-family: var(--skin-tabular); text-align: right; width: 38px; }
+    .t-table th.idx { cursor: default; text-align: right; }
+    .t-table td.num, .t-table td.mono { font-family: var(--skin-tabular); }
+    .t-table td.ev { font-family: var(--skin-tabular); font-size: 11px; color: var(--text-dim); }
+    .t-table .tag { display: inline-block; padding: 1px 5px; border-radius: var(--skin-radius-sm); font-size: 10px; font-weight: 700; font-family: var(--skin-tabular); }
+    .sort-1::after { content: " ▼"; opacity: .8; }
+    .sort-1.asc::after { content: " ▲"; }
+    .sort-2::after { content: " ▷"; opacity: .6; }
+    .sort-2.asc::after { content: " ◁"; }
+    .sort-3::after { content: " ▹"; opacity: .5; }
+    .sort-3.asc::after { content: " ◃"; }
+
+    .t-log { padding: 8px 10px; overflow-y: auto; border-left: 1px solid var(--border); background: var(--surface); font-family: var(--skin-tabular); font-size: 11px; }
+    .t-log > header { display: flex; align-items: center; justify-content: space-between; padding: 0 0 8px; margin-bottom: 6px; border-bottom: 1px solid var(--border); background: none; border-left: none; border-right: none; border-top: none; padding-left: 0; padding-right: 0; }
+    .t-log > header h3 { font-family: var(--skin-tabular); font-size: 12px; color: var(--text-muted); font-weight: 600; }
+    .t-log > header span { color: var(--text-dim); font-size: 10px; }
+    .t-log .le { padding: 4px 0; border-bottom: 1px dashed var(--border); display: grid; grid-template-columns: 56px 1fr; gap: 6px; align-items: start; }
+    .t-log .le:last-child { border: none; }
+    .t-log .le .t { color: var(--text-dim); white-space: nowrap; font-size: 10px; padding-top: 1px; }
+    .t-log .le .m { color: var(--text); font-size: 11px; }
+    .t-log .le.read .m { opacity: .5; }
+    .t-log .le.found .m::before { content: '+ '; color: var(--primary); font-weight: 700; }
+    .t-log .le.decision .m::before { content: '★ '; color: var(--success); }
+    .t-log .le.enforced .m::before { content: '◎ '; color: var(--purple); }
+    .t-log .le.error .m::before { content: '✗ '; color: var(--danger); }
+    .t-log .le.waiting .m::before { content: '○ '; color: var(--warning); }
+
+    .t-status { padding: 4px 14px; background: var(--surface); border-top: 1px solid var(--border); color: var(--text-muted); font-family: var(--skin-tabular); font-size: 11px; display: flex; gap: 14px; align-items: center; flex-shrink: 0; overflow-x: auto; }
+    .t-status .mode { color: var(--success); font-weight: 700; padding-right: 10px; border-right: 1px solid var(--border); white-space: nowrap; }
+    .t-status .seg { white-space: nowrap; }
+    .t-status .seg .k { color: var(--text-dim); margin-right: 4px; }
+    .t-status .seg .v { color: var(--text); }
+    .t-status .seg.scanrun .v { color: var(--warning); }
+    .t-status .right { margin-left: auto; color: var(--text-dim); white-space: nowrap; }
+
+    .empty-pad { padding: 40px 24px; text-align: center; color: var(--text-dim); font-family: var(--skin-tabular); font-size: 13px; }
+    .scan-bar { display: none; padding: 4px 14px; background: var(--warning-bg); color: var(--warning); font-family: var(--skin-tabular); font-size: 11px; border-bottom: 1px solid var(--border); align-items: center; gap: 10px; flex-shrink: 0; }
+    .scan-bar.show { display: flex; }
+
+    .detail-card .case-num, .detail-card .info-item .key, .detail-card .ev-type, .detail-card .ev-time { font-family: var(--skin-tabular); font-size: 11px; }
+    .detail-card .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; margin-bottom: 20px; }
+    .detail-card .info-item .key { color: var(--text-muted); }
+    .detail-card .info-item .val { color: var(--text); margin-top: 2px; font-size: 13px; }
+    .detail-card .timeline { border-left: 2px solid var(--border); padding-left: 16px; }
+    .detail-card .timeline-item { position: relative; padding: 8px 0; }
+    .detail-card .timeline-item::before { content: ''; position: absolute; left: -21px; top: 14px; width: 9px; height: 9px; border-radius: 50%; background: var(--primary); }
+    .detail-card .ev-msg { font-size: 13px; color: var(--text); margin-top: 2px; }
+    .detail-card .sub { font-family: var(--skin-tabular); font-size: 11px; color: var(--text-muted); margin: 16px 0 6px; font-weight: 600; }
+    .detail-card .sub .n { color: var(--primary); }
+
+    .help-card { background: var(--surface); border-radius: var(--skin-radius-lg); width: 560px; max-width: 90vw; max-height: 85vh; overflow-y: auto; padding: 24px; box-shadow: var(--skin-shadow-card); }
+    .help-card h2 { font-size: 16px; margin-bottom: 14px; color: var(--primary); font-family: var(--skin-head-font); }
+    .help-card .keys { display: grid; grid-template-columns: auto 1fr; gap: 6px 18px; font-family: var(--skin-tabular); font-size: 13px; }
+    .help-card .keys kbd { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--skin-radius-sm); padding: 2px 8px; font-family: var(--skin-tabular); font-size: 12px; color: var(--text); font-weight: 600; }
+    .help-card .keys .desc { color: var(--text-muted); align-self: center; }
+    .help-card .group { font-size: 11px; color: var(--text-dim); margin-top: 18px; padding-bottom: 4px; border-bottom: 1px solid var(--border); font-weight: 600; grid-column: 1 / -1; }
+    .help-card .group:first-of-type { margin-top: 0; }
+
+    @media (max-width: 900px) {
+      .t-grid { grid-template-columns: 1fr; }
+      .t-log { display: none; }
+      .t-grid.log-hidden .t-log { display: none; }
+    }
+    @media (max-width: 640px) {
+      .t-cmd .hint, .t-status .seg.scanrun, .t-status .seg.retry, .t-status .seg.cron { display: none; }
+      .t-filters .pill .k { display: none; }
+    }
+  </style>
+</head>
+<body>
+<header>
+  <h1><span>CourtDesk</span> 🏛️</h1>
+  <nav>
+    <div class="skin-switcher">
+      <button type="button" class="skin-btn" onclick="toggleSkinMenu()" title="Оформление" aria-haspopup="menu" aria-controls="skinMenu">🎨</button>
+      <div class="skin-menu" id="skinMenu" role="menu"></div>
+    </div>
+    <button id="themeToggle" class="theme-toggle" onclick="toggleTheme()">☀️</button>
+    <a href="/">📊 Дашборд</a>
+    <a href="/terminal.html" style="color:var(--primary)">▶ Терминал</a>
+    <a href="/search.html">🔍 Поиск</a>
+  </nav>
+</header>
+
+<main class="t-app">
+  <div class="scan-bar" id="scanBar">
+    <span class="spinner"></span>
+    <span id="scanStatus">Мониторинг...</span>
+  </div>
+  <div class="t-cmd">
+    <span class="prompt">▸</span>
+    <span class="mode" id="tMode">Обычный</span>
+    <input id="cmdInput" placeholder="/текст — фильтр по таблице  ·  :команда — сохранённые виды, прогон" autocomplete="off" spellcheck="false">
+    <span class="count" id="tCount">0/0</span>
+    <span class="hint">` log · ? help</span>
+  </div>
+  <div class="t-filters" id="tFilters"></div>
+  <div class="t-grid" id="tGrid">
+    <div class="t-table" id="tTableWrap">
+      <table>
+        <thead><tr id="tHead"></tr></thead>
+        <tbody id="tBody"></tbody>
+      </table>
+      <div id="tEmpty" class="empty-pad" style="display:none"></div>
+    </div>
+    <aside class="t-log" id="tLog">
+      <header>
+        <h3>Уведомления</h3>
+        <span>` свернуть · m прочитать</span>
+      </header>
+      <div id="tLogList"></div>
+    </aside>
+  </div>
+  <div class="t-status" id="tStatus"></div>
+</main>
+
+<div class="detail" id="detailOverlay" onclick="if(event.target===this)closeDetail()">
+  <div class="detail-card">
+    <button class="close-btn" onclick="closeDetail()">&times;</button>
+    <div id="detailContent"></div>
+  </div>
+</div>
+
+<div class="detail" id="helpOverlay" onclick="if(event.target===this)closeHelp()">
+  <div class="help-card">
+    <button class="close-btn" onclick="closeHelp()">&times;</button>
+    <h2>Горячие клавиши — Терминал</h2>
+    <div class="keys">
+      <div class="group">Навигация</div>
+      <kbd>j</kbd><span class="desc">вниз по списку</span>
+      <kbd>k</kbd><span class="desc">вверх по списку</span>
+      <kbd>g g</kbd><span class="desc">в начало</span>
+      <kbd>G</kbd><span class="desc">в конец</span>
+      <kbd>Ctrl+D</kbd><span class="desc">на полстраницы вниз</span>
+      <kbd>Ctrl+U</kbd><span class="desc">на полстраницы вверх</span>
+      <kbd>Enter</kbd><span class="desc">открыть детальную карточку</span>
+      <kbd>q</kbd><span class="desc">закрыть карточку</kbd>
+      <div class="group">Действия</div>
+      <kbd>a</kbd><span class="desc">архивировать выбранное / вернуть из архива</span>
+      <kbd>d</kbd><span class="desc">удалить (с подтверждением)</span>
+      <kbd>r</kbd><span class="desc">обновить данные</span>
+      <kbd>m</kbd><span class="desc">запустить прогон мониторинга</span>
+      <kbd>n</kbd><span class="desc">перейти к поиску новых дел</span>
+      <div class="group">Фильтры</div>
+      <kbd>1</kbd>–<kbd>7</kbd><span class="desc">фильтр по статусу (7 = все)</span>
+      <kbd>/</kbd><span class="desc">режим поиска по таблице</span>
+      <kbd>:</kbd><span class="desc">командный режим</span>
+      <kbd>Esc</kbd><span class="desc">очистить режим / закрыть окно</span>
+      <div class="group">Прочее</div>
+      <kbd>`` ` ``</kbd><span class="desc">свернуть/развернуть боковую панель уведомлений</span>
+      <kbd>?</kbd><span class="desc">эта справка</span>
+      <div class="group">Команды (после <kbd>:</kbd>)</div>
+      <kbd>:сохр ИМЯ</kbd><span class="desc">сохранить вид (фильтр + сортировка + поиск)</span>
+      <kbd>:прим ИМЯ</kbd><span class="desc">применить сохранённый вид</span>
+      <kbd>:сп</kbd><span class="desc">список видов</span>
+      <kbd>:удал ИМЯ</kbd><span class="desc">удалить вид</span>
+      <kbd>:прогон</kbd><span class="desc">прогон мониторинга (= m)</span>
+      <kbd>:обновить</kbd><span class="desc">обновить данные (= r)</span>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="/app.js"></script>
+<script src="/terminal.js"></script>
+</body>
+</html>

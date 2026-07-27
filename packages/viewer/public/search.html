@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CourtDesk — Поиск дел</title>
   <link rel="stylesheet" href="/theme.css">
-  <script>function _t(){var s=localStorage.getItem('courtdesk-theme'),m=matchMedia('(prefers-color-scheme: light)').matches;document.documentElement.setAttribute('data-theme',s||(m?'light':'dark'))}_t()</script>
+  <script>function _t(){var s=localStorage.getItem('courtdesk-theme'),m=matchMedia('(prefers-color-scheme: light)').matches;document.documentElement.setAttribute('data-theme',s||(m?'light':'dark'));var sk=localStorage.getItem('courtdesk-skin');if(sk==='legal'||sk==='compact')document.documentElement.setAttribute('data-skin',sk)}_t()</script>
   <style>
     .app { display: grid; grid-template-columns: 300px 1fr; gap: 0; height: calc(100vh - 60px); }
     @media (max-width: 800px) { .app { grid-template-columns: 1fr; height: auto; } }
@@ -15,7 +15,7 @@
     .sidebar label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 3px; }
     .sidebar .btn { width: 100%; padding: 8px; margin-bottom: 8px; }
     .court-search { position: relative; }
-    .court-results { position: absolute; z-index: 10; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; max-height: 200px; overflow-y: auto; width: 100%; display: none; }
+    .court-results { position: absolute; z-index: 10; background: var(--surface); border: 1px solid var(--border); border-radius: var(--skin-radius-sm); max-height: 200px; overflow-y: auto; width: 100%; display: none; }
     .court-results div { padding: 6px 10px; font-size: 12px; cursor: pointer; }
     .court-results div:hover { background: var(--surface-2); }
     .court-results .code { color: var(--primary); font-family: monospace; margin-right: 6px; }
@@ -23,14 +23,14 @@
     .main { padding: 16px; overflow-y: auto; }
     .main h2 { font-size: 14px; font-weight: 600; margin-bottom: 10px; }
     .result-count { font-size: 12px; color: var(--text-dim); margin-bottom: 10px; }
-    .tabs { display: flex; gap: 0; margin-bottom: 8px; background: var(--surface); border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
+    .tabs { display: flex; gap: 0; margin-bottom: 8px; background: var(--surface); border-radius: var(--skin-radius); overflow: hidden; border: 1px solid var(--border); }
     .tabs button { flex: 1; padding: 7px; border: none; background: transparent; color: var(--text-dim); font-size: 12px; cursor: pointer; border-right: 1px solid var(--border); transition: background .15s, color .15s; }
     .tabs button:last-child { border-right: none; }
     .tabs button.active { background: var(--surface-2); color: var(--text); font-weight: 600; }
-    .monitor-btn { padding: 3px 10px; font-size: 11px; border: none; border-radius: 5px; cursor: pointer; background: var(--primary-bg); color: var(--primary); font-weight: 600; }
+    .monitor-btn { padding: 3px 10px; font-size: 11px; border: none; border-radius: var(--skin-radius-sm); cursor: pointer; background: var(--primary-bg); color: var(--primary); font-weight: 600; }
     .monitor-btn:hover { opacity: .8; }
     .monitor-btn.added { background: var(--success-bg); color: var(--success); cursor: default; }
-    .scan-bar { display: flex; align-items: center; gap: 10px; padding: 10px 16px; background: var(--primary-bg); border-radius: 8px; margin-bottom: 16px; font-size: 13px; color: var(--primary); }
+    .scan-bar { display: flex; align-items: center; gap: 10px; padding: 10px 16px; background: var(--primary-bg); border-radius: var(--skin-radius); margin-bottom: 16px; font-size: 13px; color: var(--primary); }
     .scan-bar .spinner { flex-shrink: 0; }
     .detail-card .case-num { font-size: 12px; color: var(--text-dim); margin-bottom: 16px; word-break: break-all; }
   </style>
@@ -39,8 +39,13 @@
 <header>
   <h1><span>CourtDesk</span> 🏛️</h1>
   <nav>
+    <div class="skin-switcher">
+      <button type="button" class="skin-btn" onclick="toggleSkinMenu()" title="Оформление" aria-haspopup="menu" aria-controls="skinMenu">🎨</button>
+      <div class="skin-menu" id="skinMenu" role="menu"></div>
+    </div>
     <button id="themeToggle" class="theme-toggle" onclick="toggleTheme()">☀️</button>
     <a href="/">📊 Дашборд</a>
+    <a href="/terminal.html">▶ Терминал</a>
     <a href="/search.html" style="color:var(--primary)">🔍 Поиск</a>
   </nav>
 </header>

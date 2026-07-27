@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CourtDesk — Дашборд</title>
   <link rel="stylesheet" href="/theme.css">
-  <script>function _t(){var s=localStorage.getItem('courtdesk-theme'),m=matchMedia('(prefers-color-scheme: light)').matches;document.documentElement.setAttribute('data-theme',s||(m?'light':'dark'))}_t()</script>
+  <script>function _t(){var s=localStorage.getItem('courtdesk-theme'),m=matchMedia('(prefers-color-scheme: light)').matches;document.documentElement.setAttribute('data-theme',s||(m?'light':'dark'));var sk=localStorage.getItem('courtdesk-skin');if(sk==='legal'||sk==='compact')document.documentElement.setAttribute('data-skin',sk)}_t()</script>
   <style>
     .container { max-width: 1200px; margin: 0 auto; padding: 20px 24px; }
     .counters { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
-    .counter { background: var(--surface); border-radius: 10px; padding: 14px; border: 1px solid var(--border); transition: background .2s; }
+    .counter { background: var(--surface); border-radius: var(--skin-radius); padding: 14px; border: 1px solid var(--border); transition: background .2s; }
     .counter .num { font-size: 26px; font-weight: 700; line-height: 1; }
     .counter .label { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
     .counter.monitoring .num { color: var(--primary); }
@@ -22,10 +22,10 @@
     #casesTable td:last-child, .action-btns { vertical-align: middle; }
     .action-btns { white-space: nowrap; }
     .action-btns .icon-btn { display: inline-block; vertical-align: middle; }
-    .icon-btn { padding: 3px 6px; border: none; border-radius: 4px; cursor: pointer; background: transparent; color: var(--text-dim); font-size: 14px; }
+    .icon-btn { padding: 3px 6px; border: none; border-radius: var(--skin-radius-sm); cursor: pointer; background: transparent; color: var(--text-dim); font-size: 14px; }
     .icon-btn:hover { background: var(--surface-2); color: var(--text); }
     .icon-btn.danger:hover { color: var(--danger); }
-    .notifications { background: var(--surface); border-radius: 10px; border: 1px solid var(--border); margin-top: 24px; transition: background .2s; }
+    .notifications { background: var(--surface); border-radius: var(--skin-radius); border: 1px solid var(--border); margin-top: 24px; transition: background .2s; }
     .notif-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; border-bottom: 1px solid var(--border); }
     .notif-header h3 { font-size: 13px; color: var(--text-muted); }
     .notif-item { padding: 10px 16px; border-bottom: 1px solid var(--bg); display: flex; align-items: center; gap: 10px; }
@@ -47,7 +47,7 @@
     .detail-card .ev-type { font-size: 12px; font-weight: 600; color: var(--primary); }
     .detail-card .ev-msg { font-size: 13px; color: var(--text); margin-top: 2px; }
     .detail-card .ev-time { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
-    .scan-bar { display: none; align-items: center; gap: 10px; padding: 10px 16px; background: var(--primary-bg); border-radius: 8px; margin-bottom: 16px; font-size: 13px; color: var(--primary); }
+    .scan-bar { display: none; align-items: center; gap: 10px; padding: 10px 16px; background: var(--primary-bg); border-radius: var(--skin-radius); margin-bottom: 16px; font-size: 13px; color: var(--primary); }
     .scan-bar.show { display: flex; }
     .scan-bar .spinner { flex-shrink: 0; }
     @media (max-width: 640px) { .counters { grid-template-columns: repeat(2, 1fr); } .toolbar input[type="search"] { width: 100%; } }
@@ -57,8 +57,13 @@
 <header>
   <h1><span>CourtDesk</span> 🏛️</h1>
   <nav>
+    <div class="skin-switcher">
+      <button type="button" class="skin-btn" onclick="toggleSkinMenu()" title="Оформление" aria-haspopup="menu" aria-controls="skinMenu">🎨</button>
+      <div class="skin-menu" id="skinMenu" role="menu"></div>
+    </div>
     <button id="themeToggle" class="theme-toggle" onclick="toggleTheme()">☀️</button>
     <a href="/" style="color:var(--primary)">📊 Дашборд</a>
+    <a href="/terminal.html">▶ Терминал</a>
     <a href="/search.html">🔍 Поиск</a>
   </nav>
 </header>
