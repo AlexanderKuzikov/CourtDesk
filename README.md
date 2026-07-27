@@ -15,9 +15,15 @@
 
 - **Поиск** — по номеру дела или участникам на sudrf.ru/msudrf.ru. Один интерфейс для всех типов судов. Капча — автоматически.
 - **Мониторинг** — отслеживание изменений по делу, появление новых событий, вынесение решения, вступление в силу.
-- **Web UI** — дашборд с фильтрами, управление делами (архивирование, удаление), детали дела с timeline событий, кнопка запуска мониторинга.
-- **TUI** — терминальный интерфейс на blessed (packages/tui/). Работает на Linux, на Windows — глючно.
-- **API** — REST/JSON, 23 эндпоинта для 1С.
+- **Web UI** — три варианта работы с делами:
+  - **Дашборд** (`/`) — счётчики, фильтры по статусу, таблица дел с детальной модалкой, настройки расписания.
+  - **Терминал** (`/terminal.html`) — Bloomberg-стиль: sticky cmd-bar, multi-sort, vim-keys (j/k/gg/G), режимы (Обычный/Поиск/Команда), saved views, statusline. Подходит для плотной работы.
+  - **Поиск** (`/search.html`) — выбор суда, поиск по номеру/участникам/УИД, добавление в мониторинг.
+  - **Оформление** — кнопка 🎨 в шапке переключает 3 скина (Стандарт/Бумага/Компактный) × 2 темы (тёмная/светлая). Сохраняется в localStorage.
+- **TUI** — терминальный интерфейс на `readline`+ANSI (`packages/tui/`), без внешних TUI-зависимостей.
+- **API** — REST/JSON, 25 эндпоинтов для 1С.
+
+> **Web UI в активной доработке.** Гэпы из `PROMPT_WEBUI.md` (skeleton-загрузчики, мобильная адаптация, календарь ближайших дат, массовые операции, CSV-экспорт, вынос JS из HTML и пр.) — открыты как `WEBUI-O1..O15`, см. `docs/CONTEXT.md`.
 
 **Состав проекта:** собирает функционал CourtSniffer (поиск) и CourtFlow (мониторинг) в единый сервис.
 
@@ -31,19 +37,21 @@ cp .env.example .env   # RUCAPTCHA_API_KEY для капчи мировых су
 npm run dev
 ```
 
-Откройте `http://127.0.0.1:8767` — дашборд. Для поиска дел — `/search.html`.
+Откройте `http://127.0.0.1:8767` — дашборд. Для поиска дел — `/search.html`. Для плотной работы с таблицей — `/terminal.html`.
 
 ## Документация
 
-- [`ARCHITECTURE.md`](ARCHITECTURE.md) — полная архитектура, data flow, модули
-- [`CONTEXT.md`](CONTEXT.md) — состояние, use cases, API-контракты, журнал работ
-- [`DECISIONS.md`](DECISIONS.md) — принятые решения (ADR)
-- [`CODE_REVIEW.md`](CODE_REVIEW.md) — все раунды ревью с прогрессом
-- [`CHANGELOG.md`](CHANGELOG.md) — история изменений
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — полная архитектура, data flow, модули
+- [`docs/CONTEXT.md`](docs/CONTEXT.md) — состояние, open-проблемы, журнал работ, структура
+- [`docs/DECISIONS.md`](docs/DECISIONS.md) — принятые решения (ADR)
+- [`docs/CODE_REVIEW.md`](docs/CODE_REVIEW.md) — все раунды ревью с прогрессом
+- [`docs/CHANGELOG.md`](docs/CHANGELOG.md) — история изменений
+- [`docs/CRM-INTEGRATION.md`](docs/CRM-INTEGRATION.md) — 25 эндпоинтов API для 1С, примеры
+- [`PROMPT_WEBUI.md`](PROMPT_WEBUI.md) — список гэпов Web UI (статус O1–O15)
 
 ## Статус
 
-**v0.5.0** — msudrf AJAX overhaul, UI polish (КАПС→капс, courtName, прогресс-бар, настройки), infra (eslint, pino, cron), party matching, error counters, sync parse, TUI (blessed). 99/99 CR закрыто. Node engine ≥22.
+**v0.6.0** — Web UI: Terminal view (Bloomberg-стиль layout) + skin-axis (3 варианта оформления × 2 темы). Гэпы `PROMPT_WEBUI.md` (O1–O15) не закрыты. API: 94 теста, 25 эндпоинтов. TUI: readline+ANSI без blessed. Node engine ≥22.
 
 ## Лицензия
 

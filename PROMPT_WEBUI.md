@@ -1,10 +1,29 @@
 # Web UI — промпт для сессии доработки
 
+> ## Статус сессии (2026-07-27, v0.6.0)
+>
+> **Закрыто пунктов PROMPT_WEBUI: 0 из 15.** Все O1–O15 ниже — не сделаны.
+>
+> **Сделано взамен (отдельная ось):**
+>
+> | # | Что | Files | Покрывает пункт PROMPT? |
+> |---|-----|-------|-------------------------|
+> | A | Terminal view (Bloomberg-style layout): sticky cmd-bar/thead, multi-sort, vim-keys (j/k/gg/G/C-d/C-u), hotkeys (Enter/a/d/r/m/n/?/1-7/`/), saved views (`:сохр/...`), statusline, лог-сайдбар | `terminal.html` 210 строк, `terminal.js` 720 строк | **Нет** — новый layout, не доработка существующего dashboard |
+> | B | Skins: 3 варианта оформления (corporate/«Бумага»/compact) ортогонально `data-theme` (dark/light) | `theme.css` +140, `app.js` skin-toggle, `index/search/terminal.html` (inline `_t()` от FOUC, св-во `🎨` в nav) | **Нет** — косметика палитры/шрифта/радиуса, не UX-паттерн |
+>
+> **Архитектурное замечание:** skin ≠ layout. «3 варианта оформления» первым проходом трактовано как «3 палитры», что **не равно** «3 UX-паттерна» (Terminal/Kanban/Calendar). Реальные гэпы PROMPT_WEBUI (skeleton, mobile, календарь, bulk, CSV, retry, фикс карточки и т.д.) — не тронуты.
+>
+> **Открыты как `WEBUI-O1..O15`** (см. `docs/CONTEXT.md` → «Web UI open-проблемы») — соответствуют пунктам ниже 1:1, статус не изменён.
+>
+> **Следующий шаг:** либо закрывать O1–O14 по приоритетам PROMPT (terminal/dashboard/search), либо достраивать параллельный layout-вариант Kanban/Calendar (O15). Решение за заказчиком.
+
 ## Контекст
 
 CourtDesk — CRM-система поиска и мониторинга судебных дел РФ. Web UI находится в `packages/viewer/public/` и состоит из 4 файлов без бандлера. Сервер — Express 5 на `packages/api/server.ts`, статика раздаётся через `express.static`.
 
 **Текущее состояние UI:** функциональный минимум есть, но UX сырой (визуально «полное говно» в оценке автора). Нужно поднять до уровня «нормально выглядит и удобно».
+
+> **Post-3acca обновление (v0.6.0):** добавлены `terminal.html`/`terminal.js` (новый layout Bloomberg-стиля) и skin-axis (`data-skin="corporate|legal|compact"`). Файлы ниже перечислены для исходного dashboard/search — Terminal не заменяет их, а добавляется как 3-я страница (`/terminal.html`), доступ через nav.
 
 ## Файлы
 

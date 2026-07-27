@@ -4,6 +4,89 @@
 
 ---
 
+## [0.6.0] — 2026-07-27
+
+### Web UI — Terminal view (новый layout)
+
+Добавлен второй layout для работы с таблицей дел — **не закрывает гэпы PROMPT_WEBUI**, а даёт альтернативную поверхность.
+
+**`packages/viewer/public/terminal.html` + `terminal.js`:**
+
+- **Sticky cmd-bar**: индикатор режима (`▸ Обычный/Поиск/Команда`), поле ввода для `/поиск` и `:команда`.
+- **Sticky thead + full-scroll**: пагинации нет (terminal-конвенция), `thead` прилипает.
+- **Multi-sort**: `click` — основная колонка, `Shift+click` — до 3-х уровней, ● ▲ ▼ индикаторы.
+- **Vim-навигация**: `j/k` (строки), `g g` / `G` (в начало/конец), `Ctrl+D`/`Ctrl+U` (полстраницы).
+- **Hotkeys**: `Enter` (деталь), `a` (архив/возврат), `d` (удаление с confirm), `r` (refresh), `m` (прогон), `n` (поиск), `?` (help), `1-7` (фильтры), `` ` `` (toggle лога), `q` (закрыть модалку).
+- **Режимы**: `Обычный` (default) / `Поиск` (по `/`) / `Команда` (по `:`). Escape сбрасывает.
+- **Saved views**: `:сохр ИМЯ`, `:прим ИМЯ`, `:сп` (список), `:удал ИМЯ` — хранятся в `localStorage['courtdesk-views']`, захватывают filter+sort+search. Англ. алиасы `sv/uv/lv/rv` оставлены для muscle memory.
+- **Statusline по tmux**: `режим · дела:N/M · фильтр · сорт · повтор · расп · прогон · выбор · время`.
+- **Лог-сайдбар** уведомлений: с правой колонки, префиксы `+ ★ ◎ ✗ ○` по типу, `` ` `` сворачивает.
+- **Detail modal** переиспользует разметку dashboard (суд/участники/движение/timeline), добавлена кнопка «Закрыть (q)».
+- **Help-карточка** доступна по `?`: 27 hotkeys, 5 групп.
+- **Скриншоты**: smoke-test через Playwright (DOM-снимки), скриншоты не сохранялись (модель без image input).
+
+### Web UI — Skins (новая ось оформления)
+
+Ортогонально существующей оси `data-theme` (dark/light) добавлена ось `data-skin` (corporate/«Бумага»/compact). 3 × 2 = 6 комбинаций.
+
+**`theme.css`:**
+
+- **`data-skin="corporate"`** (default, «Стандарт») — текущий slate-blue, system-ui, radius 10px. Без изменений по поведению.
+- **`data-skin="legal"`** («Бумага») — тёмно-navy `#1a1f2a` / светлый paper `#eef1f6`, navy primary `#6f9bd1`/`#244e8c`, flat без gradient, radius 4px. **Предыдущая коричневая sepia-палитра с Georgia serif — удалена** (критика заказчика).
+- **`data-skin="compact"`** («Компактный») — carbon-teal, плотность −20% (padding/font), radius 3px, flat primary без gradient.
+
+**Косметика (по критике заказчика):**
+
+- **Убраны КАПС**: все `text-transform: uppercase` в terminal (5 мест: th, log-header, info-key, sub, help-group). Текущий dashboard/search капсов не имел.
+- **Английский → русский**: statusline (`cases`→`дела`, `filter`→`фильтр`, `sort`→`сорт`, `retry`→`повтор`, `cron`→`расп`, `scan`→`прогон`, `sel`→`выбор`), короткие статусы `Мон/Ож/Реш/Вст/Ош/Арх` вместо `MON/WAI/DEC/ENF/ERR/ARC`, mode `Обычный/Поиск/Команда`, `NOTIFICATIONS`→`Уведомления`, команды `:сохр/:прим/:сп/:удал/:прогон/:обновить` (англ. алиасы оставлены).
+- **Шрифты**: `--skin-mono` → `--skin-tabular` со значением **sans-serif** (system-ui + Helvetica Neue). Архичного моноширинного Companion/Menlo/Courier больше нет. Глобально `font-variant-numeric: tabular-nums lining-nums` — цифры не «прыгают».
+
+**`app.js`:**
+
+- `initSkin()/setSkin()/toggleSkinMenu()`, реестр `SKINS` с описаниями и swatch-превью в dropdown.
+- Close-on-outside-click, Escape закрывает меню и подробные модалки.
+- Bootstrap: `initTheme()` + `initSkin()` вызываются при загрузке.
+
+**`index.html` / `search.html`:**
+
+- Skin-switcher 🎨 в nav рядом с theme-toggle.
+- Ссылка «Терминал» в nav.
+- Inline `_t()` применяет `data-skin` + `data-theme` из localStorage до загрузки CSS (анти-FOUC).
+- Жёсткие `border-radius:` в inline-стилях заменены на `var(--skin-radius-*)` — теперь скин полностью управляет углами.
+- `var(--skin-mono)` (если встречался) → `var(--skin-tabular)`.
+
+### Что НЕ вошло (PROMPT_WEBUI.md гэпы)
+
+15 пунктов из PROMPT_WEBUI.md, описанных как приоритетные, **не реализованы**. Открыты как `WEBUI-O1..O15` в CONTEXT.md:
+
+- **WEBUI-O1** Skeleton-загрузчики (таблица/карточки прыгают)
+- **WEBUI-O2** Мобильная адаптация (search.html ломается на мобилках)
+- **WEBUI-O3** Дашборд «требует внимания» (decision + enforcedToday) — отдельного блока нет
+- **WEBUI-O4** Карточка дела перегружена (мегапростыня court/parties/events/timeline) — вкладки/аккордеон не сделаны
+- **WEBUI-O5** Календарь/список ближайших дат по `legalForceDate` — нет
+- **WEBUI-O6** Массовые операции (чекбоксы → bulk archive/delete) — нет
+- **WEBUI-O7** Экспорт таблицы в CSV — нет
+- **WEBUI-O8** Визуальный progress bar — в dashboard остался текстовый (в terminal — есть)
+- **WEBUI-O9** Фильтр по `userId` — API поддерживает, UI не передаёт
+- **WEBUI-O10** Вынос JS из HTML в `dashboard.js`/`search.js` — index/search остались инлайн (terminal.js вынесен — это был greenfield)
+- **WEBUI-O11** Retry + нормальные сообщения при сетевых ошибках — нет
+- **WEBUI-O12** Кэширование `loadDashboard()` при переключении вкладок — нет
+- **WEBUI-O13** Сохранение истории поисков между reload — нет
+- **WEBUI-O14** Массовое добавление результатов поиска в мониторинг — нет
+- **WEBUI-O15** Параллельные layout-варианты Kanban (drag&drop по статусу) и Calendar (по датам) — не начаты
+
+### Архитектурное замечание
+
+Terminal + Skins — это **добавление новых поверхностей**, не закрытие гэпов. Skin ≠ layout: skin затрагивает только палитру/шрифт/радиус/плотность, ничего не меняя в структуре. Terminal — отдельный layout поверх того же набора эндпоинтов. Решение «3 варианта оформления» трактовано первым проходом как «3 skin × 2 темы», что **не равно** «3 варианта UX-паттернов» (Terminal/Kanban/Calendar). Последний — `WEBUI-O15`.
+
+### Infra
+
+- `npx tsc --noEmit` — 0 ошибок (frontend не проверяется, только `packages/`).
+- `npm test` — 94/94 ✓ (без изменений).
+- JS-синтаксис `app.js`/`terminal.js` — `node --check` ✓.
+
+---
+
 ## [0.5.2] — 2026-07-26
 
 ### TUI — полный разворот архитектуры
