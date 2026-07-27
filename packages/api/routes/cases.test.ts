@@ -25,25 +25,43 @@ const baseCase: WatchedCase = {
 };
 
 const storeMock = {
-  listCases: vi.fn((f?: { status?: string; userId?: string; courtId?: string; q?: string }): WatchedCase[] => []),
-  getCase: vi.fn((uid: string): WatchedCase | null => null),
-  addCase: vi.fn((c: WatchedCase): void => undefined),
-  updateCase: vi.fn((uid: string, updates: Partial<WatchedCase>): WatchedCase | null => null),
-  deleteCase: vi.fn((uid: string): boolean => false),
+  listCases: vi.fn((_f?: { status?: string; userId?: string; courtId?: string; q?: string }): WatchedCase[] => []),
+  getCase: vi.fn((_uid: string): WatchedCase | null => null),
+  addCase: vi.fn((_c: WatchedCase): void => undefined),
+  updateCase: vi.fn((_uid: string, _updates: Partial<WatchedCase>): WatchedCase | null => null),
+  deleteCase: vi.fn((_uid: string): boolean => false),
   getStats: vi.fn(() => ({ monitoring: 0, waiting: 0, decision: 0, enforcedToday: 0 })),
   deleteNotificationsByCase: vi.fn((): void => undefined),
   deleteCard: vi.fn((): void => undefined),
-  getCard: vi.fn((): null => null),
+  getCard: vi.fn((): any => null),
+  saveCard: vi.fn((): void => undefined),
 };
 
 const eventsMock = {
-  addEvent: vi.fn((caseUid: string, event: CaseHistoryEvent): void => undefined),
+  addEvent: vi.fn((_caseUid: string, _event: CaseHistoryEvent): void => undefined),
   getEvents: vi.fn((): CaseHistoryEvent[] => []),
   clearEvents: vi.fn((): void => undefined),
 };
 
+const mockCore = {
+  findCourtByCodeOrSubdomain: vi.fn(() => null),
+  getRuCaptchaKey: vi.fn(() => ''),
+};
+
+const mockParse = {
+  getParseAdapter: vi.fn(() => ({ parse: vi.fn(async () => ({ uid: 'u1', card: { result: 'Удовлетворено' } })) })),
+};
+
+const mockCaptcha = {
+  fetchWithCaptcha: vi.fn(async () => '<html><body>captcha bypassed</body></html>'),
+};
+
 vi.mock('../../store/index.js', () => storeMock);
 vi.mock('../../store/events.js', () => eventsMock);
+vi.mock('../../core/index.js', () => mockCore);
+vi.mock('../../parse/index.js', () => mockParse);
+vi.mock('../../captcha/session.js', () => mockCaptcha);
+vi.mock('../../core/errors.js', () => ({ isCaptchaPage: vi.fn(() => false) }));
 
 async function buildApp(): Promise<Express> {
   const { default: casesRouter } = await import('./cases.js');
@@ -59,6 +77,187 @@ async function req(app: Express, method: string, path: string, body?: unknown) {
   if (body !== undefined) r.send(body).set('Content-Type', 'application/json');
   return r;
 }
+
+// ---------- LIST ----------
+
+describe('GET /api/cases — list', () => {
+  let app: Express;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    vi.resetModules();
+    storeMock.listCases.mockReturnValue([baseCase]);
+    storeMock.getCase.mockReturnValue(null);
+    app = await buildApp();
+  });
+
+  it('возвращает список дел с courtName', async () => {
+    const res = await req(app, 'get', '/api/cases');
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0].courtName).toBe('kirov--perm');
+  });
+
+  it('фильтрует по статусу', async () => {
+    await req(app, 'get', '/api/cases?status=decision');
+    expect(storeMock.listCases).toHaveBeenCalledWith({ status: 'decision' });
+  });
+
+  it('фильтрует по поиску', async () => {
+    await req(app, 'get', '/api/cases?q=2-100');
+    expect(storeMock.listCases).toHaveBeenCalledWith({ q: '2-100' });
+  });
+});
+
+// ---------- STATS ----------
+
+describe('GET /api/cases/stats', () => {
+  let app: Express;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    vi.resetModules();
+    storeMock.getStats.mockReturnValue({ monitoring: 5, waiting: 2, decision: 1, enforcedToday: 0 });
+    app = await buildApp();
+  });
+
+  it('возвращает статистику', async () => {
+    const res = await req(app, 'get', '/api/cases/stats');
+    expect(res.status).toBe(200);
+    expect(res.body.data.monitoring).toBe(5);
+    expect(res.body.data.enforcedToday).toBe(0);
+  });
+});
+
+// ---------- SINGLE ----------
+
+describe('GET /api/cases/:uid', () => {
+  let app: Express;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    vi.resetModules();
+    storeMock.getCase.mockReturnValue(baseCase);
+    app = await buildApp();
+  });
+
+  it('200 с карточкой дела', async () => {
+    const res = await req(app, 'get', '/api/cases/u1');
+    expect(res.status).toBe(200);
+    expect(res.body.data.number).toBe('2-100/2026');
+    expect(res.body.data.courtName).toBe('kirov--perm');
+  });
+
+  it('404 если uid не найден', async () => {
+    storeMock.getCase.mockReturnValue(null);
+    const res = await req(app, 'get', '/api/cases/nonexistent');
+    expect(res.status).toBe(404);
+    expect(res.body.code).toBe('NOT_FOUND');
+  });
+});
+
+// ---------- ADD ----------
+
+describe('POST /api/cases — add to monitoring', () => {
+  let app: Express;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    vi.resetModules();
+    storeMock.addCase.mockImplementation(() => undefined);
+    eventsMock.addEvent.mockImplementation(() => undefined);
+    app = await buildApp();
+  });
+
+  it('400 если нет обязательных полей', async () => {
+    const res = await req(app, 'post', '/api/cases', { url: 'https://...' });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('BAD_REQUEST');
+  });
+
+  it('создаёт monitoring-дело', async () => {
+    const res = await req(app, 'post', '/api/cases', {
+      url: 'https://kirov--perm.sudrf.ru/modules.php?name_op=case&case_id=1',
+      courtId: 'kirov--perm', courtType: 'district', caseNumber: '2-100/2026',
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.data.status).toBe('monitoring');
+    expect(storeMock.addCase).toHaveBeenCalledTimes(1);
+    expect(eventsMock.addEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it('принимает userId', async () => {
+    const res = await req(app, 'post', '/api/cases', {
+      url: 'https://kirov--perm.sudrf.ru/...', courtId: 'kirov--perm',
+      courtType: 'district', caseNumber: '2-100/2026', userId: '1c-001',
+    });
+    expect(res.body.data.userId).toBe('1c-001');
+  });
+});
+
+// ---------- EVENTS ----------
+
+describe('GET /api/cases/:uid/events', () => {
+  let app: Express;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    vi.resetModules();
+    storeMock.getCase.mockReturnValue(baseCase);
+    eventsMock.getEvents.mockReturnValue([
+      { uid: 'e1', caseUid: 'u1', type: 'added', message: 'Добавлено в мониторинг', data: {}, createdAt: '2026-07-21T10:00:00.000Z' },
+    ]);
+    app = await buildApp();
+  });
+
+  it('возвращает события дела', async () => {
+    const res = await req(app, 'get', '/api/cases/u1/events');
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0].type).toBe('added');
+  });
+
+  it('404 если uid не найден', async () => {
+    storeMock.getCase.mockReturnValue(null);
+    const res = await req(app, 'get', '/api/cases/ghost/events');
+    expect(res.status).toBe(404);
+  });
+});
+
+// ---------- CARD ----------
+
+describe('GET /api/cases/:uid/card', () => {
+  let app: Express;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    vi.resetModules();
+    storeMock.getCase.mockReturnValue(baseCase);
+    app = await buildApp();
+  });
+
+  it('возвращает полную карточку', async () => {
+    storeMock.getCard.mockReturnValue({ uid: 'u1', number: '2-100/2026', court: 'kirov--perm', card: { result: 'Удовлетворено' } });
+    const res = await req(app, 'get', '/api/cases/u1/card');
+    expect(res.status).toBe(200);
+    expect(res.body.data.card.result).toBe('Удовлетворено');
+  });
+
+  it('404 если uid не найден', async () => {
+    storeMock.getCase.mockReturnValue(null);
+    const res = await req(app, 'get', '/api/cases/ghost/card');
+    expect(res.status).toBe(404);
+  });
+
+  it('404 если карточка не загружена', async () => {
+    storeMock.getCard.mockReturnValue(null);
+    const res = await req(app, 'get', '/api/cases/u1/card');
+    expect(res.status).toBe(404);
+    expect(res.body.code).toBe('NOT_FOUND');
+  });
+});
+
+// ---------- PATCH ----------
 
 describe('PATCH /api/cases/:uid — whitelist (BUG-004)', () => {
   let app: Express;
@@ -107,6 +306,8 @@ describe('PATCH /api/cases/:uid — whitelist (BUG-004)', () => {
   });
 });
 
+// ---------- DELETE ----------
+
 describe('DELETE /api/cases/:uid — не пишет если uid нет (BUG-006)', () => {
   let app: Express;
 
@@ -129,6 +330,8 @@ describe('DELETE /api/cases/:uid — не пишет если uid нет (BUG-00
     expect(res.body.success).toBe(true);
   });
 });
+
+// ---------- WAIT ----------
 
 describe('POST /api/cases/wait — waiting-кейс', () => {
   let app: Express;
