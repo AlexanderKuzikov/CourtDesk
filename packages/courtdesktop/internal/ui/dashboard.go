@@ -243,7 +243,7 @@ func NewDashboardScreen(w fyne.Window) fyne.CanvasObject {
 				curPage = 0
 				rebuildChips()
 				updatePagin()
-				caseList.Refresh()
+				renderCases()
 			})
 			if s == filterStatus {
 				btn.Importance = widget.HighImportance
@@ -259,13 +259,13 @@ func NewDashboardScreen(w fyne.Window) fyne.CanvasObject {
 		searchText = s
 		curPage = 0
 		updatePagin()
-		caseList.Refresh()
+		renderCases()
 	}
 	searchBtn.OnTapped = func() {
 		searchText = searchEntry.Text
 		curPage = 0
 		updatePagin()
-		caseList.Refresh()
+		renderCases()
 	}
 
 	monBtn.OnTapped = func() {
