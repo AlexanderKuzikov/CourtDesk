@@ -370,7 +370,7 @@ func NewDashboardScreen(w fyne.Window) fyne.CanvasObject {
 			wg.Wait()
 			updateCounters()
 			updatePagin()
-			caseList.Refresh()
+			renderCases()
 		}()
 	}
 
