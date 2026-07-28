@@ -453,26 +453,15 @@ func makeCaseRow(c client.WatchedCase, w fyne.Window) *fyne.Container {
 		cn = c.CourtID
 	}
 	uid := c.UID
-	num := widget.NewLabelWithStyle(c.Number, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
-	st := widget.NewLabel(statusText(c.Status))
-	ct := widget.NewLabel(cn)
-	rs := widget.NewLabel(truncate(c.Result, 35))
-	lf := widget.NewLabel(fmtDate(c.LegalForceDate))
-	row := container.NewHBox(num, st, ct, rs, lf)
-	// Make row clickable
-	rowTapped := &tappableRow{Container: row, uid: uid, win: w}
-	tappedContainer := container.NewMax(rowTapped, row)
-	return tappedContainer
-}
 
-type tappableRow struct {
-	fyne.Container
-	uid string
-	win fyne.Window
-}
+	text := fmt.Sprintf("%s  |  %s  |  %s  |  %s  |  %s",
+		c.Number, statusText(c.Status), cn, truncate(c.Result, 35), fmtDate(c.LegalForceDate))
 
-func (t *tappableRow) Tapped(_ *fyne.PointEvent) {
-	showDetail(t.win, t.uid)
+	btn := widget.NewButton(text, func() {
+		showDetail(w, uid)
+	})
+	btn.Importance = widget.LowImportance
+	return container.NewMax(btn)
 }
 
 func truncate(s string, n int) string {
