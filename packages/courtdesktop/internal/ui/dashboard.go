@@ -155,7 +155,7 @@ func NewDashboardScreen(w fyne.Window) fyne.CanvasObject {
 	caseContainer := container.NewVBox()
 	caseScroll := container.NewVScroll(caseContainer)
 
-	renderCases := func() {
+	renderCases = func() {
 		caseContainer.RemoveAll()
 		items := pageItems()
 		for _, c := range items {
