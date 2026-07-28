@@ -126,6 +126,10 @@ func NewMainWindow() fyne.Window {
 			if triggerRefresh != nil {
 				triggerRefresh()
 			}
+		case fyne.KeyReturn:
+			if triggerOpenSelected != nil {
+				triggerOpenSelected()
+			}
 		}
 	})
 
@@ -133,6 +137,7 @@ func NewMainWindow() fyne.Window {
 }
 
 var triggerRefresh func()
+var triggerOpenSelected func()
 
 func checkAPI(w fyne.Window) {
 	go func() {

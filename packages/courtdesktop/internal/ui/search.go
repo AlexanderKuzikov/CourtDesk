@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"net/url"
 	"sync"
 	"time"
 
@@ -88,7 +89,8 @@ func NewSearchScreen(w fyne.Window) fyne.CanvasObject {
 			return
 		}
 		debounce = time.AfterFunc(300*time.Millisecond, func() {
-			courts, err := client.Get[[]client.CourtInfo]("/courts?q=" + s)
+			encoded := url.QueryEscape(s)
+			courts, err := client.Get[[]client.CourtInfo]("/courts?q=" + encoded)
 			if err != nil || len(courts) == 0 {
 				mu.Lock()
 				courtResults = nil

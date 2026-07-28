@@ -42,6 +42,7 @@ func NewDashboardScreen(w fyne.Window) fyne.CanvasObject {
 		monDone      bool
 		monProcessed int
 		monErrors    int
+		selectedRow  = -1
 	)
 
 	var (
@@ -124,6 +125,16 @@ func NewDashboardScreen(w fyne.Window) fyne.CanvasObject {
 		}
 		return filtered[start:end]
 	}
+
+	openSelectedCase := func() {
+		if selectedRow >= 0 {
+			items := getPage()
+			if selectedRow < len(items) {
+				showDetail(w, items[selectedRow].UID)
+			}
+		}
+	}
+	triggerOpenSelected = openSelectedCase
 
 	totalPages := func() int {
 		n := len(filtered)
@@ -300,35 +311,37 @@ func NewDashboardScreen(w fyne.Window) fyne.CanvasObject {
 			c := items[id.Row]
 			label := obj.(*widget.Label)
 			label.Truncation = fyne.TextTruncateEllipsis
+			isSelected := id.Row == selectedRow
 			switch id.Col {
 			case colNumber:
 				label.SetText(c.Number)
-				label.TextStyle = fyne.TextStyle{Bold: true}
+				label.TextStyle = fyne.TextStyle{Bold: true || isSelected}
 			case colStatus:
 				label.SetText(statusText(c.Status))
-				label.TextStyle = fyne.TextStyle{}
+				label.TextStyle = fyne.TextStyle{Bold: isSelected}
 			case colCourt:
 				cn := c.CourtName
 				if cn == "" {
 					cn = c.CourtID
 				}
 				label.SetText(cn)
-				label.TextStyle = fyne.TextStyle{}
+				label.TextStyle = fyne.TextStyle{Bold: isSelected}
 			case colResult:
 				label.SetText(truncateStr(c.Result, 32))
-				label.TextStyle = fyne.TextStyle{}
+				label.TextStyle = fyne.TextStyle{Bold: isSelected}
 			case colLegalForce:
 				label.SetText(fmtDate(c.LegalForceDate))
-				label.TextStyle = fyne.TextStyle{}
+				label.TextStyle = fyne.TextStyle{Bold: isSelected}
 			}
 		},
 	)
 	table.OnSelected = func(id widget.TableCellID) {
-		items := getPage()
-		if id.Row < len(items) {
-			showDetail(w, items[id.Row].UID)
-		}
-		table.UnselectAll()
+		selectedRow = id.Row
+		table.Refresh()
+	}
+	table.OnUnselected = func(id widget.TableCellID) {
+		selectedRow = -1
+		table.Refresh()
 	}
 	table.SetColumnWidth(colNumber, 160)
 	table.SetColumnWidth(colStatus, 110)
