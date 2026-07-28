@@ -438,13 +438,41 @@ func NewDashboardScreen(w fyne.Window) fyne.CanvasObject {
 		notifList,
 	)
 
-	casePanel := container.NewBorder(headerRow, nil, nil, nil, caseList)
+	casePanel := container.NewBorder(headerRow, nil, nil, nil, caseScroll)
 	content := container.NewBorder(topPanel, bottomPanel, nil, nil, casePanel)
 
 	rebuildChips()
 	loadAll()
 
 	return content
+}
+
+func makeCaseRow(c client.WatchedCase, w fyne.Window) *fyne.Container {
+	cn := c.CourtName
+	if cn == "" {
+		cn = c.CourtID
+	}
+	uid := c.UID
+	num := widget.NewLabelWithStyle(c.Number, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	st := widget.NewLabel(statusText(c.Status))
+	ct := widget.NewLabel(cn)
+	rs := widget.NewLabel(truncate(c.Result, 35))
+	lf := widget.NewLabel(fmtDate(c.LegalForceDate))
+	row := container.NewHBox(num, st, ct, rs, lf)
+	// Make row clickable
+	rowTapped := &tappableRow{Container: row, uid: uid, win: w}
+	tappedContainer := container.NewMax(rowTapped, row)
+	return tappedContainer
+}
+
+type tappableRow struct {
+	fyne.Container
+	uid string
+	win fyne.Window
+}
+
+func (t *tappableRow) Tapped(_ *fyne.PointEvent) {
+	showDetail(t.win, t.uid)
 }
 
 func truncate(s string, n int) string {
