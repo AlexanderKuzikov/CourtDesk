@@ -42,9 +42,9 @@ let _ggPending = false;
 // ---------- API ----------
 async function loadData() {
   const [s, c, n] = await Promise.all([
-    fetch('/api/status').then(r => r.json()),
-    fetch('/api/cases').then(r => r.json()),
-    fetch('/api/notifications').then(r => r.json()),
+    fetch(apiUrl('/api'/status').then(r => r.json()),
+    fetch(apiUrl('/api'/cases').then(r => r.json()),
+    fetch(apiUrl('/api'/notifications').then(r => r.json()),
   ]);
   statusData = s.data || {};
   allCases = c.data || [];
@@ -55,10 +55,10 @@ async function loadData() {
 }
 
 async function patchCase(uid, body) {
-  return fetch('/api/cases/' + encodeURIComponent(uid), { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  return fetch(apiUrl('/api'/cases/' + encodeURIComponent(uid), { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 }
 async function deleteCaseApi(uid) {
-  return fetch('/api/cases/' + encodeURIComponent(uid), { method: 'DELETE' });
+  return fetch(apiUrl('/api'/cases/' + encodeURIComponent(uid), { method: 'DELETE' });
 }
 
 // ---------- Filtering + multsort ----------
@@ -455,7 +455,7 @@ async function runMonitor() {
   const bar = document.getElementById('scanBar');
   const stat = document.getElementById('scanStatus');
   try {
-    const res = await fetch('/api/parse/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'full' }) });
+    const res = await fetch(apiUrl('/api'/parse/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: 'full' }) });
     if (res.status === 409) { showToast('Прогон уже выполняется', 'error'); }
     else if (!res.ok) { throw new Error((await res.json().catch(() => ({}))).error || 'Ошибка'); }
     else { showToast('Мониторинг запущен', 'success'); }
@@ -471,7 +471,7 @@ function pollMonitor() {
   if (scanPollTimer) clearInterval(scanPollTimer);
   scanPollTimer = setInterval(async () => {
     try {
-      const p = await (await fetch('/api/parse/progress')).json();
+      const p = await (await fetch(apiUrl('/api'/parse/progress')).json();
       const d = p.data || {};
       const stat = document.getElementById('scanStatus');
       if (d.total > 0) stat.textContent = `Прогон: ${d.processed}/${d.total} (ошибок: ${d.errors})`;
@@ -493,7 +493,7 @@ async function markAllRead() {
   try {
     const unread = allNotifs.filter(n => !n.read);
     if (!unread.length) { showToast('Нет непрочитанных', 'error'); return; }
-    await Promise.all(unread.map(n => fetch('/api/notifications/' + encodeURIComponent(n.uid) + '/read', { method: 'PATCH' })));
+    await Promise.all(unread.map(n => fetch(apiUrl('/api'/notifications/' + encodeURIComponent(n.uid) + '/read', { method: 'PATCH' })));
     showToast(`${unread.length} прочитано`, 'success');
     await refreshData();
   } catch { showToast('Ошибка', 'error'); }
@@ -505,9 +505,9 @@ async function openDetail() {
   if (!c) return;
   try {
     const [caseRes, eventsRes, cardRes] = await Promise.all([
-      fetch('/api/cases/' + encodeURIComponent(c.uid)).then(r => r.json()),
-      fetch('/api/cases/' + encodeURIComponent(c.uid) + '/events').then(r => r.json()),
-      fetch('/api/cases/' + encodeURIComponent(c.uid) + '/card').then(r => r.json()).catch(() => ({ data: null })),
+      fetch(apiUrl('/api'/cases/' + encodeURIComponent(c.uid)).then(r => r.json()),
+      fetch(apiUrl('/api'/cases/' + encodeURIComponent(c.uid) + '/events').then(r => r.json()),
+      fetch(apiUrl('/api'/cases/' + encodeURIComponent(c.uid) + '/card').then(r => r.json()).catch(() => ({ data: null })),
     ]);
     const ca = caseRes.data || caseRes;
     const card = cardRes.data || null;
