@@ -3,6 +3,17 @@
 // --- Theme ---
 const THEME_KEY = 'courtdesk-theme';
 const SKIN_KEY = 'courtdesk-skin';
+const API_URL_KEY = 'courtdesk-api-url';
+const DEFAULT_API_URL = '';
+
+function getApiBase() {
+  return localStorage.getItem(API_URL_KEY) || DEFAULT_API_URL;
+}
+
+function setApiBase(url) {
+  const normalized = url.trim().replace(/\/+$/, '');
+  localStorage.setItem(API_URL_KEY, normalized);
+}
 
 const SKINS = [
   { id: 'corporate', name: 'Стандарт',     desc: 'Slate · корпоративный',        swatch: 'linear-gradient(135deg,#0f172a 0 50%, #38bdf8 50% 100%)' },
@@ -95,6 +106,11 @@ function showToast(msg, type) {
 function debounce(fn, ms) {
   let timer;
   return (...a) => { clearTimeout(timer); timer = setTimeout(() => fn(...a), ms); };
+}
+
+function apiUrl(path) {
+  const base = getApiBase();
+  return base + (path.startsWith('/') ? path : '/' + path);
 }
 
 // Esc to close any modal + skin menu

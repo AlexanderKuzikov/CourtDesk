@@ -20,6 +20,8 @@
     .toolbar .actions { display: flex; gap: 8px; align-items: center; }
     .toolbar input[type="search"] { width: 220px; margin-bottom: 0; padding: 5px 10px; }
     #casesTable td:last-child, .action-btns { vertical-align: middle; }
+    #casesTable tbody tr { cursor: pointer; transition: background .15s; }
+    #casesTable tbody tr:hover { background: var(--surface-2); }
     .action-btns { white-space: nowrap; }
     .action-btns .icon-btn { display: inline-block; vertical-align: middle; }
     .icon-btn { padding: 3px 6px; border: none; border-radius: var(--skin-radius-sm); cursor: pointer; background: transparent; color: var(--text-dim); font-size: 14px; }
@@ -213,7 +215,7 @@ function renderTable() {
   const sortInd = (col) => sortCol === col ? `<span class="sort-ind">${sortDir === 'asc' ? '▲' : '▼'}</span>` : '';
 
   const rows = pageCases.map(c => `
-    <tr>
+    <tr onclick="if(event.target.tagName!=='SPAN')openDetail('${esc(c.uid)}')">
       <td><a href="#" onclick="openDetail('${esc(c.uid)}');return false" style="color:var(--primary);text-decoration:none;font-weight:600">${esc(c.number || '—')}</a></td>
       <td><span class="badge badge-${esc(c.status)}">${esc(STATUS_LABELS[c.status] || c.status)}</span></td>
       <td>${esc(c.courtName || c.courtId || '—')}</td>

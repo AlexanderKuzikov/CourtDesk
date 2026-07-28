@@ -148,7 +148,7 @@ function renderTable() {
   tbody.innerHTML = rows.map((c, i) => {
     const sel = c.uid === selectedUid ? 'sel' : '';
     const short = STATUS_SHORT[c.status] || c.status || '—';
-    return `<tr class="${sel}" data-uid="${esc(c.uid)}" onclick="selectRow('${esc(c.uid)}')">
+    return `<tr class="${sel}" data-uid="${esc(c.uid)}" onclick="selectRow('${esc(c.uid)}')" ondblclick="selectRow('${esc(c.uid)}');openDetail()">
       <td class="idx">${i + 1}</td>
       <td class="num"><a href="#" onclick="selectRow('${esc(c.uid)}');openDetail();return false" style="color:var(--primary);text-decoration:none">${esc(c.number || '—')}</a></td>
       <td><span class="tag badge badge-${esc(c.status)}">${esc(short)}</span></td>
