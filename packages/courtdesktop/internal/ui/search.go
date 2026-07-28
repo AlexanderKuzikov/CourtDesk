@@ -340,16 +340,20 @@ func showSearchResultDetail(w fyne.Window, r client.SearchResult, card *client.C
 	}
 	body.Add(widget.NewSeparator())
 
-	addInfoRow(body, "Тип суда", r.CourtType)
-	addInfoRow(body, "Судья", stringOr(r.Judge, "—"))
-	addInfoRow(body, "Дата поступления", fmtDate(r.FilingDate))
-	addInfoRow(body, "Дата решения", fmtDate(r.DecisionDate))
-	addInfoRow(body, "Результат", stringOr(r.Result, "—"))
-	addInfoRow(body, "Вступление в силу", fmtDate(r.LegalForceDate))
+	infoGrid := container.NewGridWithColumns(2)
+	addPair(infoGrid, "Тип суда", r.CourtType)
+	addPair(infoGrid, "Судья", stringOr(r.Judge, "—"))
+	addPair(infoGrid, "Дата поступления", fmtDate(r.FilingDate))
+	addPair(infoGrid, "Дата решения", fmtDate(r.DecisionDate))
+	addPair(infoGrid, "Результат", stringOr(r.Result, "—"))
+	addPair(infoGrid, "Вступление в силу", fmtDate(r.LegalForceDate))
+	body.Add(container.NewPadded(infoGrid))
 
 	if r.CaseUid != "" {
 		body.Add(widget.NewSeparator())
-		addInfoRow(body, "УИД", r.CaseUid)
+		uidGrid := container.NewGridWithColumns(2)
+		addPair(uidGrid, "УИД", r.CaseUid)
+		body.Add(container.NewPadded(uidGrid))
 	}
 
 	if card != nil {
