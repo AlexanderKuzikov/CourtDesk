@@ -4,6 +4,75 @@
 
 ---
 
+## [0.7.0] — 2026-07-28
+
+### Desktop App — миграция с Fyne на WebView
+
+**Критическое изменение**: полный переход с Fyne (40 MB) на WebView (6 MB) для десктопного приложения.
+
+**Причины миграции:**
+- Размер бинарника: 40 MB (Fyne) → 6 MB (WebView) — в 7 раз меньше
+- Рендеринг: Fyne OpenGL → нативный браузерный движок (WebView2/WebKitGTK/WKWebView)
+- Переиспользование: 100% Web UI вместо дублирования кода
+- Кроссплатформенность: упрощена сборка для Linux
+
+**Технические детали:**
+- Библиотека: `github.com/webview/webview_go`
+- Windows: WebView2 (Edge Chromium, встроен в Windows 10/11)
+- Linux: WebKitGTK (`libwebkit2gtk-4.0`)
+- macOS: WKWebView (встроен)
+- Размер: ~6 MB (без включения WebView runtime)
+
+**Новые возможности:**
+- Настраиваемый API URL (локальный/удалённый сервер)
+- `Ctrl+,` — горячая клавиша для настроек
+- Профиль в `~/.config/courtdesk/profile.json`
+- Поддержка fullscreen режима (`-fullscreen` flag)
+- Убрана блокирующая проверка API — приложение загружается даже без сервера
+
+**Структура:**
+```
+packages/courtdesktop/
+├── main.go              # ~200 строк (ранее ~2000 строк в 10 файлах с Fyne)
+├── go.mod               # webview_go dependency
+├── courtdesktop.exe     # Windows binary (6 MB)
+└── IMPLEMENTATION.md    # Детальная документация
+```
+
+### Web UI — прогресс мониторинга
+
+**Dashboard (`index.html`):**
+- Добавлена панель прогресса при запуске мониторинга
+- Список дел со статусами: ✓ (обработано), ✗ (ошибка), ○ (не обработано)
+- Обновление каждые 5 секунд во время мониторинга
+- Определение статуса по `updatedAt` vs время начала мониторинга
+
+### Web UI — настраиваемый API URL
+
+**Новая функция:**
+- Поле "Сервер API" в настройках (⚙️)
+- Сохранение в `localStorage['courtdesk-api-url']`
+- Все API-запросы используют `apiUrl()` helper
+- Перезагрузка страницы после изменения URL
+
+**Затронутые файлы:**
+- `packages/viewer/public/app.js` — добавлены `getApiBase()`, `setApiBase()`, `apiUrl()`
+- `packages/viewer/public/index.html` — поле URL в настройках, все fetch вызовы обёрнуты в `apiUrl()`
+- `packages/viewer/public/search.html` — все fetch вызовы обёрнуты в `apiUrl()`
+- `packages/viewer/public/terminal.js` — все fetch вызовы обёрнуты в `apiUrl()`
+
+### Web UI — открытие дела по всей строке
+
+**Dashboard (`index.html`):**
+- Клик по любой ячейке строки открывает карточку дела (кроме иконок действий)
+- Добавлен `cursor: pointer` и hover-эффект
+
+**Terminal view (`terminal.js`):**
+- Двойной клик по строке открывает карточку дела
+- Одинарный клик выделяет строку (существующее поведение)
+
+---
+
 ## [0.6.0] — 2026-07-27
 
 ### Web UI — Terminal view (новый layout)

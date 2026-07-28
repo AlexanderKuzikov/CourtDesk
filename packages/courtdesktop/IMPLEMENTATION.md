@@ -1,68 +1,143 @@
-# CourtDesk WebView Implementation
+# CourtDesk Desktop App
 
 ## Overview
-Successfully migrated CourtDesk from Fyne to WebView, reducing binary size from ~40MB to ~13MB while providing native browser rendering of the existing Web UI.
+
+Нативное десктопное приложение на Go+WebView, использующее существующий Web UI через WebView2.
 
 ## Architecture
-- **Backend**: Node.js API server (unchanged) at `http://127.0.0.1:8767`
-- **Frontend**: WebView window displaying the existing Web UI
-- **Configuration**: Profile stored at `~/.config/courtdesk/profile.json`
-- **Settings**: Accessible via Ctrl+, keyboard shortcut
+
+```
+┌─────────────────────────────────────┐
+│   CourtDesk Desktop (Go + WebView)  │
+│   ┌───────────────────────────────┐ │
+│   │  WebView Window (1920x1080)   │ │
+│   │  ┌─────────────────────────┐  │ │
+│   │  │  http://127.0.0.1:8767  │  │ │  ← Node.js API + Web UI
+│   │  │  (same as browser)      │  │ │
+│   │  └─────────────────────────┘  │ │
+│   └───────────────────────────────┘ │
+└─────────────────────────────────────┘
+              ↓
+┌─────────────────────────────────────┐
+│   Node.js API Server (:8767)        │
+│   - Express 5                       │
+│   - Puppeteer + RuCaptcha           │
+│   - 25 REST endpoints               │
+│   - 94 tests                        │
+└─────────────────────────────────────┘
+```
 
 ## Key Features
-1. **Lightweight**: 13MB binary (vs 40MB with Fyne)
-2. **Native Rendering**: Uses system WebView (Edge WebView2 on Windows, WebKitGTK on Linux)
-3. **Full HD**: 1920x1080 window by default, fullscreen mode available via `-fullscreen` flag
-4. **Theme Support**: 5 themes (Slate, Light, Paper, Forest, High Contrast)
-5. **Settings Page**: Built-in settings accessible via Ctrl+,
+
+- **Минимальный бинарник**: 6 MB (WebView2 runtime встроен в Windows 10/11)
+- **Нативный рендеринг**: Edge Chromium на Windows, WebKitGTK на Linux, WKWebView на macOS
+- **Полный Web UI**: Dashboard, Terminal, Search, Skins — всё из коробки
+- **Настраиваемый сервер**: поддержка удалённых API серверов
+- **Горячие клавиши**: `Ctrl+,` — настройки, `F5` — refresh
 
 ## File Structure
+
 ```
 packages/courtdesktop/
-├── main.go              # WebView implementation (212 lines)
-├── go.mod               # Dependencies
+├── main.go              # WebView implementation (~200 строк)
+├── go.mod               # Dependencies (webview_go)
 ├── go.sum               # Dependency checksums
-└── courtdesktop.exe     # Windows binary (13MB)
+├── courtdesktop.exe     # Windows binary (6 MB)
+└── IMPLEMENTATION.md    # This file
 ```
 
-## Removed Files
-- `internal/ui/*.go` - Fyne UI components (app, dashboard, detail, search, settings, themes)
-- `internal/client/*.go` - HTTP client code (no longer needed)
-- `internal/model/*.go` - Model code (consolidated into main.go)
-
 ## Usage
+
+### Запуск
+
 ```bash
-# Start API server first
+# 1. Запустить API сервер
 cd packages/api
 npm start
 
-# Launch desktop app
+# 2. Запустить desktop app
 cd packages/courtdesktop
 ./courtdesktop.exe              # Normal mode
 ./courtdesktop.exe -fullscreen  # Fullscreen mode
 ```
 
-## Settings
-Press `Ctrl+,` to open settings page where you can:
-- Change API URL
-- Select theme
-- Settings persist across sessions
+### Настройки
+
+**Ctrl+,** — открыть страницу настроек:
+- **API URL** — адрес сервера (по умолчанию `http://127.0.0.1:8767`)
+- **Theme** — выбор темы (Slate/Light/Paper/Forest/Contrast)
+- Настройки сохраняются в `~/.config/courtdesk/profile.json`
+- Перезапустите приложение для применения изменений
+
+### Если сервер недоступен
+
+Приложение загружается и показывает ошибки загрузки в Web UI. Через `Ctrl+,` можно настроить другой сервер.
 
 ## Technical Details
-- Uses `github.com/webview/webview_go` library
-- Keyboard shortcut injected via `w.Init()` for settings access
-- Profile loaded/saved as JSON
-- API health check before launching WebView
-- Graceful error handling if API is unavailable
+
+- **Библиотека**: `github.com/webview/webview_go` (Go bindings для webview C library)
+- **WebView2**: Edge Chromium runtime (встроен в Windows 10/11)
+- **Bindings**: `courtdesk.OpenSettings()`, `courtdesk.SaveSettings()`, `courtdesk.GoBack()`
+- **Профиль**: JSON в `~/.config/courtdesk/profile.json`
+
+### API URL normalization
+
+При загрузке профиля URL нормализуется:
+- Удаляется trailing `/api`
+- Удаляется trailing `/`
+
+Это позволяет использовать как `http://server:8767`, так и `http://server:8767/api`.
 
 ## Cross-Platform Support
-- **Windows**: Uses Edge WebView2 (pre-installed on Windows 10/11)
-- **Linux**: Uses WebKitGTK (requires libwebkit2gtk-4.0)
-- **macOS**: Uses WKWebView (built into macOS)
 
-## Benefits over Fyne
-1. **Smaller binary**: 13MB vs 40MB
-2. **Better rendering**: Native browser engine vs Fyne's custom renderer
-3. **Code reuse**: Uses existing Web UI (no duplication)
-4. **Easier maintenance**: Single source of truth for UI
-5. **Better performance**: Hardware-accelerated browser rendering
+| Platform | WebView Engine | System Dependency |
+|----------|----------------|-------------------|
+| Windows  | WebView2 (Edge Chromium) | Built-in (Win10/11) |
+| Linux    | WebKitGTK | `libwebkit2gtk-4.0` (usually pre-installed) |
+| macOS    | WKWebView | Built-in |
+
+### Linux Build
+
+```bash
+# Install dependencies
+sudo apt install libgtk-3-dev libwebkit2gtk-4.0-dev golang
+
+# Build
+go build -o courtdesktop .
+```
+
+### Cross-compile from Windows
+
+Cross-compile с Windows на Linux требует CGo toolchain и Linux-заголовков. Рекомендуется собирать на целевой платформе.
+
+## Преимущества перед Fyne
+
+| Метрика | Fyne | WebView |
+|---------|------|---------|
+| Размер бинарника | 40 MB | 6 MB |
+| Рендеринг | Custom (OpenGL) | Нативный браузер |
+| Код UI | Дублирование | Переиспользование Web UI |
+| Поддержка | Ограниченная | Полная (HTML/CSS/JS) |
+| Производительность | Средняя | Высокая (GPU-accelerated) |
+
+## История миграции
+
+**v0.6.0** — Desktop app на Fyne (40 MB). Проблемы:
+- Большой бинарник (OpenGL, GLFW, fonts)
+- Ограниченный UI (Fyne widgets)
+- Дублирование кода с Web UI
+- Проблемы с Linux cross-compile
+
+**v0.7.0** — Миграция на WebView (6 MB):
+- Нативный браузерный движок
+- 100% переиспользование Web UI
+- Настраиваемый API URL
+- Простая кроссплатформенная сборка
+
+## Синхронизация Web ↔ Desktop
+
+Оба интерфейса используют **один и тот же Web UI**:
+- Web: `npm start` → открыть `http://127.0.0.1:8767` в браузере
+- Desktop: `courtdesktop.exe` → WebView на тот же сервер
+
+Изменения в `packages/viewer/public/` автоматически доступны в обоих интерфейсах.

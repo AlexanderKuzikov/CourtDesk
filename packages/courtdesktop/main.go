@@ -3,14 +3,9 @@ package main
 import (
 	"encoding/json"
 	"flag"
-	"fmt"
-	"log"
-	"net/http"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
-	"time"
 
 	"github.com/webview/webview_go"
 )
@@ -41,7 +36,6 @@ func loadProfile() *Profile {
 	if p.ThemeName == "" {
 		p.ThemeName = defaultTheme
 	}
-	// Normalize: remove trailing /api or /
 	p.APIURL = strings.TrimSuffix(p.APIURL, "/api")
 	p.APIURL = strings.TrimSuffix(p.APIURL, "/")
 	return p
@@ -59,58 +53,27 @@ func saveProfile(p *Profile) error {
 	return os.WriteFile(profilePath(), data, 0644)
 }
 
-func checkAPI(baseURL string) bool {
-	client := &http.Client{Timeout: 3 * time.Second}
-	resp, err := client.Get(baseURL + "/api/health")
-	if err != nil {
-		return false
-	}
-	defer resp.Body.Close()
-	return resp.StatusCode == 200
-}
-
 func main() {
 	fullscreen := flag.Bool("fullscreen", false, "Full-screen mode")
 	flag.Parse()
 
 	profile := loadProfile()
 
-	if !checkAPI(profile.APIURL) {
-		showError("CourtDesk", "API server is not available at "+profile.APIURL+"\n\nStart the server first:\n  cd CourtDesk && npm start")
-		os.Exit(1)
-	}
-
 	w := webview.New(!*fullscreen)
 	defer w.Destroy()
 
 	w.SetTitle("CourtDesk")
-
-	if runtime.GOOS == "windows" {
-		w.SetSize(1920, 1080, webview.HintNone)
-	} else {
-		w.SetSize(1920, 1080, webview.HintNone)
-	}
+	w.SetSize(1920, 1080, webview.HintNone)
 
 	if *fullscreen {
 		w.SetSize(1920, 1080, webview.HintMax)
 	}
 
 	settingsHTML := buildSettingsPage(profile)
+	jsAPI := &jsAPI{profile: profile, w: w, settingsHTML: settingsHTML}
 
-	w.Bind("courtdesk", &jsAPI{profile: profile, w: w, settingsHTML: settingsHTML})
-
-	// Inject keyboard shortcut for settings (Ctrl+,)
-	w.Init(`
-		document.addEventListener('keydown', function(e) {
-			if (e.ctrlKey && e.key === ',') {
-				e.preventDefault();
-				courtdesk.OpenSettings();
-			}
-		});
-	`)
-
+	w.Bind("courtdesk", jsAPI)
 	w.Navigate(profile.APIURL)
-
 	w.Run()
 }
 
@@ -132,15 +95,23 @@ func (j *jsAPI) SaveSettings(apiURL string, themeName string) {
 }
 
 func (j *jsAPI) OpenSettings() {
-	j.w.Navigate("data:text/html," + j.settingsHTML)
+	j.w.Eval(`document.body.innerHTML = '` + escapeJS(j.settingsHTML) + `';`)
 }
 
 func (j *jsAPI) GoBack() {
-	j.w.Navigate(j.profile.APIURL)
+	j.w.Eval(`location.reload();`)
+}
+
+func escapeJS(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `'`, `\'`)
+	s = strings.ReplaceAll(s, "\n", `\n`)
+	s = strings.ReplaceAll(s, "\r", `\r`)
+	return s
 }
 
 func buildSettingsPage(p *Profile) string {
-	return fmt.Sprintf(`<!DOCTYPE html>
+	return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
@@ -171,18 +142,18 @@ func buildSettingsPage(p *Profile) string {
   h1 { margin-bottom:30px; font-size:24px; }
   .card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:24px; margin-bottom:20px; max-width:600px; }
   label { display:block; margin-bottom:6px; font-size:14px; opacity:0.8; }
-  input, select { width:100%%; padding:10px 12px; background:var(--input-bg); color:var(--fg); border:1px solid var(--border); border-radius:8px; font-size:14px; margin-bottom:16px; }
+  input, select { width:100%; padding:10px 12px; background:var(--input-bg); color:var(--fg); border:1px solid var(--border); border-radius:8px; font-size:14px; margin-bottom:16px; }
   button { padding:10px 24px; background:var(--primary); color:#000; border:none; border-radius:8px; font-size:14px; cursor:pointer; font-weight:600; margin-right:10px; }
   button:hover { opacity:0.9; }
   button.secondary { background:var(--surface); color:var(--fg); border:1px solid var(--border); }
   .status { margin-top:12px; font-size:13px; opacity:0.7; }
 </style>
 </head>
-<body data-theme="%s">
+<body data-theme="` + p.ThemeName + `">
 <h1>CourtDesk Settings</h1>
 <div class="card">
   <label>API URL</label>
-  <input id="apiUrl" value="%s" placeholder="http://127.0.0.1:8767">
+  <input id="apiUrl" value="` + p.APIURL + `" placeholder="http://127.0.0.1:8767">
   <label>Theme</label>
   <select id="theme">
     <option value="slate">Slate (Dark)</option>
@@ -197,7 +168,7 @@ func buildSettingsPage(p *Profile) string {
 </div>
 <script>
   const themeSelect = document.getElementById('theme');
-  themeSelect.value = '%s';
+  themeSelect.value = '` + p.ThemeName + `';
   themeSelect.addEventListener('change', function() {
     document.body.setAttribute('data-theme', this.value);
   });
@@ -212,11 +183,5 @@ func buildSettingsPage(p *Profile) string {
   }
 </script>
 </body>
-</html>`, p.ThemeName, p.APIURL, p.ThemeName)
-}
-
-func init() {
-	if runtime.GOOS == "windows" {
-		log.SetFlags(0)
-	}
+</html>`
 }

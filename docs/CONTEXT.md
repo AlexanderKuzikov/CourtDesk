@@ -1,13 +1,13 @@
 # CourtDesk — CONTEXT
 > CRM-система поиска и мониторинга судебных дел РФ.
-> Единый сервис для интеграции с 1С и параллельного Web UI.
+> Единый сервис для интеграции с 1С, Web UI и Desktop App на Go+WebView.
 > Собирается из CourtSniffer (поиск), CourtFlow (мониторинг) и существующего скелета CourtDesk.
 
 ---
 
 ## Статус
 
-**v0.6.0** — Web UI: добавлен второй layout (Terminal/Bloomberg-style) и ортогональная ось skin (3 варианта × 2 темы). **Гэпы из PROMPT_WEBUI.md не закрыты** — см. «Web UI open-проблемы». API покрыт тестами на 94 теста (все эндпоинты). TUI на readline+ANSI.
+**v0.7.0** — Desktop App на Go+WebView (6 MB). Использует существующий Web UI через WebView2. Поддержка настраиваемого API URL (локальный/удалённый сервер). Web UI: прогресс мониторинга с индикацией статуса дел. API покрыт тестами на 94 теста (все эндпоинты).
 
 | Компонент | Статус | Последнее изменение |
 |-----------|--------|---------------------|
@@ -22,10 +22,10 @@
 | Scheduler | ✅ cron + double-fire guard | 2026-07-26 |
 | Store | ✅ каскадное удаление + settings | CR6-016 |
 | API | ✅ 25 эндпоинтов, static imports | 2026-07-27 |
-| Viewer (Dashboard) | ⚠️ см. Web UI open-проблемы | 2026-07-26 |
-| Viewer (Search) | ⚠️ см. Web UI open-проблемы | 2026-07-26 |
+| Viewer (Dashboard) | ⚠️ см. Web UI open-проблемы | 2026-07-28 |
+| Viewer (Search) | ⚠️ см. Web UI open-проблемы | 2026-07-28 |
 | Viewer (Terminal) | ✅ добавлен — `/terminal.html` Bloomberg-style | 2026-07-27 |
-| Viewer (Skins) | ✅ 3 skin × 2 theme, переключатель 🎨 | 2026-07-27 |
+| Viewer (Skins) | ✅ 3 skin × 5 themes, переключатель 🎨 | 2026-07-28 |
 | Court Hierarchy | ✅ CR9 закрыт | 2026-07-25 |
 | Party Matching | ✅ pickBestMatch | 2026-07-26 |
 | eslint | ✅ flat config | 2026-07-26 |
@@ -33,9 +33,41 @@
 | Dependency audit | ✅ TUI-vuln ветка удалена | 2026-07-26 |
 | TUI (Node, deprecated) | ✅ readline+ANSI | 2026-07-26 |
 | TUI (Go, актуальный) | 🆕 Bubble Tea — Win32 API, стабильно | 2026-07-27 |
-| Go CLI/Web binary | 🆕 единый .exe (web + tui) на Go | 2026-07-27 |
+| Desktop App (Go+WebView) | 🆕 v0.7.0 — WebView2, 6 MB, настраиваемый API URL | 2026-07-28 |
 | API tests | ✅ 94 тестов, покрытие всех эндпоинтов | 2026-07-27 |
 | Docs | ✅ docs/ почищен, CRM-INTEGRATION обновлён | 2026-07-27 |
+
+---
+
+## Desktop App — текущее состояние
+
+**v0.7.0** — Нативное десктопное приложение на Go+WebView (6 MB).
+
+**Архитектура:**
+- Go binary с `github.com/webview/webview_go`
+- WebView2 на Windows (Edge Chromium, встроен в Windows 10/11)
+- WebKitGTK на Linux (`libwebkit2gtk-4.0`)
+- WKWebView на macOS (встроен)
+- Использует существующий Node.js API сервер и Web UI
+
+**Возможности:**
+- Нативное окно 1920×1080 (или fullscreen)
+- Настраиваемый API URL (локальный/удалённый сервер)
+- `Ctrl+,` — настройки (API URL, тема)
+- Профиль в `~/.config/courtdesk/profile.json`
+- 100% переиспользование Web UI (Dashboard, Terminal, Search, Skins)
+
+**Преимущества перед Fyne:**
+- 6 MB vs 40 MB (в 7 раз меньше)
+- Нативный браузерный движок vs Fyne OpenGL
+- Переиспользование Web UI vs дублирование
+- Простая кроссплатформенная сборка
+
+**История миграции:**
+- v0.6.0: Fyne (40 MB, проблемы с UI и cross-compile)
+- v0.7.0: WebView (6 MB, нативный рендеринг, настраиваемый сервер)
+
+См. [`packages/courtdesktop/IMPLEMENTATION.md`](../packages/courtdesktop/IMPLEMENTATION.md) для деталей.
 
 ---
 
@@ -184,6 +216,10 @@ Go-бинарник — **альтернативный** UI, в первую о�
 | 2026-07-27 | **v0.6.0 Web UI — Terminal + Skins**: новый layout `terminal.html` + `terminal.js` (Bloomberg-style, vim-keys, multi-sort, saved views, statusline). Skin-axis в `theme.css` — 3 варианта оформления (corporate/Бумага/compact) ортогонально `data-theme`. `app.js` — skin-switcher с реестром и swatch. `index.html`/`search.html` — inline `_t()` от FOUC, ссылка «Терминал» в nav. **Гэпы PROMPT_WEBUI.md (O1-O15) НЕ закрыты** — открыты как WEBUI-O1..O15. |
 | 2026-07-27 | **Go TUI (v0.7.0)**: `packages/tui-go/` — Go-бинарник на Bubble Tea. Отказ от Node.js для UI (Ink/ConPTY нестабильны на Windows). Работает через Win32 API напрямую, статус-бар внизу, alt-screen, F-keys. Список дел, детали+события, добавление/удаление, прогон, уведомления, фильтр. Кроссплатформенная компиляция (win/linux), 7 MB .exe. |
 | 2026-07-27 | **Решение: Go — UI-платформа**: TUI-прототип подтвердил стабильность. Планируется единый Go-бинарник для Web UI (`courtdesk-ui`) и TUI (`--tui`). Node.js бэкенд не трогается. Решение зафиксировано в docs/CONTEXT.md и docs/DECISIONS.md. |
+| 2026-07-28 | **v0.7.0 Desktop App — миграция на WebView**: полный переход с Fyne (40 MB) на WebView (6 MB). Библиотека `github.com/webview/webview_go`. WebView2 на Windows, WebKitGTK на Linux, WKWebView на macOS. Удалены все Fyne-компоненты (`internal/ui/*.go`, `internal/client/*.go`). Добавлена поддержка настраиваемого API URL (локальный/удалённый сервер). Убрана блокирующая проверка API — приложение загружается даже без сервера. |
+| 2026-07-28 | **Web UI — настраиваемый API URL**: добавлены `getApiBase()`, `setApiBase()`, `apiUrl()` в `app.js`. Все fetch-вызовы в `index.html`, `search.html`, `terminal.js` обёрнуты в `apiUrl()`. Добавлено поле "Сервер API" в настройки. Сохранение в `localStorage['courtdesk-api-url']`. |
+| 2026-07-28 | **Web UI — прогресс мониторинга**: добавлена панель прогресса в dashboard. Список дел со статусами (✓/✗/○) определяется по `updatedAt` vs время начала мониторинга. Обновление каждые 5 секунд. |
+| 2026-07-28 | **Web UI — открытие дела по строке**: dashboard — клик по всей строке открывает карточку. terminal — двойной клик по строке открывает карточку. |
 
 ---
 

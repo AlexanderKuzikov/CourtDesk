@@ -130,7 +130,7 @@ function searchCourts(q) {
   const el = document.getElementById('courtResults');
   if (q.length < 2) { el.style.display = 'none'; return; }
   searchCourts._t = setTimeout(async () => {
-    const r = await fetch(apiUrl('/api'/courts?q=' + encodeURIComponent(q));
+    const r = await fetch(apiUrl('/api/courts?q=' + encodeURIComponent(q)));
     const data = await r.json();
     const list = data.data || data || [];
     el.innerHTML = list.map(c => `<div data-code="${esc(c.code)}"><span class="code">${esc(c.code)}</span> ${esc(c.name)}</div>`).join('');
@@ -156,7 +156,7 @@ async function selectCourt(id) {
   document.getElementById('courtCode').value = id;
   const el = document.getElementById('courtDisplay');
   try {
-    const r = await fetch(apiUrl('/api'/courts/' + encodeURIComponent(id));
+    const r = await fetch(apiUrl('/api/courts/' + encodeURIComponent(id)));
     const data = await r.json();
     const c = data.data || data;
     if (!c || !c.name) { el.textContent = id; return; }
@@ -266,7 +266,7 @@ async function addToMonitor(idx) {
   const btn = document.querySelector(`.monitor-btn[data-idx="${idx}"]`);
   if (btn && btn.classList.contains('added')) return;
   try {
-    const res = await fetch(apiUrl('/api'/cases?parse=true', {
+    const res = await fetch(apiUrl('/api/cases?parse=true'), {
       method:'POST', headers:{'Content-Type':'application/json'},
       body:JSON.stringify({ url:r.caseUrl, courtId:r.courtId, courtCode:r.courtCode||r.courtId, courtType:r.courtType, caseNumber:r.caseNumber }),
     });
@@ -289,8 +289,8 @@ async function addWait() {
   btn.disabled = true;
   try {
     let courtType = 'district';
-    try { const info = await (await fetch(apiUrl('/api'/courts/' + encodeURIComponent(courtCode))).json(); const c = info.data||info; if (c?.courtType) courtType = c.courtType; } catch {}
-    const res = await fetch(apiUrl('/api'/cases/wait', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ courtId:courtCode, courtType, party, filingDate:date }) });
+    try { const info = await (await fetch(apiUrl('/api/courts/' + encodeURIComponent(courtCode))).json()); const c = info.data||info; if (c?.courtType) courtType = c.courtType; } catch {}
+    const res = await fetch(apiUrl('/api/cases/wait'), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ courtId:courtCode, courtType, party, filingDate:date }) });
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || 'Ошибка');
     showToast('Отслеживание появления дела добавлено', 'success');
@@ -307,7 +307,7 @@ async function openDetail(idx) {
   // Пробуем загрузить полную карточку через парсинг URL
   let cardHtml = '';
   try {
-    const parseRes = await fetch(apiUrl('/api'/parse/url', {
+    const parseRes = await fetch(apiUrl('/api/parse/url'), {
       method:'POST', headers:{'Content-Type':'application/json'},
       body:JSON.stringify({ url: r.caseUrl, courtId: r.courtId, courtType: r.courtType }),
     });

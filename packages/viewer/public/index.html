@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CourtDesk — Дашборд</title>
   <link rel="stylesheet" href="/theme.css">
-  <script>function _t(){var s=localStorage.getItem('courtdesk-theme'),m=matchMedia('(prefers-color-scheme: light)').matches;document.documentElement.setAttribute('data-theme',s||(m?'light':'dark'));var sk=localStorage.getItem('courtdesk-skin');if(sk==='legal'||sk==='compact')document.documentElement.setAttribute('data-skin',sk)}_t()</script>
+  <script>function _t(){var s=localStorage.getItem('courtdesk-theme'),m=matchMedia('(prefers-color-scheme: light').matches;document.documentElement.setAttribute('data-theme',s||(m?'light':'dark'));var sk=localStorage.getItem('courtdesk-skin');if(sk==='legal'||sk==='compact')document.documentElement.setAttribute('data-skin',sk)}_t()</script>
   <style>
     .container { max-width: 1200px; margin: 0 auto; padding: 20px 24px; }
     .counters { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
@@ -49,9 +49,14 @@
     .detail-card .ev-type { font-size: 12px; font-weight: 600; color: var(--primary); }
     .detail-card .ev-msg { font-size: 13px; color: var(--text); margin-top: 2px; }
     .detail-card .ev-time { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
-    .scan-bar { display: none; align-items: center; gap: 10px; padding: 10px 16px; background: var(--primary-bg); border-radius: var(--skin-radius); margin-bottom: 16px; font-size: 13px; color: var(--primary); }
+    .scan-bar { display: none; align-items: center; gap: 10px; padding: 10px 16px; background: var(--primary-bg); border-radius: var(--skin-radius); margin-bottom: 16px; font-size: 13px; color: var(--primary); flex-wrap: wrap; }
     .scan-bar.show { display: flex; }
     .scan-bar .spinner { flex-shrink: 0; }
+    .scan-progress { width: 100%; display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .scan-item { font-size: 11px; padding: 3px 8px; border-radius: 4px; background: var(--surface); border: 1px solid var(--border); }
+    .scan-item.done { border-color: var(--success); color: var(--success); }
+    .scan-item.error { border-color: var(--danger); color: var(--danger); }
+    .scan-item.current { border-color: var(--warning); color: var(--warning); background: var(--warning-bg); }
     @media (max-width: 640px) { .counters { grid-template-columns: repeat(2, 1fr); } .toolbar input[type="search"] { width: 100%; } }
   </style>
 </head>
@@ -75,6 +80,7 @@
   <div class="scan-bar" id="scanBar">
     <span class="spinner"></span>
     <span id="scanStatus">Мониторинг...</span>
+    <div class="scan-progress" id="scanProgress"></div>
   </div>
 
   <div class="toolbar">
@@ -271,9 +277,9 @@ function goPage(p) { currentPage = p; renderTable(); }
 async function loadDashboard() {
   try {
     const [statusRes, casesRes, notifRes] = await Promise.all([
-      fetch(apiUrl('/api'/status').then(r => r.json()),
-      fetch(apiUrl('/api'/cases').then(r => r.json()),
-      fetch(apiUrl('/api'/notifications').then(r => r.json()),
+      fetch(apiUrl('/api/status')).then(r => r.json()),
+      fetch(apiUrl('/api/cases')).then(r => r.json()),
+      fetch(apiUrl('/api/notifications')).then(r => r.json()),
     ]);
     const s = statusRes.data || {};
     document.getElementById('counters').innerHTML = `
@@ -301,10 +307,10 @@ async function loadDashboard() {
 async function openDetail(uid) {
   try {
     const [caseRes, eventsRes, cardRes, courtRes] = await Promise.all([
-      fetch(apiUrl('/api'/cases/' + encodeURIComponent(uid)).then(r => r.json()),
-      fetch(apiUrl('/api'/cases/' + encodeURIComponent(uid) + '/events').then(r => r.json()),
-      fetch(apiUrl('/api'/cases/' + encodeURIComponent(uid) + '/card').then(r => r.json()).catch(() => ({ data: null })),
-      fetch(apiUrl('/api'/courts/' + encodeURIComponent(document.querySelector('#detailOverlay')?.dataset?.courtId || '')).then(r => r.json()).catch(() => ({ data: null })),
+      fetch(apiUrl('/api/cases/' + encodeURIComponent(uid))).then(r => r.json()),
+      fetch(apiUrl('/api/cases/' + encodeURIComponent(uid) + '/events')).then(r => r.json()),
+      fetch(apiUrl('/api/cases/' + encodeURIComponent(uid) + '/card')).then(r => r.json()).catch(() => ({ data: null })),
+      fetch(apiUrl('/api/courts/' + encodeURIComponent(document.querySelector('#detailOverlay')?.dataset?.courtId || ''))).then(r => r.json()).catch(() => ({ data: null })),
     ]);
     const c = caseRes.data || caseRes;
     const card = cardRes.data || null;
@@ -397,14 +403,14 @@ function closeDetail() { document.getElementById('detailOverlay').classList.remo
 
 async function archiveCase(uid) {
   try {
-    const res = await fetch(apiUrl('/api'/cases/' + encodeURIComponent(uid), { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:'archived'}) });
+    const res = await fetch(apiUrl('/api/cases/' + encodeURIComponent(uid)), { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:'archived'}) });
     if (!res.ok) throw new Error();
     showToast('Дело заархивировано', 'success'); loadDashboard();
   } catch { showToast('Ошибка архивирования', 'error'); }
 }
 async function unarchiveCase(uid) {
   try {
-    const res = await fetch(apiUrl('/api'/cases/' + encodeURIComponent(uid), { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:'monitoring'}) });
+    const res = await fetch(apiUrl('/api/cases/' + encodeURIComponent(uid)), { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:'monitoring'}) });
     if (!res.ok) throw new Error();
     showToast('Дело возвращено в мониторинг', 'success'); loadDashboard();
   } catch { showToast('Ошибка', 'error'); }
@@ -412,7 +418,7 @@ async function unarchiveCase(uid) {
 async function deleteCase(uid) {
   if (!confirm('Удалить дело безвозвратно?')) return;
   try {
-    const res = await fetch(apiUrl('/api'/cases/' + encodeURIComponent(uid), { method:'DELETE' });
+    const res = await fetch(apiUrl('/api/cases/' + encodeURIComponent(uid)), { method:'DELETE' });
     if (!res.ok) throw new Error();
     showToast('Дело удалено', 'success'); loadDashboard();
   } catch { showToast('Ошибка удаления', 'error'); }
@@ -422,10 +428,12 @@ async function runMonitor() {
   const btn = document.getElementById('runBtn');
   const scanBar = document.getElementById('scanBar');
   const scanStatus = document.getElementById('scanStatus');
+  const scanProgress = document.getElementById('scanProgress');
+  const startTime = Date.now();
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Запущен...';
   try {
-    const res = await fetch(apiUrl('/api'/parse/run', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({mode:'full'}) });
+    const res = await fetch(apiUrl('/api/parse/run'), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({mode:'full'}) });
     const json = await res.json();
     if (res.status === 409) {
       showToast('Прогон уже выполняется', 'error');
@@ -434,9 +442,10 @@ async function runMonitor() {
       // Пытаемся слушать прогресс текущего прогона
       const poll = setInterval(async () => {
         try {
-          const p = await (await fetch(apiUrl('/api'/parse/progress')).json();
+          const p = await (await fetch(apiUrl('/api/parse/progress'))).json();
           const d = p.data || {};
           if (d.total > 0) scanStatus.textContent = `Мониторинг: ${d.processed}/${d.total} (ошибок: ${d.errors})`;
+          updateScanProgress(startTime, scanProgress);
           if (!d.running) { clearInterval(poll); scanBar.classList.remove('show'); }
         } catch {}
       }, 5000);
@@ -450,9 +459,10 @@ async function runMonitor() {
       let polls = 0;
       const poll = setInterval(async () => {
         await loadDashboard();
+        updateScanProgress(startTime, scanProgress);
         // Обновляем прогресс
         try {
-          const p = await (await fetch(apiUrl('/api'/parse/progress')).json();
+          const p = await (await fetch(apiUrl('/api/parse/progress'))).json();
           const d = p.data || {};
           if (d.total > 0) {
             scanStatus.textContent = `Мониторинг: ${d.processed}/${d.total} (ошибок: ${d.errors})`;
@@ -476,12 +486,29 @@ async function runMonitor() {
   setTimeout(() => { btn.disabled = false; btn.innerHTML = '▶ Мониторинг'; }, 5000);
 }
 
+function updateScanProgress(startTime, container) {
+  const items = allCases.slice(0, 20).map(c => {
+    const updatedAt = new Date(c.updatedAt).getTime();
+    let cls = '';
+    let icon = '○';
+    if (c.status === 'error') {
+      cls = 'error';
+      icon = '✗';
+    } else if (updatedAt > startTime) {
+      cls = 'done';
+      icon = '✓';
+    }
+    return `<span class="scan-item ${cls}" title="${esc(c.number)}">${icon} ${esc(c.number.substring(0, 15))}</span>`;
+  });
+  container.innerHTML = items.join('');
+}
+
 async function markAllRead() {
   try {
-    const notifs = await (await fetch(apiUrl('/api'/notifications')).json();
+    const notifs = await (await fetch(apiUrl('/api/notifications'))).json();
     const unread = (notifs.data || []).filter(n => !n.read);
     await Promise.all(unread.map(n =>
-      fetch(apiUrl('/api'/notifications/' + encodeURIComponent(n.uid) + '/read', { method:'PATCH' })
+      fetch(apiUrl('/api/notifications/' + encodeURIComponent(n.uid) + '/read'), { method:'PATCH' })
     ));
     if (unread.length) showToast('Все уведомления отмечены', 'success');
     loadDashboard();
