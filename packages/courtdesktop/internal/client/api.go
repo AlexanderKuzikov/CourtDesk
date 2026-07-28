@@ -9,9 +9,25 @@ import (
 	"time"
 )
 
-const apiBase = "http://127.0.0.1:8767/api"
+var apiBase = "http://127.0.0.1:8767/api"
 
 var httpClient = &http.Client{Timeout: 10 * time.Second}
+
+func Init(baseURL string) {
+	apiBase = strings.TrimRight(baseURL, "/")
+}
+
+func HealthCheck() error {
+	resp, err := httpClient.Get(apiBase + "/health")
+	if err != nil {
+		return fmt.Errorf("API недоступен: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("API вернул статус %d", resp.StatusCode)
+	}
+	return nil
+}
 
 func Get[T any](path string) (T, error) {
 	var zero T

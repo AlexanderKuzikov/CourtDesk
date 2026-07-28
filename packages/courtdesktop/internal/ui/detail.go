@@ -7,7 +7,6 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
-	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/AlexanderKuzikov/CourtDesk/packages/courtdesktop/internal/client"
@@ -62,143 +61,21 @@ func showDetail(w fyne.Window, uid string) {
 	cs, ev, cd := c, events, card
 	mu.Unlock()
 
-	body := container.NewVBox()
+	mainContent := buildMainSection(cs)
+	courtContent := buildCourtSection(cs, cd)
+	partiesContent := buildPartiesSection(cd)
+	movContent := buildMovementSection(cd)
+	monContent := buildMonitorSection(cs, ev)
 
-	// Заголовок — номер дела
-	body.Add(widget.NewLabelWithStyle(cs.Number, fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
-	if cs.URL != "" {
-		body.Add(widget.NewLabel(cs.URL))
-	}
-	body.Add(widget.NewSeparator())
+	acc := widget.NewAccordion(
+		widget.NewAccordionItem("Основное", mainContent),
+		widget.NewAccordionItem("Суд и дело", courtContent),
+		widget.NewAccordionItem("Стороны", partiesContent),
+		widget.NewAccordionItem("Движение дела", movContent),
+		widget.NewAccordionItem("Мониторинг", monContent),
+	)
+	acc.Open(0)
 
-	// Основная информация — сетка 2 колонки
-	info := container.NewGridWithColumns(2)
-	addPair(info, "Статус", statusText(cs.Status))
-	addPair(info, "Вступление в силу", fmtDate(cs.LegalForceDate))
-	addPair(info, "Последняя проверка", fmtDT(cs.LastChecked))
-	if cs.CaseUid != "" {
-		addPair(info, "УИД", cs.CaseUid)
-	}
-	body.Add(container.NewPadded(info))
-	body.Add(widget.NewSeparator())
-
-	// Суд
-	courtName := cs.CourtName
-	if courtName == "" && cd != nil {
-		courtName = cd.Court
-	}
-	if courtName != "" || cd != nil {
-		body.Add(widget.NewLabelWithStyle("🏛️ Суд", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
-		courtInfo := container.NewGridWithColumns(2)
-		addPair(courtInfo, "Суд", courtName)
-		if cd != nil {
-			addPair(courtInfo, "Тип суда", stringOr(cd.CourtType, cs.CourtType))
-			addPair(courtInfo, "Тип дела", stringOr(cd.Type, "—"))
-			if cd.Card != nil {
-				if len(cd.Card.Category) > 0 {
-					cat := ""
-					for i, c := range cd.Card.Category {
-						if i > 0 {
-							cat += " → "
-						}
-						cat += c
-					}
-					addPair(courtInfo, "Категория", cat)
-				}
-				addPair(courtInfo, "Судья", stringOr(cd.Card.Judge, "—"))
-				addPair(courtInfo, "Дата поступления", fmtDate(cd.Card.FilingDate))
-				addPair(courtInfo, "Дата слушания", fmtDate(cd.Card.HearingDate))
-				addPair(courtInfo, "Результат", stringOr(cd.Card.Result, "—"))
-			}
-		} else {
-			addPair(courtInfo, "Код", stringOr(cs.CourtCode, cs.CourtID))
-		}
-		body.Add(container.NewPadded(courtInfo))
-		body.Add(widget.NewSeparator())
-	}
-
-	// Результат решения
-	if cs.Result != "" {
-		body.Add(widget.NewLabelWithStyle("📄 Результат", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
-		body.Add(container.NewPadded(widget.NewLabel(cs.Result)))
-		body.Add(widget.NewSeparator())
-	}
-
-	// Участники
-	if cd != nil && len(cd.Parties) > 0 {
-		pl, de := 0, 0
-		for _, p := range cd.Parties {
-			switch p.Role {
-			case "Истец", "Истец (заявитель)":
-				pl++
-			case "Ответчик":
-				de++
-			}
-		}
-		body.Add(widget.NewLabelWithStyle(fmt.Sprintf("👥 Стороны: %d истец/ов, %d ответчик/ов", pl, de),
-			fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
-		for _, p := range cd.Parties {
-			line := fmt.Sprintf("  %s: %s", p.Role, p.Name)
-			if p.INN != "" {
-				line += fmt.Sprintf(" (ИНН %s", p.INN)
-				if p.OGRN != "" {
-					line += fmt.Sprintf(", ОГРН %s", p.OGRN)
-				}
-				line += ")"
-			}
-			body.Add(widget.NewLabel(line))
-		}
-		body.Add(widget.NewSeparator())
-	}
-
-	// Движение дела
-	if cd != nil && len(cd.Events) > 0 {
-		body.Add(widget.NewLabelWithStyle(fmt.Sprintf("📅 Движение дела (%d)", len(cd.Events)),
-			fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
-		start := 0
-		if len(cd.Events) > 20 {
-			start = len(cd.Events) - 20
-		}
-		for i := len(cd.Events) - 1; i >= start; i-- {
-			e := cd.Events[i]
-			txt := fmt.Sprintf("  • %s", e.EventDate)
-			if e.EventTime != "" {
-				txt += " " + e.EventTime
-			}
-			txt += " — " + e.EventName
-			if e.Result != "" {
-				txt += ": " + e.Result
-			}
-			body.Add(widget.NewLabel(txt))
-		}
-		if len(cd.Events) > 20 {
-			body.Add(widget.NewLabel(fmt.Sprintf("  ... и ещё %d", len(cd.Events)-20)))
-		}
-		body.Add(widget.NewSeparator())
-	}
-
-	// Ошибка
-	if cs.LastError != "" {
-		body.Add(widget.NewLabelWithStyle(fmt.Sprintf("❌ Ошибок: %d", cs.ErrorCount),
-			fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
-		body.Add(container.NewPadded(widget.NewLabel(cs.LastError)))
-		body.Add(widget.NewSeparator())
-	}
-
-	// История мониторинга
-	if len(ev) > 0 {
-		body.Add(widget.NewLabelWithStyle("📋 История мониторинга",
-			fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
-		for _, e := range ev {
-			body.Add(container.NewPadded(widget.NewLabel(fmt.Sprintf("%s %s — %s",
-				eventIcon(e.Type), fmtDT(e.CreatedAt), e.Message))))
-		}
-	}
-
-	body.Add(layout.NewSpacer())
-	scroll := container.NewVScroll(body)
-
-	// Кнопки
 	archiveBtn := widget.NewButton("📦 В архив", func() {
 		go func() {
 			_, err := client.Patch[any]("/cases/"+uid, map[string]string{"status": "archived"})
@@ -209,18 +86,18 @@ func showDetail(w fyne.Window, uid string) {
 			}
 		}()
 	})
-	unarchiveBtn := widget.NewButton("↩ Вернуть из архива", func() {
+	unarchiveBtn := widget.NewButton("↩ Вернуть", func() {
 		go func() {
 			_, err := client.Patch[any]("/cases/"+uid, map[string]string{"status": "monitoring"})
 			if err != nil {
 				dialog.ShowError(fmt.Errorf("Ошибка: %w", err), w)
 			} else {
-				dialog.ShowInformation("Готово", "Дело возвращено в мониторинг", w)
+				dialog.ShowInformation("Готово", "Дело возвращено", w)
 			}
 		}()
 	})
 	deleteBtn := widget.NewButton("🗑 Удалить", func() {
-		dialog.ShowConfirm("Удаление", "Удалить дело безвозвратно?", func(ok bool) {
+		dialog.ShowConfirm("Удаление", "Удалить дело?", func(ok bool) {
 			if !ok {
 				return
 			}
@@ -244,18 +121,179 @@ func showDetail(w fyne.Window, uid string) {
 	}
 	actionBox.Add(deleteBtn)
 
-	content := container.NewBorder(nil, actionBox, nil, nil, scroll)
-	d := dialog.NewCustom("Дело "+cs.Number, "✕ Закрыть", content, w)
-	d.Resize(fyne.NewSize(680, 600))
+	content := container.NewBorder(nil, actionBox, nil, nil, container.NewVScroll(acc))
+	d := dialog.NewCustom("Дело №"+cs.Number, "Закрыть", content, w)
+	d.Resize(fyne.NewSize(700, 600))
 	d.Show()
 }
 
-func addPair(g *fyne.Container, key, val string) {
-	if val == "" {
-		val = "—"
+func buildMainSection(cs client.WatchedCase) fyne.CanvasObject {
+	body := container.NewVBox()
+
+	grid := container.NewGridWithColumns(2,
+		widget.NewLabel("Статус:"), widget.NewLabel(statusText(cs.Status)),
+		widget.NewLabel("Вступление:"), widget.NewLabel(fmtDate(cs.LegalForceDate)),
+		widget.NewLabel("Последняя проверка:"), widget.NewLabel(fmtDT(cs.LastChecked)),
+		widget.NewLabel("Создано:"), widget.NewLabel(fmtDT(cs.CreatedAt)),
+		widget.NewLabel("Обновлено:"), widget.NewLabel(fmtDT(cs.UpdatedAt)),
+	)
+	body.Add(grid)
+
+	if cs.CaseUid != "" {
+		addSep(body)
+		body.Add(container.NewGridWithColumns(2,
+			widget.NewLabel("УИД:"), widget.NewLabel(cs.CaseUid),
+		))
 	}
-	g.Add(widget.NewLabelWithStyle(key+":", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
-	g.Add(widget.NewLabel(val))
+	if cs.URL != "" {
+		addSep(body)
+		body.Add(container.NewGridWithColumns(2,
+			widget.NewLabel("URL:"), widget.NewLabel(cs.URL),
+		))
+	}
+	if cs.Result != "" {
+		addSep(body)
+		body.Add(container.NewGridWithColumns(2,
+			widget.NewLabel("Результат:"), widget.NewLabel(cs.Result),
+		))
+	}
+	if cs.ErrorCount > 0 {
+		addSep(body)
+		body.Add(container.NewGridWithColumns(2,
+			widget.NewLabel("Ошибок:"), widget.NewLabel(fmt.Sprintf("%d", cs.ErrorCount)),
+			widget.NewLabel(""), widget.NewLabel(cs.LastError),
+		))
+	}
+	return body
+}
+
+func buildCourtSection(cs client.WatchedCase, cd *client.CaseCard) fyne.CanvasObject {
+	body := container.NewVBox()
+
+	courtName := cs.CourtName
+	if courtName == "" && cd != nil {
+		courtName = cd.Court
+	}
+	grid := container.NewGridWithColumns(2,
+		widget.NewLabel("Суд:"), widget.NewLabel(stringOr(courtName, "—")),
+		widget.NewLabel("Код:"), widget.NewLabel(stringOr(cs.CourtCode, cs.CourtID)),
+		widget.NewLabel("Тип суда:"), widget.NewLabel(stringOr(cs.CourtType, "—")),
+	)
+	body.Add(grid)
+
+	if cd != nil {
+		addSep(body)
+		rows := []fyne.CanvasObject{
+			widget.NewLabel("Тип дела:"), widget.NewLabel(stringOr(cd.Type, "—")),
+		}
+		if cd.Card != nil {
+			if len(cd.Card.Category) > 0 {
+				cat := ""
+				for i, c := range cd.Card.Category {
+					if i > 0 {
+						cat += " → "
+					}
+					cat += c
+				}
+				rows = append(rows, widget.NewLabel("Категория:"), widget.NewLabel(cat))
+			}
+			rows = append(rows,
+				widget.NewLabel("Судья:"), widget.NewLabel(stringOr(cd.Card.Judge, "—")),
+				widget.NewLabel("Поступление:"), widget.NewLabel(fmtDate(cd.Card.FilingDate)),
+				widget.NewLabel("Слушание:"), widget.NewLabel(fmtDate(cd.Card.HearingDate)),
+				widget.NewLabel("Тип процесса:"), widget.NewLabel(stringOr(cd.Card.ProceedingType, "—")),
+				widget.NewLabel("Результат:"), widget.NewLabel(stringOr(cd.Card.Result, "—")),
+			)
+		}
+		body.Add(container.NewGridWithColumns(2, rows...))
+	}
+
+	return body
+}
+
+func buildPartiesSection(cd *client.CaseCard) fyne.CanvasObject {
+	body := container.NewVBox()
+
+	if cd == nil || len(cd.Parties) == 0 {
+		body.Add(widget.NewLabel("Нет данных о сторонах"))
+		return body
+	}
+
+	body.Add(widget.NewLabel(fmt.Sprintf("Стороны (%d)", len(cd.Parties))))
+	addSep(body)
+	for _, p := range cd.Parties {
+		line := fmt.Sprintf("[%s] %s", p.Role, p.Name)
+		if p.INN != "" {
+			line += fmt.Sprintf("  (ИНН %s", p.INN)
+			if p.OGRN != "" {
+				line += fmt.Sprintf(", ОГРН %s", p.OGRN)
+			}
+			line += ")"
+		}
+		body.Add(widget.NewLabel(line))
+	}
+
+	return body
+}
+
+func buildMovementSection(cd *client.CaseCard) fyne.CanvasObject {
+	body := container.NewVBox()
+
+	if cd == nil || len(cd.Events) == 0 {
+		body.Add(widget.NewLabel("Нет данных о движении дела"))
+		return body
+	}
+
+	body.Add(widget.NewLabel(fmt.Sprintf("Событий: %d", len(cd.Events))))
+	addSep(body)
+
+	start := 0
+	if len(cd.Events) > 30 {
+		start = len(cd.Events) - 30
+	}
+	for i := len(cd.Events) - 1; i >= start; i-- {
+		e := cd.Events[i]
+		header := e.EventDate
+		if e.EventTime != "" {
+			header += " " + e.EventTime
+		}
+		body.Add(widget.NewLabel(fmt.Sprintf("▸ %s", header)))
+		body.Add(widget.NewLabel(fmt.Sprintf("  %s", e.EventName)))
+		if e.Result != "" {
+			body.Add(widget.NewLabel(fmt.Sprintf("  → %s", e.Result)))
+		}
+		if e.Judge != "" {
+			body.Add(widget.NewLabel(fmt.Sprintf("  Судья: %s", e.Judge)))
+		}
+		addSep(body)
+	}
+
+	return body
+}
+
+func buildMonitorSection(cs client.WatchedCase, ev []client.CaseEvent) fyne.CanvasObject {
+	body := container.NewVBox()
+
+	if len(ev) == 0 {
+		body.Add(widget.NewLabel("История мониторинга пуста"))
+		return body
+	}
+
+	body.Add(widget.NewLabel(fmt.Sprintf("Записей: %d", len(ev))))
+	addSep(body)
+	for _, e := range ev {
+		body.Add(widget.NewLabel(fmt.Sprintf("%s %s — %s", eventIcon(e.Type), fmtDT(e.CreatedAt), e.Message)))
+	}
+
+	return body
+}
+
+func addLine(body *fyne.Container, text string) {
+	body.Add(widget.NewLabel(text))
+}
+
+func addSep(body *fyne.Container) {
+	body.Add(widget.NewSeparator())
 }
 
 func eventIcon(typ string) string {

@@ -15,30 +15,139 @@ import (
 	"github.com/AlexanderKuzikov/CourtDesk/packages/courtdesktop/internal/client"
 )
 
+const (
+	colNumber = iota
+	colStatus
+	colCourt
+	colResult
+	colLegalForce
+	totalCols
+)
+
 func NewDashboardScreen(w fyne.Window) fyne.CanvasObject {
 	var (
 		mu           sync.Mutex
 		cases        []client.WatchedCase
+		filtered     []client.WatchedCase
 		notif        []client.Notification
 		dashStatus   *client.DashboardStatus
 		filterStatus = "all"
-		searchText   = ""
-		curPage      = 0
+		searchText   string
+		sortCol      = colNumber
+		sortAsc      = true
+		curPage      int
 		pageSize     = 20
 		monBusy      bool
+		monStartTime time.Time
+		monDone      bool
+		monProcessed int
+		monErrors    int
 	)
 
 	var (
-		filtered      func() []client.WatchedCase
-		pageItems     func() []client.WatchedCase
-		updatePagin   func()
-		rebuildChips  func()
-		loadAll       func()
-		refreshNotifs func()
-		renderCases   func()
+		pageLabel    *widget.Label
+		prevBtn      *widget.Button
+		nextBtn      *widget.Button
+		table        *widget.Table
+		loadAll      func()
+		loadNotifs   func()
+		refreshTable func()
+		makeFilterBtns func()
 	)
 
-	// ── Widgets ──
+	headerNames := [totalCols]string{"Номер", "Статус", "Суд", "Результат", "Вступление"}
+	var headerBtns [totalCols]*widget.Button
+
+	sortFiltered := func() {
+		sort.SliceStable(filtered, func(i, j int) bool {
+			var less bool
+			switch sortCol {
+			case colNumber:
+				less = filtered[i].Number < filtered[j].Number
+			case colStatus:
+				less = filtered[i].Status < filtered[j].Status
+			case colCourt:
+				ci := filtered[i].CourtName
+				if ci == "" {
+					ci = filtered[i].CourtID
+				}
+				cj := filtered[j].CourtName
+				if cj == "" {
+					cj = filtered[j].CourtID
+				}
+				less = ci < cj
+			case colResult:
+				less = filtered[i].Result < filtered[j].Result
+			case colLegalForce:
+				less = filtered[i].LegalForceDate < filtered[j].LegalForceDate
+			}
+			if sortAsc {
+				return less
+			}
+			return !less
+		})
+	}
+
+	applyFilter := func() {
+		mu.Lock()
+		defer mu.Unlock()
+		filtered = make([]client.WatchedCase, 0, len(cases))
+		for _, c := range cases {
+			if filterStatus != "all" && c.Status != filterStatus {
+				continue
+			}
+			if searchText != "" {
+				q := strings.ToLower(searchText)
+				if !strings.Contains(strings.ToLower(c.Number), q) &&
+					!strings.Contains(strings.ToLower(c.CourtName), q) &&
+					!strings.Contains(strings.ToLower(c.CourtID), q) {
+					continue
+				}
+			}
+			filtered = append(filtered, c)
+		}
+		sortFiltered()
+	}
+
+	getPage := func() []client.WatchedCase {
+		n := len(filtered)
+		if n == 0 {
+			return nil
+		}
+		if curPage*pageSize >= n {
+			curPage = 0
+		}
+		start := curPage * pageSize
+		end := start + pageSize
+		if end > n {
+			end = n
+		}
+		return filtered[start:end]
+	}
+
+	totalPages := func() int {
+		n := len(filtered)
+		if n == 0 {
+			return 1
+		}
+		return (n + pageSize - 1) / pageSize
+	}
+
+	updateHeaders := func() {
+		arrow := " ▲"
+		if !sortAsc {
+			arrow = " ▼"
+		}
+		for i := 0; i < totalCols; i++ {
+			name := headerNames[i]
+			if i == sortCol {
+				headerBtns[i].SetText(name + arrow)
+			} else {
+				headerBtns[i].SetText(name)
+			}
+		}
+	}
+
 	cntMonitoring := widget.NewLabel("0")
 	cntMonitoring.TextStyle = fyne.TextStyle{Bold: true}
 	cntWaiting := widget.NewLabel("0")
@@ -53,24 +162,78 @@ func NewDashboardScreen(w fyne.Window) fyne.CanvasObject {
 	searchEntry := widget.NewEntry()
 	searchEntry.SetPlaceHolder("Поиск по номеру / суду...")
 
-	searchBtn := widget.NewButton("🔍", nil)
 	monBtn := widget.NewButton("▶ Мониторинг", nil)
 	refreshBtn := widget.NewButton("🔄", nil)
 
-	pageLabel := widget.NewLabel("")
-	prevBtn := widget.NewButton("← Назад", nil)
+	pageLabel = widget.NewLabel("")
+	prevBtn = widget.NewButton("← Назад", func() {
+		curPage--
+		refreshTable()
+	})
 	prevBtn.Importance = widget.LowImportance
-	nextBtn := widget.NewButton("Вперёд →", nil)
+	nextBtn = widget.NewButton("Вперёд →", func() {
+		curPage++
+		refreshTable()
+	})
 	nextBtn.Importance = widget.LowImportance
 
-	// Progress bar
 	progressLabel := widget.NewLabel("")
 	progressBar := widget.NewProgressBar()
+	progressDetail := widget.NewList(
+		func() int {
+			mu.Lock()
+			defer mu.Unlock()
+			return len(cases)
+		},
+		func() fyne.CanvasObject {
+			return container.NewHBox(widget.NewLabel(""), widget.NewLabel(""))
+		},
+		func(id widget.ListItemID, obj fyne.CanvasObject) {
+			mu.Lock()
+			if id >= len(cases) {
+				mu.Unlock()
+				return
+			}
+			c := cases[id]
+			mu.Unlock()
+			box := obj.(*fyne.Container)
+			icon := "○"
+			if monBusy && !monStartTime.IsZero() {
+				t, _ := time.Parse(time.RFC3339, c.UpdatedAt)
+				if !t.IsZero() && t.After(monStartTime) {
+					if c.Status == "error" {
+						icon = "✗"
+					} else {
+						icon = "✓"
+					}
+				}
+			} else if monDone {
+				t, _ := time.Parse(time.RFC3339, c.UpdatedAt)
+				if !t.IsZero() && t.After(monStartTime) {
+					if c.Status == "error" {
+						icon = "✗"
+					} else {
+						icon = "✓"
+					}
+				}
+			}
+			cn := c.CourtName
+			if cn == "" {
+				cn = c.CourtID
+			}
+			box.Objects[0].(*widget.Label).SetText(icon)
+			box.Objects[1].(*widget.Label).SetText(fmt.Sprintf("%s — %s", c.Number, cn))
+		},
+	)
+	progressDetail.SetItemHeight(0, 24)
 	progressBox := container.NewVBox(progressLabel, progressBar)
 	progressBox.Hidden = true
 
-	// Notification area
+	monResultLabel := widget.NewLabel("")
+	monResultLabel.Hidden = true
+
 	notifLabel := widget.NewLabelWithStyle("🔔 Уведомления", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	markReadBtn := widget.NewButton("✓ Прочитать все", nil)
 	notifList := widget.NewList(
 		func() int {
 			mu.Lock()
@@ -78,117 +241,102 @@ func NewDashboardScreen(w fyne.Window) fyne.CanvasObject {
 			return len(notif)
 		},
 		func() fyne.CanvasObject {
-			return container.NewHBox(
-				widget.NewLabel(""),
-				widget.NewLabel(""),
-			)
+			return container.NewHBox(widget.NewLabel(""), widget.NewLabel(""))
 		},
 		func(id widget.ListItemID, obj fyne.CanvasObject) {
 			mu.Lock()
-			n := notif
-			mu.Unlock()
-			if id >= len(n) {
+			if id >= len(notif) {
+				mu.Unlock()
 				return
 			}
+			n := notif[id]
+			mu.Unlock()
 			box := obj.(*fyne.Container)
-			indicator := "⬤"
-			if n[id].Read {
-				indicator = "○"
+			d := "○"
+			if !n.Read {
+				d = "●"
 			}
-			box.Objects[0].(*widget.Label).SetText(indicator)
-			box.Objects[1].(*widget.Label).SetText(n[id].Message)
+			box.Objects[0].(*widget.Label).SetText(d)
+			box.Objects[1].(*widget.Label).SetText(n.Message)
 		},
 	)
-	notifContainer := container.NewBorder(nil, nil, nil, nil, notifList)
-	notifContainer.Resize(fyne.NewSize(0, 180))
 
-	markReadBtn := widget.NewButton("✓ Прочитать все", nil)
-
-	// ── Filtering ──
-	filtered = func() []client.WatchedCase {
-		mu.Lock()
-		defer mu.Unlock()
-		out := make([]client.WatchedCase, 0, len(cases))
-		for _, c := range cases {
-			if filterStatus != "all" && c.Status != filterStatus {
-				continue
+	headerRow := container.NewHBox()
+	for i := 0; i < totalCols; i++ {
+		col := i
+		headerBtns[i] = widget.NewButton(headerNames[i], nil)
+		headerBtns[i].Importance = widget.LowImportance
+		headerBtns[i].OnTapped = func() {
+			if sortCol == col {
+				sortAsc = !sortAsc
+			} else {
+				sortCol = col
+				sortAsc = true
 			}
-			if searchText != "" {
-				q := strings.ToLower(searchText)
-				if !strings.Contains(strings.ToLower(c.Number), q) &&
-					!strings.Contains(strings.ToLower(c.CourtName), q) &&
-					!strings.Contains(strings.ToLower(c.CourtID), q) {
-					continue
+			updateHeaders()
+			mu.Lock()
+			sortFiltered()
+			mu.Unlock()
+			refreshTable()
+		}
+		headerRow.Add(headerBtns[i])
+	}
+
+	table = widget.NewTable(
+		func() (int, int) {
+			return len(getPage()), totalCols
+		},
+		func() fyne.CanvasObject {
+			lbl := widget.NewLabel("")
+			lbl.Truncation = fyne.TextTruncateEllipsis
+			return lbl
+		},
+		func(id widget.TableCellID, obj fyne.CanvasObject) {
+			items := getPage()
+			if id.Row >= len(items) {
+				obj.(*widget.Label).SetText("")
+				return
+			}
+			c := items[id.Row]
+			label := obj.(*widget.Label)
+			label.Truncation = fyne.TextTruncateEllipsis
+			switch id.Col {
+			case colNumber:
+				label.SetText(c.Number)
+				label.TextStyle = fyne.TextStyle{Bold: true}
+			case colStatus:
+				label.SetText(statusText(c.Status))
+				label.TextStyle = fyne.TextStyle{}
+			case colCourt:
+				cn := c.CourtName
+				if cn == "" {
+					cn = c.CourtID
 				}
+				label.SetText(cn)
+				label.TextStyle = fyne.TextStyle{}
+			case colResult:
+				label.SetText(truncateStr(c.Result, 32))
+				label.TextStyle = fyne.TextStyle{}
+			case colLegalForce:
+				label.SetText(fmtDate(c.LegalForceDate))
+				label.TextStyle = fyne.TextStyle{}
 			}
-			out = append(out, c)
+		},
+	)
+	table.OnSelected = func(id widget.TableCellID) {
+		items := getPage()
+		if id.Row < len(items) {
+			showDetail(w, items[id.Row].UID)
 		}
-		sort.Slice(out, func(i, j int) bool {
-			return out[i].UpdatedAt > out[j].UpdatedAt
-		})
-		return out
+		table.UnselectAll()
 	}
+	table.SetColumnWidth(colNumber, 160)
+	table.SetColumnWidth(colStatus, 110)
+	table.SetColumnWidth(colCourt, 280)
+	table.SetColumnWidth(colResult, 250)
+	table.SetColumnWidth(colLegalForce, 120)
 
-	pageItems = func() []client.WatchedCase {
-		fc := filtered()
-		start := curPage * pageSize
-		if start >= len(fc) {
-			curPage = 0
-			start = 0
-		}
-		end := start + pageSize
-		if end > len(fc) {
-			end = len(fc)
-		}
-		return fc[start:end]
-	}
-
-	totalPages := func() int {
-		fc := filtered()
-		if len(fc) == 0 {
-			return 1
-		}
-		return (len(fc) + pageSize - 1) / pageSize
-	}
-
-	// ── Case table (VBox + Scroll instead of List for reliable refresh) ──
-	caseContainer := container.NewVBox()
-	caseScroll := container.NewVScroll(caseContainer)
-
-	renderCases = func() {
-		caseContainer.RemoveAll()
-		items := pageItems()
-		for _, c := range items {
-			row := makeCaseRow(c, w)
-			caseContainer.Add(row)
-		}
-		caseContainer.Refresh()
-		caseScroll.Refresh()
-	}
-
-	type clickableRow struct {
-		widget.Label
-		uid string
-	}
-
-	// ── Helpers ──
-	updateCounters := func() {
-		mu.Lock()
-		d := dashStatus
-		total := len(cases)
-		mu.Unlock()
-		m, w, dec, enf := 0, 0, 0, 0
-		if d != nil {
-			m, w, dec, enf = d.Monitoring, d.Waiting, d.Decision, d.EnforcedToday
-		}
-		cntMonitoring.SetText(fmt.Sprintf("%d", m))
-		cntWaiting.SetText(fmt.Sprintf("%d", w))
-		cntDecision.SetText(fmt.Sprintf("%d", dec))
-		cntEnforced.SetText(fmt.Sprintf("%d", enf))
-		cntTotal.SetText(fmt.Sprintf("%d", total))
-	}
-
-	updatePagin = func() {
+	refreshTable = func() {
 		tp := totalPages()
 		if curPage >= tp {
 			curPage = tp - 1
@@ -196,134 +344,94 @@ func NewDashboardScreen(w fyne.Window) fyne.CanvasObject {
 		if curPage < 0 {
 			curPage = 0
 		}
-		fc := filtered()
-		start := curPage * pageSize
-		end := start + pageSize
-		if end > len(fc) {
-			end = len(fc)
+		s := curPage * pageSize
+		e := s + pageSize
+		if e > len(filtered) {
+			e = len(filtered)
 		}
-		if len(fc) == 0 {
+		if len(filtered) == 0 {
 			pageLabel.SetText("Нет дел")
 		} else {
-			pageLabel.SetText(fmt.Sprintf("%d–%d из %d", start+1, end, len(fc)))
+			pageLabel.SetText(fmt.Sprintf("%d–%d из %d", s+1, e, len(filtered)))
 		}
-		if curPage <= 0 {
-			prevBtn.Disable()
-		} else {
+		prevBtn.Disable()
+		nextBtn.Disable()
+		if curPage > 0 {
 			prevBtn.Enable()
 		}
-		if curPage+1 >= tp {
-			nextBtn.Disable()
-		} else {
+		if curPage+1 < tp {
 			nextBtn.Enable()
 		}
+		table.Refresh()
 	}
 
-	// ── Filter chips ──
-	filterDefs := []struct {
-		status string
-		label  string
-	}{
-		{"all", "Все"},
-		{"monitoring", "Мониторинг"},
-		{"waiting", "Ожидание"},
-		{"decision", "Решение"},
-		{"enforced", "Вступило"},
-		{"error", "Ошибка"},
-		{"archived", "Архив"},
-	}
-
-	filterBar := container.NewHBox()
-	rebuildChips = func() {
-		filterBar.RemoveAll()
-		for _, fd := range filterDefs {
-			s := fd.status
-			btn := widget.NewButton(fd.label, func() {
-				filterStatus = s
-				curPage = 0
-				rebuildChips()
-				updatePagin()
-				renderCases()
-			})
-			if s == filterStatus {
-				btn.Importance = widget.HighImportance
-			} else {
-				btn.Importance = widget.LowImportance
-			}
-			filterBar.Add(btn)
-		}
-	}
-
-	// ── Callbacks ──
 	searchEntry.OnSubmitted = func(s string) {
 		searchText = s
 		curPage = 0
-		updatePagin()
-		renderCases()
+		applyFilter()
+		refreshTable()
 	}
-	searchBtn.OnTapped = func() {
+	searchBtn := widget.NewButton("🔍", func() {
 		searchText = searchEntry.Text
 		curPage = 0
-		updatePagin()
-		renderCases()
-	}
+		applyFilter()
+		refreshTable()
+	})
 
 	monBtn.OnTapped = func() {
 		if monBusy {
 			return
 		}
 		monBusy = true
+		monDone = false
+		monStartTime = time.Now()
+		monProcessed = 0
+		monErrors = 0
 		monBtn.Disable()
-		monBtn.SetText("⏳ Выполняется...")
+		monBtn.SetText("⏳")
 		progressBox.Hidden = false
 		progressBar.Value = 0
 		progressBar.Refresh()
-		progressLabel.SetText("Запуск мониторинга...")
-
+		progressLabel.SetText("Запуск...")
+		monResultLabel.Hidden = true
+		progressDetail.Refresh()
 		go func() {
 			_, err := client.Post[any]("/parse/run", map[string]string{"mode": "full"})
 			if err == nil {
-				for i := 0; i < 60; i++ {
+				for i := 0; i < 120; i++ {
 					time.Sleep(2 * time.Second)
 					p, err := client.Get[client.ScanProgress]("/parse/progress")
 					if err != nil {
 						continue
 					}
 					if p.Total > 0 {
-						progressLabel.SetText(fmt.Sprintf("Мониторинг: %d/%d (ошибок: %d)", p.Processed, p.Total, p.Errors))
+						monProcessed = p.Processed
+						monErrors = p.Errors
+						progressLabel.SetText(fmt.Sprintf("%d / %d  (ошибок: %d)", p.Processed, p.Total, p.Errors))
 						progressBar.Value = float64(p.Processed) / float64(p.Total)
 						progressBar.Refresh()
+						progressDetail.Refresh()
 					}
 					if !p.Running || p.Processed >= p.Total {
 						break
 					}
 				}
 			}
-			progressBox.Hidden = true
-			progressLabel.SetText("")
 			monBusy = false
+			monDone = true
+			success := monProcessed - monErrors
+			monResultLabel.SetText(fmt.Sprintf("Итого: %d обработано, %d успешно, %d ошибок", monProcessed, success, monErrors))
+			monResultLabel.Hidden = false
+			progressLabel.SetText("")
+			progressBar.Value = 1.0
+			progressBar.Refresh()
 			monBtn.Enable()
 			monBtn.SetText("▶ Мониторинг")
+			progressDetail.Refresh()
 			loadAll()
 		}()
 	}
-
 	refreshBtn.OnTapped = func() { loadAll() }
-	prevBtn.OnTapped = func() {
-		if curPage > 0 {
-			curPage--
-		}
-		updatePagin()
-		renderCases()
-	}
-	nextBtn.OnTapped = func() {
-		cp := curPage + 1
-		if cp < totalPages() {
-			curPage = cp
-		}
-		updatePagin()
-		renderCases()
-	}
 
 	markReadBtn.OnTapped = func() {
 		go func() {
@@ -336,19 +444,80 @@ func NewDashboardScreen(w fyne.Window) fyne.CanvasObject {
 					_, _ = client.Patch[any]("/notifications/"+n.UID+"/read", nil)
 				}
 			}
-			refreshNotifs()
+			loadNotifs()
 		}()
 	}
 
-	// ── Data load ──
+	filterDefs := []struct{ s, l string }{
+		{"all", "Все"}, {"monitoring", "Мониторинг"}, {"waiting", "Ожидание"},
+		{"decision", "Решение"}, {"enforced", "Вступило"}, {"error", "Ошибка"}, {"archived", "Архив"},
+	}
+	filterBar := container.NewHBox()
+	makeFilterBtns = func() {
+		filterBar.RemoveAll()
+		for _, f := range filterDefs {
+			s, l := f.s, f.l
+			btn := widget.NewButton(l, func() {
+				filterStatus = s
+				curPage = 0
+				makeFilterBtns()
+				applyFilter()
+				refreshTable()
+			})
+			if s == filterStatus {
+				btn.Importance = widget.HighImportance
+			} else {
+				btn.Importance = widget.LowImportance
+			}
+			filterBar.Add(btn)
+		}
+	}
+
+	updateCounters := func() {
+		mu.Lock()
+		d := dashStatus
+		t := len(cases)
+		mu.Unlock()
+		m, ww, dec, enf := 0, 0, 0, 0
+		if d != nil {
+			m, ww, dec, enf = d.Monitoring, d.Waiting, d.Decision, d.EnforcedToday
+		}
+		cntMonitoring.SetText(fmt.Sprintf("%d", m))
+		cntWaiting.SetText(fmt.Sprintf("%d", ww))
+		cntDecision.SetText(fmt.Sprintf("%d", dec))
+		cntEnforced.SetText(fmt.Sprintf("%d", enf))
+		cntTotal.SetText(fmt.Sprintf("%d", t))
+	}
+
+	loadNotifs = func() {
+		n, err := client.Get[[]client.Notification]("/notifications")
+		if err != nil {
+			return
+		}
+		mu.Lock()
+		notif = n
+		unread := 0
+		for _, nn := range n {
+			if !nn.Read {
+				unread++
+			}
+		}
+		mu.Unlock()
+		notifList.Refresh()
+		if unread > 0 {
+			notifLabel.SetText(fmt.Sprintf("🔔 %d непрочитанных", unread))
+		} else {
+			notifLabel.SetText("🔔 Все прочитано")
+		}
+	}
+
 	loadAll = func() {
 		go func() {
 			var wg sync.WaitGroup
 			wg.Add(3)
 			go func() {
 				defer wg.Done()
-				c, err := client.Get[[]client.WatchedCase]("/cases")
-				if err == nil {
+				if c, err := client.Get[[]client.WatchedCase]("/cases"); err == nil {
 					mu.Lock()
 					cases = c
 					mu.Unlock()
@@ -356,8 +525,7 @@ func NewDashboardScreen(w fyne.Window) fyne.CanvasObject {
 			}()
 			go func() {
 				defer wg.Done()
-				s, err := client.Get[client.DashboardStatus]("/status")
-				if err == nil {
+				if s, err := client.Get[client.DashboardStatus]("/status"); err == nil {
 					mu.Lock()
 					dashStatus = &s
 					mu.Unlock()
@@ -365,37 +533,17 @@ func NewDashboardScreen(w fyne.Window) fyne.CanvasObject {
 			}()
 			go func() {
 				defer wg.Done()
-				refreshNotifs()
+				loadNotifs()
 			}()
 			wg.Wait()
+			applyFilter()
 			updateCounters()
-			updatePagin()
-			renderCases()
+			refreshTable()
 		}()
 	}
 
-	refreshNotifs = func() {
-		n, err := client.Get[[]client.Notification]("/notifications")
-		if err == nil {
-			mu.Lock()
-			notif = n
-			mu.Unlock()
-			notifList.Refresh()
-			unread := 0
-			for _, nn := range n {
-				if !nn.Read {
-					unread++
-				}
-			}
-			if unread > 0 {
-				notifLabel.SetText(fmt.Sprintf("🔔 %d непрочитанных", unread))
-			} else {
-				notifLabel.SetText("🔔 Все прочитано")
-			}
-		}
-	}
+	triggerRefresh = loadAll
 
-	// ── Auto-refresh ──
 	go func() {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
@@ -404,30 +552,18 @@ func NewDashboardScreen(w fyne.Window) fyne.CanvasObject {
 		}
 	}()
 
-	// ── Layout ──
-	headerRow := container.NewHBox(
-		widget.NewLabelWithStyle("Номер", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		layout.NewSpacer(),
-		widget.NewLabelWithStyle("Статус", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		layout.NewSpacer(),
-		widget.NewLabelWithStyle("Суд", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		layout.NewSpacer(),
-		widget.NewLabelWithStyle("Результат", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		layout.NewSpacer(),
-		widget.NewLabelWithStyle("Вступление", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-	)
-
 	topPanel := container.NewVBox(
 		container.NewGridWithColumns(5,
-			makeCounterCard("Мониторинг", cntMonitoring),
-			makeCounterCard("Ожидают", cntWaiting),
-			makeCounterCard("Решено", cntDecision),
-			makeCounterCard("Вступило сегодня", cntEnforced),
-			makeCounterCard("Всего", cntTotal),
+			container.NewCenter(container.NewVBox(cntMonitoring, widget.NewLabel("Мониторинг"))),
+			container.NewCenter(container.NewVBox(cntWaiting, widget.NewLabel("Ожидают"))),
+			container.NewCenter(container.NewVBox(cntDecision, widget.NewLabel("Решено"))),
+			container.NewCenter(container.NewVBox(cntEnforced, widget.NewLabel("Вступило сегодня"))),
+			container.NewCenter(container.NewVBox(cntTotal, widget.NewLabel("Всего"))),
 		),
 		filterBar,
 		container.NewHBox(searchEntry, searchBtn, monBtn, refreshBtn),
 		progressBox,
+		monResultLabel,
 	)
 
 	bottomPanel := container.NewVBox(
@@ -437,40 +573,37 @@ func NewDashboardScreen(w fyne.Window) fyne.CanvasObject {
 		container.NewHBox(notifLabel, layout.NewSpacer(), markReadBtn),
 		notifList,
 	)
+	notifList.SetItemHeight(0, 28)
 
-	casePanel := container.NewBorder(headerRow, nil, nil, nil, caseScroll)
-	content := container.NewBorder(topPanel, bottomPanel, nil, nil, casePanel)
+	monPanel := container.NewVBox(
+		widget.NewLabelWithStyle("Прогресс по делам:", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		progressDetail,
+	)
+	monPanelScroll := container.NewVScroll(monPanel)
+	monPanelScroll.SetMinSize(fyne.NewSize(0, 200))
 
-	rebuildChips()
+	rightSide := container.NewVSplit(
+		container.NewBorder(headerRow, nil, nil, nil, table),
+		monPanelScroll,
+	)
+	rightSide.SetOffset(0.7)
+
+	content := container.NewBorder(topPanel, bottomPanel, nil, nil, rightSide)
+
+	makeFilterBtns()
+	updateHeaders()
 	loadAll()
 
 	return content
 }
 
-func makeCaseRow(c client.WatchedCase, w fyne.Window) *fyne.Container {
-	cn := c.CourtName
-	if cn == "" {
-		cn = c.CourtID
-	}
-	uid := c.UID
-
-	text := fmt.Sprintf("%s  |  %s  |  %s  |  %s  |  %s",
-		c.Number, statusText(c.Status), cn, truncate(c.Result, 35), fmtDate(c.LegalForceDate))
-
-	btn := widget.NewButton(text, func() {
-		showDetail(w, uid)
-	})
-	btn.Importance = widget.LowImportance
-	return container.NewMax(btn)
-}
-
-func truncate(s string, n int) string {
+func truncateStr(s string, n int) string {
 	if s == "" {
 		return "—"
 	}
-	runes := []rune(s)
-	if len(runes) <= n {
+	r := []rune(s)
+	if len(r) <= n {
 		return s
 	}
-	return string(runes[:n]) + "…"
+	return string(r[:n]) + "…"
 }

@@ -7,8 +7,12 @@ import (
 )
 
 type Profile struct {
-	Role string `json:"role"`
+	APIURL    string `json:"apiUrl"`
+	ThemeName string `json:"themeName"`
 }
+
+const defaultAPIURL = "http://127.0.0.1:8767/api"
+const defaultTheme = "Slate"
 
 func ProfilePath() string {
 	home, _ := os.UserHomeDir()
@@ -16,13 +20,19 @@ func ProfilePath() string {
 }
 
 func LoadProfile() *Profile {
-	p := &Profile{Role: "user"}
+	p := &Profile{APIURL: defaultAPIURL, ThemeName: defaultTheme}
 	data, err := os.ReadFile(ProfilePath())
 	if err != nil {
 		return p
 	}
 	if err := json.Unmarshal(data, p); err != nil {
-		return &Profile{Role: "user"}
+		return &Profile{APIURL: defaultAPIURL, ThemeName: defaultTheme}
+	}
+	if p.APIURL == "" {
+		p.APIURL = defaultAPIURL
+	}
+	if p.ThemeName == "" {
+		p.ThemeName = defaultTheme
 	}
 	return p
 }
