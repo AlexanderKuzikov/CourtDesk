@@ -163,6 +163,21 @@ Go-бинарник — **альтернативный** UI, в первую о�
 
 | ID | Приоритет | Описание | Заметка |
 |----|-----------|----------|---------|
+| CR11-001 | BLOCKER | CORS wildcard + нет аутентификации API | любой сайт может управлять делами |
+| CR11-002 | BLOCKER | `rejectUnauthorized: false` на всех HTTPS | MITM на трафике к sudrf.ru |
+| CR11-003 | BLOCKER | Race condition в store (read-modify-write) | параллельные запросы теряют данные |
+| CR11-004 | BLOCKER | Бинарники в git (~20 MB) | courtdesktop.exe, tui-go .exe |
+| CR11-005 | BLOCKER | `_isRunning` guard неатомарен + cron параллелизм | двойные прогоны |
+| CR11-006 | HIGH | Нет тестов для parse/search/captcha (~40% кода) | snapshot-тесты на фикстурах |
+| CR11-007 | HIGH | Дублирование fetchHtml (search vs scheduler) | вынести в core/http.ts |
+| CR11-008 | MED | Версия health API (0.4.0) ≠ package.json (0.5.1) ≠ README (0.7.0) | |
+| CR11-009 | MED | `go 1.26.5` в tui-go/go.mod — несуществующая версия | |
+| CR11-010 | MED | Мёртвые зависимости: react, ink, @types/react | |
+| CR11-011 | MED | POST /api/cases?parse=true — синхронный парсинг до 2 мин | |
+| CR11-012 | LOW | console.log результата капчи в rucaptcha.ts | |
+| CR11-013 | LOW | Мусорные файлы в корне (txt, PROMPT_WEBUI.md) | |
+| CR11-014 | LOW | showError в Go desktop не вызывается | |
+| CR11-015 | MED | Два TUI (TS + Go) дублируют функциональность | |
 | WEBUI-O1..O15 | HIGH/MED | 15 гэпов из PROMPT_WEBUI.md — все не закрыты | см. «Web UI open-проблемы» выше |
 | TUI-O1 | HIGH | Run tab без live progress polling | log есть, progress bar нет |
 | GOUI-O1 | HIGH | TUI (Go) требует кардинальной доработки UI | курсор, цвета, скролл, прокрутка |
@@ -220,6 +235,7 @@ Go-бинарник — **альтернативный** UI, в первую о�
 | 2026-07-28 | **Web UI — настраиваемый API URL**: добавлены `getApiBase()`, `setApiBase()`, `apiUrl()` в `app.js`. Все fetch-вызовы в `index.html`, `search.html`, `terminal.js` обёрнуты в `apiUrl()`. Добавлено поле "Сервер API" в настройки. Сохранение в `localStorage['courtdesk-api-url']`. |
 | 2026-07-28 | **Web UI — прогресс мониторинга**: добавлена панель прогресса в dashboard. Список дел со статусами (✓/✗/○) определяется по `updatedAt` vs время начала мониторинга. Обновление каждые 5 секунд. |
 | 2026-07-28 | **Web UI — открытие дела по строке**: dashboard — клик по всей строке открывает карточку. terminal — двойной клик по строке открывает карточку. |
+| 2026-07-29 | **CR11 — полный аудит** (OpenCode Go, qwen3.8): 22 замечания (5 блокеров, 10 важных, 7 советов). Зафиксированы в docs/CODE_REVIEW.md. Блокеры: CORS+auth (CR11-001), TLS rejectUnauthorized (CR11-002), race condition store (CR11-003), бинарники в git (CR11-004), неатомарный guard (CR11-005). Решения ожидаются. |
 
 ---
 
