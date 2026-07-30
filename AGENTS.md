@@ -48,6 +48,17 @@ CourtDesk/
 - `packages/courtdesktop/courtdesktop.exe` — бинарник (CR11-004)
 - `packages/tui-go/courtdesk-tui.exe` — бинарник (CR11-004)
 
+## Frontend conventions (viewer/public/)
+
+- **Без бандлера.** Vanilla JS, никаких npm-зависимостей во frontend.
+- **Без TypeScript в браузере.** tsx — для Node.js, viewer — чистый JS.
+- **XSS-safe:** любой user-контент — только через `esc()` из `app.js`.
+- **Event delegation** через `document.querySelector('.table').addEventListener(...)`.
+- **data-* атрибуты** для хранения идентификаторов.
+- **CSS variables** для темы (`data-theme`, `data-skin`).
+- **Никаких сторонних UI-библиотек.** Только system-ui.
+- **Изменения только в `packages/viewer/public/`.** Backend (API, store, scheduler) НЕ трогать.
+
 ## Documentation rules
 
 - После работы — обнови `docs/CONTEXT.md`

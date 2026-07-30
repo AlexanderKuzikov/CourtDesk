@@ -105,6 +105,21 @@
 | INFRA-O1 | Monorepo без workspaces |
 | SEC-O1 | Zero-auth API (⏸ отложено 2026-07-27) |
 
+### Советы (из code review)
+
+| # | Файл | Описание |
+|---|------|----------|
+| CR12-S01 | `tui-go/main.go:787` | `det`-замыкание определено и отброшено — мёртвый код |
+| CR12-S02 | `tui-go/main.go:110`, `tui/app.ts:27` | Оба TUI хардкодят `http://127.0.0.1:8767/api` — нет флага/env/конфига |
+| CR12-S03 | `tui/api.ts` vs `tui/app.ts` | Два параллельных API-клиента в TS TUI; `api.ts` не используется — мёртвый модуль |
+| CR12-S04 | `terminal.js:654` | `mouseover` → `selectRow()` → полная перерисовка statusbar на каждое движение мыши |
+| CR12-S05 | `core/courts.ts:116`, `core/logger.ts:8` | `readFileSync`/`mkdirSync` на уровне модуля — крах при импорте без graceful degradation |
+| CR12-S06 | `store/json-store.ts:30` | `Date.now()` в tmp-имени: две записи в одну мс = коллизия пути |
+| CR12-S07 | `vitest.config.ts` | Нет coverage-провайдера и порогов — реальное покрытие неизвестно |
+| CR12-S08 | `courtdesktop/go.mod` | `webview_go` на pseudo-version (коммит, не тег) — нет semver-гарантий |
+| CR12-S09 | `.npmrc` | `legacy-peer-deps=true` маскирует конфликты peer-зависимостей |
+| CR12-S10 | `intake/classify.ts:8` | `[А-ЯA-Z]?` без `Ё`; латинские имена не классифицируются; нет лимита длины входа |
+
 ---
 
 ## API-покрытие
