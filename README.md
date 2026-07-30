@@ -1,6 +1,6 @@
 <p align="center">
   <a href="https://www.typescriptlang.org/"><img alt="TypeScript 7" src="https://img.shields.io/badge/TypeScript-7-3178C6?logo=typescript&logoColor=white"></a>
-  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/License-Apache_2.0-blue.svg?logo=apache&logoColor=white"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/License-Proprietary-red.svg"></a>
   <a href="https://nodejs.org/"><img alt="Node 22" src="https://img.shields.io/badge/Node-22-339933?logo=node.js&logoColor=white"></a>
   <a href="https://expressjs.com/"><img alt="Express 5" src="https://img.shields.io/badge/Express-5-000000?logo=express&logoColor=white"></a>
   <a href="https://pptr.dev/"><img alt="Puppeteer 25" src="https://img.shields.io/badge/Puppeteer-25-40B5A4?logo=puppeteer&logoColor=white"></a>
@@ -70,4 +70,4 @@ go build -ldflags="-H windowsgui" -o courtdesktop.exe .
 
 ## Лицензия
 
-[Apache-2.0](LICENSE) © Alexander Kuzikov
+Proprietary. Все права принадлежат заказчику.
