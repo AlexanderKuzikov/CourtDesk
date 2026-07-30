@@ -170,14 +170,35 @@ Go-бинарник — **альтернативный** UI, в первую о�
 | CR11-005 | BLOCKER | `_isRunning` guard неатомарен + cron параллелизм | двойные прогоны |
 | CR11-006 | HIGH | Нет тестов для parse/search/captcha (~40% кода) | snapshot-тесты на фикстурах |
 | CR11-007 | HIGH | Дублирование fetchHtml (search vs scheduler) | вынести в core/http.ts |
-| CR11-008 | MED | Версия health API (0.4.0) ≠ package.json (0.5.1) ≠ README (0.7.0) | |
-| CR11-009 | MED | `go 1.26.5` в tui-go/go.mod — несуществующая версия | |
+| CR11-008 | MED | Версия health API (0.4.0) ≠ package.json (0.5.1) ≠ README (0.7.0) | подтверждено CR12-021 |
+| ~~CR11-009~~ | ~~MED~~ | ~~`go 1.26.5` — несуществующая версия~~ | ❌ INVALID (CR12): go1.26.5 установлен, версия реальна |
 | CR11-010 | MED | Мёртвые зависимости: react, ink, @types/react | |
 | CR11-011 | MED | POST /api/cases?parse=true — синхронный парсинг до 2 мин | |
 | CR11-012 | LOW | console.log результата капчи в rucaptcha.ts | |
 | CR11-013 | LOW | Мусорные файлы в корне (txt, PROMPT_WEBUI.md) | |
 | CR11-014 | LOW | showError в Go desktop не вызывается | |
 | CR11-015 | MED | Два TUI (TS + Go) дублируют функциональность | |
+| CR12-001 | BLOCKER | SSRF: `cases.ts:102` — url из req.body без `assertCourtUrl()` | в parse.ts валидация есть, в cases.ts — нет |
+| CR12-002 | BLOCKER | Data race: `tui-go/main.go:380` — runCmd мутирует модель из горутины | undefined behavior |
+| CR12-003 | BLOCKER | Утечка RuCaptcha-ключа: имена .txt-файлов = фрагменты ключа, git tracked | ключ отозвать! |
+| CR12-004 | BLOCKER | XSS + arbitrary scheme navigation в courtdesktop (profile.json → HTML/JS без экранирования) | file://, javascript: работают |
+| CR12-005 | HIGH | UTF-8 коррупция в tui-go: pad/trunc/wrap/backspace по байтам | русский текст ломается |
+| CR12-006 | HIGH | ESLint сломан: typescript-eslint не поддерживает TS 7.0 | статанализ = 0 |
+| CR12-007 | MED | tui-go `Init()` мутирует value receiver — loading screen мёртв | |
+| CR12-008 | MED | tui-go `renderDetail` guard мутирует копию — пустая страница | |
+| CR12-009 | HIGH | Puppeteer: новый браузер на каждый вызов, `--no-sandbox` | 50 дел = 50 Chromium |
+| CR12-010 | HIGH | magistrate.ts: plaintiff молча перезаписывает defendant | потеря данных поиска |
+| CR12-011 | HIGH | `logs/courtdesk.log` tracked в git (CR10-013 ложно закрыт) | персональные данные |
+| CR12-012 | MED | shared.ts:59 — HTML капчи возвращается как результат без ключа | мусор в выдаче |
+| CR12-013 | MED | cron.ts: local time vs UTC рассинхрон (00:00–03:00 MSK) | пропуск прогонов |
+| CR12-014 | MED | error middleware отдаёт err.message клиенту | утечка путей |
+| CR12-015 | MED | settings: нет валидации значений (NaN, строки, отрицательные) | |
+| CR12-016 | HIGH | CI: Go не компилируется и не тестируется, нет Windows matrix | 1333 строки Go без контроля |
+| CR12-017 | HIGH | .gitignore без *.exe; .gitattributes без binary для exe; .git = 95 MB | связано с CR11-004 |
+| CR12-018 | HIGH | tui-go: 6+ ignored errors, HTTP-статусы не проверяются, false success | |
+| CR12-019 | MED | store: кэши растут без eviction; notifications мутирует кэш до save | memory leak |
+| CR12-020 | MED | 8 коммитов подряд с сообщением «.» | история нечитаема |
+| CR12-021 | MED | Хаос версий: 0.4.0 / 0.5.1 / 0.7.0 в трёх местах | = CR11-008 |
 | WEBUI-O1..O15 | HIGH/MED | 15 гэпов из PROMPT_WEBUI.md — все не закрыты | см. «Web UI open-проблемы» выше |
 | TUI-O1 | HIGH | Run tab без live progress polling | log есть, progress bar нет |
 | GOUI-O1 | HIGH | TUI (Go) требует кардинальной доработки UI | курсор, цвета, скролл, прокрутка |
@@ -236,6 +257,7 @@ Go-бинарник — **альтернативный** UI, в первую о�
 | 2026-07-28 | **Web UI — прогресс мониторинга**: добавлена панель прогресса в dashboard. Список дел со статусами (✓/✗/○) определяется по `updatedAt` vs время начала мониторинга. Обновление каждые 5 секунд. |
 | 2026-07-28 | **Web UI — открытие дела по строке**: dashboard — клик по всей строке открывает карточку. terminal — двойной клик по строке открывает карточку. |
 | 2026-07-29 | **CR11 — полный аудит** (OpenCode Go, qwen3.8): 22 замечания (5 блокеров, 10 важных, 7 советов). Зафиксированы в docs/CODE_REVIEW.md. Блокеры: CORS+auth (CR11-001), TLS rejectUnauthorized (CR11-002), race condition store (CR11-003), бинарники в git (CR11-004), неатомарный guard (CR11-005). Решения ожидаются. |
+| 2026-07-30 | **CR12 — контрольный жёсткий аудит** (OpenCode Go, qwen3.8): перечитаны все 84 файла (~6850 строк). Ни одно замечание CR11 не исправлено. Найдено 21 новое: 4 блокера (SSRF cases.ts, data race tui-go, утечка RuCaptcha-ключа через .txt-имена, XSS/arbitrary navigation courtdesktop), 15 важных (UTF-8 коррупция, сломанный ESLint, мёртвые guard'ы в tui-go, Puppeteer без пула, потеря defendant, лог в git, капча как результат, timezone bug, error leak, settings без валидации, Go вне CI, .gitignore дыры, ignored errors, memory leak, хаос версий), 10 советов. CR11-009 признан invalid (go1.26.5 реален). CR10-013 признан ложно закрытым. Суммарно открыто: 9 блокеров, 25 важных, 17 советов. |
 
 ---
 

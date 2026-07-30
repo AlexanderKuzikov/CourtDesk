@@ -4,6 +4,19 @@
 
 ---
 
+## [Unreleased] — 2026-07-30
+
+### CR12 — контрольный аудит (документация)
+
+**Изменена только документация** (`docs/CODE_REVIEW.md`, `docs/CONTEXT.md`, `docs/CHANGELOG.md`). Код не менялся.
+
+- Новый раунд CR12: 21 замечание (4 блокера, 15 важных, 10 советов) — см. `docs/CODE_REVIEW.md`.
+- Новые блокеры: SSRF в `POST /api/cases?parse=true` (CR12-001), data race в Go TUI (CR12-002), утечка RuCaptcha-ключа через имена git-tracked .txt-файлов (CR12-003), XSS/arbitrary scheme navigation в Desktop App (CR12-004).
+- Ревизия: CR11-009 закрыт как invalid (go1.26.5 — реальная версия); CR10-013 признан ложно закрытым (`logs/courtdesk.log` по-прежнему tracked).
+- Сводка: 12 раундов, 156+ замечаний, открыто 9 блокеров / 25 важных / 17 советов.
+
+---
+
 ## [0.7.0] — 2026-07-28
 
 ### Desktop App — миграция с Fyne на WebView
