@@ -32,7 +32,7 @@
 | 7 | `GET` | `/api/cases/:uid` | Карточка дела (с `courtName`) |
 | 8 | `GET` | `/api/cases/:uid/events` | События дела (timeline) |
 | 9 | `GET` | `/api/cases/:uid/card` | Полная карточка дела (CaseCard — сырые данные с сайта суда) |
-| 10 | `POST` | `/api/cases` | Добавить дело в мониторинг (`?parse=true` — синхронный парсинг) |
+| 10 | `POST` | `/api/cases` | Добавить дело в мониторинг (`?parse=true` синхронно / `?parse=async` — 202) |
 | 11 | `PATCH` | `/api/cases/:uid` | Обновить поля дела (whitelist) |
 | 12 | `DELETE` | `/api/cases/:uid` | Удалить дело (каскадно: events + notifications + card) |
 | 13 | `POST` | `/api/cases/wait` | Отслеживать появление дела (по ФИО + дате) |
@@ -308,6 +308,18 @@ POST /api/cases?parse=true HTTP/1.1
 ```
 
 Ответ будет содержать поле `card` (CaseCard) или `parseError` при ошибке парсинга (дело всё равно добавится).
+
+**Асинхронный парсинг (CR11-011):** `?parse=async` — сервер сразу отвечает `202`, парсинг идёт в фоне. Подходит, когда клиент не может держать соединение до 2 минут (таймауты 1С/прокси):
+
+```http
+POST /api/cases?parse=async HTTP/1.1
+...
+
+→ 202
+{ "success": true, "data": { "uid": "…", "status": "monitoring", "parseStatus": "running" } }
+```
+
+Карточка появляется в `GET /api/cases/:uid/card` (до готовности — 404). Завершение/ошибка отражаются в истории дела (`GET /api/cases/:uid/events`): события `card_loaded` / `parse_error`.
 
 ### 4.5 Отслеживание появления дела (номер ещё неизвестен)
 
