@@ -40,7 +40,8 @@ describe('captcha/browser — пул браузера (CR12-009)', () => {
 
   it('параллельные getBrowser не запускают два браузера', async () => {
     const b = makeFakeBrowser();
-    launchMock.mockImplementation(() => new Promise(res => setTimeout(() => res(b), 10)));
+    // без setTimeout — в тесте fake timers
+    launchMock.mockImplementation(() => Promise.resolve(b));
     const { getBrowser } = await freshModule();
 
     const [b1, b2, b3] = await Promise.all([getBrowser(), getBrowser(), getBrowser()]);

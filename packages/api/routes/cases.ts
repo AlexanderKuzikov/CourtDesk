@@ -97,9 +97,16 @@ router.post('/api/cases', async (req: Request, res: Response) => {
       message: 'Добавлено в мониторинг', data: {}, createdAt: now,
     });
 
-    // Sync parse on ?parse=true — CR10-009: static imports, no dynamic import() in hot path
-    if (req.query['parse'] === 'true' || req.body?.parse) {
-      try {
+    // Parse при добавлении: ?parse=true — синхронно (совместимость с 1С),
+    // ?parse=async — 202 + карточка в фоне (CR11-011)
+    const qParse = strQuery(req.query['parse']);
+    const bParse = req.body?.parse;
+    const parseAsync = qParse === 'async' || bParse === 'async';
+    const parseSync = qParse === 'true' || bParse === true || bParse === 'true';
+
+    if (parseAsync || parseSync) {
+      // CR10-009: static imports, no dynamic import() in hot path
+      const doParse = async () => {
         const adapter = getParseAdapter(courtType);
         let html = '';
         const apiKey = getRuCaptchaKey();
@@ -117,6 +124,31 @@ router.post('/api/cases', async (req: Request, res: Response) => {
         const card = await adapter.parse(html, url);
         saveCard(uid, card);
         if (card.identifiers?.case_uid) updateCase(uid, { caseUid: card.identifiers.case_uid });
+        return card;
+      };
+
+      if (parseAsync) {
+        // Не держим HTTP-соединение: клиент поллит GET /api/cases/:uid/card (404 пока не готово)
+        doParse()
+          .then(() => {
+            addHistoryEvent(c.uid, {
+              uid: crypto.randomUUID(), caseUid: c.uid, type: 'card_loaded',
+              message: 'Карточка дела загружена', data: {}, createdAt: new Date().toISOString(),
+            });
+          })
+          .catch(parseErr => {
+            console.error('[cases/add] async parse error:', parseErr);
+            addHistoryEvent(c.uid, {
+              uid: crypto.randomUUID(), caseUid: c.uid, type: 'parse_error',
+              message: 'Ошибка парсинга: ' + errMsg(parseErr), data: {}, createdAt: new Date().toISOString(),
+            });
+          });
+        res.status(202).json({ success: true, data: { ...c, parseStatus: 'running' } });
+        return;
+      }
+
+      try {
+        const card = await doParse();
         return ok(res, { ...c, card });
       } catch (parseErr) {
         console.error('[cases/add] parse error:', parseErr);

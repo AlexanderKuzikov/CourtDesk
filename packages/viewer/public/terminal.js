@@ -38,6 +38,7 @@ let logOpen = true;
 let pollTimer = 0;
 let scanPollTimer = 0;
 let _ggPending = false;
+let _hoverUid = null;       // CR12-S04: последний hover-uid, чтобы не дёргать selectRow
 
 // ---------- API ----------
 async function loadData() {
@@ -159,6 +160,7 @@ function renderTable() {
       <td class="ev">${formatTime(c.updatedAt)}</td>
     </tr>`;
   }).join('');
+  _hoverUid = null; // CR12-S04: строки пересозданы — hover-селекция нужна заново
   ensureVisible();
 }
 
@@ -651,9 +653,12 @@ document.getElementById('cmdInput').addEventListener('input', onCmdInput);
 document.getElementById('cmdInput').addEventListener('keydown', onCmdKeydown);
 document.getElementById('cmdInput').disabled = true;
 
+// CR12-S04 FIXED: selectRow только при смене строки, не на каждый mouseover
 document.getElementById('tBody').addEventListener('mouseover', (e) => {
   const tr = e.target.closest('tr[data-uid]');
   if (!tr) return;
+  if (tr.dataset.uid === _hoverUid) return;
+  _hoverUid = tr.dataset.uid;
   // pre-set selectedUid for preview when hovering (light mode; disable on focus loss)
   if (mode === 'NORMAL') selectRow(tr.dataset.uid);
 });

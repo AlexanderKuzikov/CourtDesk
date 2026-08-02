@@ -113,14 +113,21 @@ function toCourtInfo(e: RawCourtEntry): CourtInfo {
   };
 }
 
-const raw = JSON.parse(readFileSync(COURTS_PATH, 'utf-8')) as {
-  count: number;
-  version: string;
-  description: string;
-  courts: RawCourtEntry[];
-};
-
-const entries = raw.courts;
+// CR12-S05 FIXED: отсутствие/порча справочника не роняет процесс при импорте
+let entries: RawCourtEntry[] = [];
+try {
+  const raw = JSON.parse(readFileSync(COURTS_PATH, 'utf-8')) as {
+    count: number;
+    version: string;
+    description: string;
+    courts: RawCourtEntry[];
+  };
+  entries = raw.courts;
+} catch (err) {
+  // Справочник критичен для поиска, но импорт модуля не должен падать:
+  // API стартует, health/settings продолжат работать
+  console.error('[courts] справочник судов не загружен:', err instanceof Error ? err.message : err);
+}
 
 const bySubdomain = new Map<string, CourtInfo>();
 const byCode = new Map<string, CourtInfo>();

@@ -60,6 +60,11 @@ const schedulerMock = {
   runSingle: vi.fn(async (_uid: string): Promise<boolean> => true),
 };
 
+const sharedMock = {
+  fetchHtml: vi.fn(async (_url: string): Promise<string> => '<html><body>case page</body></html>'),
+};
+
+vi.mock('../../search/shared.js', () => sharedMock);
 vi.mock('../../store/index.js', () => storeMock);
 vi.mock('../../store/events.js', () => eventsMock);
 vi.mock('../../core/index.js', () => mockCore);
@@ -238,6 +243,44 @@ describe('POST /api/cases — add to monitoring', () => {
     });
     expect(res.status).toBe(200);
     expect(storeMock.addCase).toHaveBeenCalledTimes(1);
+  });
+
+  // CR11-011: parse=async — 202 сразу, парсинг в фоне
+  it('parse=async — 202 с parseStatus=running', async () => {
+    const res = await req(app, 'post', '/api/cases?parse=async', {
+      url: 'https://kirov--perm.sudrf.ru/modules.php?case_id=1', courtId: 'kirov--perm',
+      courtType: 'district', caseNumber: '2-100/2026',
+    });
+    expect(res.status).toBe(202);
+    expect(res.body.data.parseStatus).toBe('running');
+    expect(res.body.data.status).toBe('monitoring');
+    await vi.waitFor(() => expect(storeMock.saveCard).toHaveBeenCalledTimes(1));
+  });
+
+  it('parse=async — ошибка парсинга пишет событие parse_error, не 500', async () => {
+    mockParse.getParseAdapter.mockReturnValueOnce({
+      parse: vi.fn(async () => { throw new Error('boom'); }),
+    });
+    const res = await req(app, 'post', '/api/cases?parse=async', {
+      url: 'https://kirov--perm.sudrf.ru/modules.php?case_id=1', courtId: 'kirov--perm',
+      courtType: 'district', caseNumber: '2-100/2026',
+    });
+    expect(res.status).toBe(202);
+    await vi.waitFor(() => {
+      const types = eventsMock.addEvent.mock.calls.map(call => (call[1] as CaseHistoryEvent).type);
+      expect(types).toContain('parse_error');
+    });
+    expect(storeMock.saveCard).not.toHaveBeenCalled();
+  });
+
+  it('parse=true — по-прежнему синхронный (совместимость)', async () => {
+    const res = await req(app, 'post', '/api/cases?parse=true', {
+      url: 'https://kirov--perm.sudrf.ru/modules.php?case_id=1', courtId: 'kirov--perm',
+      courtType: 'district', caseNumber: '2-100/2026',
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.data.card).toBeTruthy();
+    expect(storeMock.saveCard).toHaveBeenCalledTimes(1);
   });
 });
 
