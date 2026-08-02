@@ -7,6 +7,7 @@
 - **test:** `npm test` — vitest (94 теста)
 - **lint:** `npm run lint` — tsc --noEmit
 - **lint:eslint:** `npm run lint:eslint` — eslint packages/ (⚠️ сломан: TS 7.0 не поддерживается)
+- **build:desktop:** `go build -ldflags="-s -w" -o courtdesktop.exe .` (в `packages/courtdesktop/`)
 
 ## Conventions
 
@@ -15,6 +16,7 @@
 - **Стиль:** без `any`, без `console.log` (pino), `prefer-const`
 - **Коммиты:** на русском или английском, повелительное наклонение, ≤72 символа
 - **Коммиты в main напрямую**, без feature-веток
+- **Коммитит только пользователь.** Агент не коммитит и не пушит никогда
 
 ## Structure
 
@@ -45,8 +47,6 @@ CourtDesk/
 - `data/` — JSON-хранилище, генерируется приложением
 - `logs/` — логи, не коммитить
 - `node_modules/` — зависимости
-- `packages/courtdesktop/courtdesktop.exe` — бинарник (CR11-004)
-- `packages/tui-go/courtdesk-tui.exe` — бинарник (CR11-004)
 
 ## Frontend conventions (viewer/public/)
 
