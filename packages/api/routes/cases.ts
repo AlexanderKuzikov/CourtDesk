@@ -8,6 +8,7 @@ import { findCourtByCodeOrSubdomain, getRuCaptchaKey } from '../../core/index.js
 import { getParseAdapter } from '../../parse/index.js';
 import { isCaptchaPage } from '../../core/errors.js';
 import { fetchWithCaptcha } from '../../captcha/session.js'; // CR10-009: static import
+import { runSingle } from '../../scheduler/index.js';
 import type { WatchedCase, CaseStatus } from '../../core/types.js';
 
 const router = Router();
@@ -199,6 +200,16 @@ router.get('/api/cases/:uid/events', (req: Request, res: Response) => {
     const events = getCaseEvents(String(req.params['uid']));
     ok(res, events);
   } catch (e) { fail(res, 'STORE_ERROR', errMsg(e), 500); }
+});
+
+// Manual reparse of a single watched case (bound parse via orchestrator.runSingle)
+router.post('/api/cases/:uid/parse', async (req: Request, res: Response) => {
+  const uid = String(req.params['uid']);
+  if (!getCase(uid)) return fail(res, 'NOT_FOUND', 'Дело не найдено', 404);
+  try {
+    await runSingle(uid);
+    ok(res, getCase(uid));
+  } catch (e) { fail(res, 'PARSE_ERROR', 'Ошибка парсинга: ' + errMsg(e), 500); }
 });
 
 export default router;

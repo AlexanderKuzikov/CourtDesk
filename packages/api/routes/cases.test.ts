@@ -56,12 +56,17 @@ const mockCaptcha = {
   fetchWithCaptcha: vi.fn(async () => '<html><body>captcha bypassed</body></html>'),
 };
 
+const schedulerMock = {
+  runSingle: vi.fn(async (_uid: string): Promise<boolean> => true),
+};
+
 vi.mock('../../store/index.js', () => storeMock);
 vi.mock('../../store/events.js', () => eventsMock);
 vi.mock('../../core/index.js', () => mockCore);
 vi.mock('../../parse/index.js', () => mockParse);
 vi.mock('../../captcha/session.js', () => mockCaptcha);
 vi.mock('../../core/errors.js', () => ({ isCaptchaPage: vi.fn(() => false) }));
+vi.mock('../../scheduler/index.js', () => schedulerMock);
 
 async function buildApp(): Promise<Express> {
   const { default: casesRouter } = await import('./cases.js');
@@ -360,5 +365,42 @@ describe('POST /api/cases/wait — waiting-кейс', () => {
     expect(c.status).toBe('waiting');
     expect(c.url).toBe('');
     expect(c.number).toBe('');
+  });
+});
+
+// ---------- REPARSE ----------
+
+describe('POST /api/cases/:uid/parse — ручной перепарсинг дела', () => {
+  let app: Express;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    vi.resetModules();
+    app = await buildApp();
+  });
+
+  it('200 и вызывает runSingle с uid', async () => {
+    storeMock.getCase.mockReturnValue(baseCase);
+    schedulerMock.runSingle.mockResolvedValue(true);
+    const res = await req(app, 'post', '/api/cases/u1/parse');
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(schedulerMock.runSingle).toHaveBeenCalledWith('u1');
+  });
+
+  it('404 если дело не найдено', async () => {
+    storeMock.getCase.mockReturnValue(null);
+    const res = await req(app, 'post', '/api/cases/ghost/parse');
+    expect(res.status).toBe(404);
+    expect(res.body.code).toBe('NOT_FOUND');
+    expect(schedulerMock.runSingle).not.toHaveBeenCalled();
+  });
+
+  it('500 если runSingle бросает', async () => {
+    storeMock.getCase.mockReturnValue(baseCase);
+    schedulerMock.runSingle.mockRejectedValue(new Error('kaput'));
+    const res = await req(app, 'post', '/api/cases/u1/parse');
+    expect(res.status).toBe(500);
+    expect(res.body.code).toBe('PARSE_ERROR');
   });
 });

@@ -8,7 +8,7 @@
 
 ## Статус
 
-**v0.7.0** — Desktop App на Go+WebView (6 MB). Web UI: Terminal + Skins + прогресс мониторинга. API: 94 теста, 25 эндпоинтов. Node ≥22.
+**v0.7.0** — Desktop App на Go+WebView (6 MB). Web UI: Terminal + Skins + прогресс мониторинга. API: 97 тестов, 26 эндпоинтов. Node ≥22.
 
 | Компонент | Статус | Заметка |
 |-----------|--------|---------|
@@ -22,7 +22,7 @@
 | Parse | ✅ sync parse при добавлении | |
 | Scheduler | ✅ cron + double-fire guard | |
 | Store | ✅ каскадное удаление + settings | |
-| API | ✅ 25 эндпоинтов | open LAN, без auth (ADR 2026-08-02) |
+| API | ✅ 26 эндпоинтов | open LAN, без auth (ADR 2026-08-02) |
 | Viewer (Dashboard) | ⚠️ см. open-проблемы | |
 | Viewer (Search) | ⚠️ см. open-проблемы | |
 | Viewer (Terminal) | ✅ Bloomberg-style | |
@@ -112,13 +112,13 @@
 
 ## API-покрытие
 
-**94 теста (16 файлов).** Все эндпоинты:
+**97 тестов (16 файлов).** Все эндпоинты:
 
 | Файл | Эндпоинты |
 |------|-----------|
 | health.test.ts | GET /api/health |
 | status.test.ts | GET /api/status, GET/PATCH /api/notifications |
-| cases.test.ts | CRUD /api/cases + /events /card /stats /wait |
+| cases.test.ts | CRUD /api/cases + /events /card /stats /wait + POST /:uid/parse |
 | search.test.ts | POST /api/search/by-number, by-party, by-case-uid |
 | resolve.test.ts | POST /api/resolve |
 | parse.run.test.ts | POST /api/parse/run |
@@ -137,6 +137,7 @@
 
 | Дата | Изменение |
 |------|-----------|
+| 2026-08-02 | **Кнопка «Перепарсить» (вариант 2).** `POST /api/cases/:uid/parse` — тонкий роут над `scheduler.runSingle` (привязанный парсинг: saveCard под внутр. uid + обновление дела). 🔄 в строке дашборда и в карточке, guard от двойного клика. Убран глазик 👁 «Детали» (дубль клика по строке). Тесты 94→97. API.md §4.17. |
 | 2026-08-02 | **Desktop: connection flow.** Health-check при старте → приложение или встроенная страница подключения (SetHtml). Watcher потери/восстановления связи (10 с, 3 сбоя). Ctrl+, через GetAsyncKeyState (Windows). recentUrls (до 5). XSS встроенных страниц закрыт (html.EscapeString), валидация схемы URL. ADR: WebView — единственный клиент, TUI заморожены, API открыт в LAN. CR11-001 закрыт (by design); CR12-002/005/007/008/018, CR11-015, GOUI-O*, CR12-S01..S03 сняты (TUI frozen). |
 | 2026-07-30 | **Реорганизация документации.** Удалены CODE_REVIEW.md, BUG_REPORT.md, SESSION_CONTINUE.md, PROMPT_WEBUI.md. Open-проблемы слиты сюда. Создан AGENTS.md. CRM-INTEGRATION.md → API.md. Создан knowledge base в `D:\GitHub\knowledge/`. |
 | 2026-07-30 | **CR12** — контрольный аудит. 21 новое замечание, 4 блокера. CR11 не исправлены. |

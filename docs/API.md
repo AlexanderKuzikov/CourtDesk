@@ -495,6 +495,21 @@ Content-Type: application/json
 { "success": true, "data": { "type": "search", "caseNumber": "2-1234/2024", "courtType": "district" } }
 ```
 
+### 4.17 Ручной перепарсинг дела
+
+```http
+POST /api/cases/:uid/parse HTTP/1.1
+
+→ 200
+{ "success": true, "data": { ...обновлённое дело (WatchedCase)... } }
+```
+
+Запускает **привязанный** парсинг одного отслеживаемого дела по внутреннему `uid`
+(переиспользует `scheduler.runSingle` → `orchestrator.processOne`): fetch `url` дела
+(при капче — RuCaptcha), `saveCard(uid, card)` под внутренним uid, обновление
+`result` / `legalForceDate` / `lastChecked` / `caseUid`, события и уведомления при
+реальных изменениях. Ошибки: `404 NOT_FOUND` (дела нет), `500 PARSE_ERROR`.
+
 ## 5. Коды ошибок
 
 | HTTP | code | Когда |

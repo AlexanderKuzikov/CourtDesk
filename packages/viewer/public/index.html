@@ -237,6 +237,7 @@ function renderTable() {
       <td>${esc(c.legalForceDate || '—')}</td>
       <td style="font-size:11px;color:var(--text-dim)">${formatTime(c.updatedAt)}</td>
       <td class="action-btns">
+        <span class="icon-btn" title="Перепарсить" onclick="reparseCase('${esc(c.uid)}')">🔄</span>
         ${c.status !== 'archived'
           ? `<span class="icon-btn" title="Архивировать" onclick="archiveCase('${esc(c.uid)}')">📦</span>`
           : `<span class="icon-btn" title="Вернуть" onclick="unarchiveCase('${esc(c.uid)}')">↩</span>`}
@@ -393,6 +394,7 @@ async function openDetail(uid) {
       <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">
         ${c.status !== 'archived' ? `<button class="btn btn-secondary btn-sm" onclick="archiveCase('${esc(c.uid)}');closeDetail()">📦 Архивировать</button>` : `<button class="btn btn-secondary btn-sm" onclick="unarchiveCase('${esc(c.uid)}');closeDetail()">↩ Вернуть</button>`}
         <button class="btn btn-danger btn-sm" onclick="deleteCase('${esc(c.uid)}');closeDetail()">🗑 Удалить</button>
+        <button class="btn btn-secondary btn-sm" onclick="reparseCase('${esc(c.uid)}')">🔄 Перепарсить</button>
         <button class="btn btn-secondary btn-sm" onclick="window.print()">🖨 Печать</button>
       </div>`;
     document.getElementById('detailOverlay').classList.add('open');
@@ -417,10 +419,27 @@ async function unarchiveCase(uid) {
 async function deleteCase(uid) {
   if (!confirm('Удалить дело безвозвратно?')) return;
   try {
-    const res = await fetch(apiUrl('/api/cases/' + encodeURIComponent(uid)), { method:'DELETE' });
+    const res = await fetch(apiUrl('/api/cases/' + encodeURIComponent(uid)), { method: 'DELETE' });
     if (!res.ok) throw new Error();
     showToast('Дело удалено', 'success'); loadDashboard();
   } catch { showToast('Ошибка удаления', 'error'); }
+}
+
+const _reparsing = new Set();
+async function reparseCase(uid) {
+  if (_reparsing.has(uid)) return;
+  _reparsing.add(uid);
+  showToast('Парсинг дела…');
+  try {
+    const res = await fetch(apiUrl('/api/cases/' + encodeURIComponent(uid) + '/parse'), { method: 'POST' });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error || 'Ошибка парсинга');
+    showToast('Дело перепарсено', 'success');
+    const overlayOpen = document.getElementById('detailOverlay').classList.contains('open');
+    await loadDashboard();
+    if (overlayOpen) await openDetail(uid);
+  } catch (e) { showToast(e.message, 'error'); }
+  finally { _reparsing.delete(uid); }
 }
 
 async function runMonitor() {
