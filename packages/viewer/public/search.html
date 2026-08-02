@@ -215,7 +215,8 @@ async function doSearch() {
     const results = json.data?.results || [];
     showResults(results, json.data?.count ?? results.length, json.data?.court);
   } catch (err) {
-    document.getElementById('resultsTable').innerHTML = `<div class="empty"><h3>❌ Ошибка</h3><p>${esc(err.message)}</p></div>`;
+    // WEBUI-O11: сообщение + retry
+    document.getElementById('resultsTable').innerHTML = `<div class="empty"><h3>❌ Ошибка</h3><p>${esc(err.message)}</p><p style="margin-top:12px"><button class="btn btn-primary btn-sm" onclick="doSearch()">🔄 Повторить</button></p></div>`;
   }
   scanBar.style.display = 'none';
   btn.disabled = false;
@@ -266,17 +267,35 @@ async function addToMonitor(idx) {
   const btn = document.querySelector(`.monitor-btn[data-idx="${idx}"]`);
   if (btn && btn.classList.contains('added')) return;
   try {
-    const res = await fetch(apiUrl('/api/cases?parse=true'), {
+    // CR11-011: parse=async — не держим соединение, карточка догружается в фоне
+    const res = await fetch(apiUrl('/api/cases?parse=async'), {
       method:'POST', headers:{'Content-Type':'application/json'},
       body:JSON.stringify({ url:r.caseUrl, courtId:r.courtId, courtCode:r.courtCode||r.courtId, courtType:r.courtType, caseNumber:r.caseNumber }),
     });
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || 'Ошибка');
     showToast(`Дело ${r.caseNumber} добавлено в мониторинг`, 'success');
-    if (btn) { btn.textContent = '✓'; btn.classList.add('added'); }
-    // Если пришла карточка — показываем сразу
-    if (json.data?.card) openDetail(allResults.indexOf(r));
+    if (btn) { btn.innerHTML = '<span class="spinner"></span>'; btn.classList.add('added'); }
+    const uid = json.data?.uid;
+    if (uid) pollCardUntilReady(uid, btn);
   } catch (err) { showToast(err.message, 'error'); }
+}
+
+// Поллинг карточки после async-парсинга (до 2 минут)
+function pollCardUntilReady(uid, btn) {
+  let tries = 0;
+  const timer = setInterval(async () => {
+    try {
+      const res = await fetch(apiUrl('/api/cases/' + encodeURIComponent(uid) + '/card'));
+      if (res.ok) {
+        clearInterval(timer);
+        if (btn) btn.textContent = '✓';
+        showToast('Карточка дела загружена', 'success');
+        return;
+      }
+    } catch { /* сервер недоступен — пробуем дальше */ }
+    if (++tries >= 24) { clearInterval(timer); if (btn) btn.textContent = '✓'; }
+  }, 5000);
 }
 
 async function addWait() {

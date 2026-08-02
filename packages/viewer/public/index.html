@@ -113,6 +113,7 @@
       <input type="search" id="caseSearch" placeholder="Поиск по номеру/суду..." oninput="onSearchInput(this.value)">
       <button class="btn btn-primary btn-sm" onclick="runMonitor()" id="runBtn">▶ Мониторинг</button>
       <a href="/search.html" class="btn btn-primary btn-sm">+ Дело</a>
+      <button class="btn btn-secondary btn-sm" onclick="exportCsv()" title="Экспорт в CSV">⬇ CSV</button>
       <button class="btn btn-secondary btn-sm" onclick="loadDashboard()" title="Обновить">🔄</button>
       <button class="btn btn-secondary btn-sm" onclick="openSettings()" title="Настройки">⚙️</button>
     </div>
@@ -313,6 +314,26 @@ function renderTable() {
 }
 
 function goPage(p) { currentPage = p; renderTable(); }
+
+// WEBUI-O7: экспорт отфильтрованных дел в CSV (BOM + «;» — под русский Excel)
+function exportCsv() {
+  const cases = getFilteredCases();
+  if (!cases.length) { showToast('Нет дел для экспорта', 'error'); return; }
+  const headers = ['Номер', 'Статус', 'Суд', 'Результат', 'Вступление в силу', 'Обновлено', 'URL'];
+  const q = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+  const lines = [headers.join(';')];
+  for (const c of cases) {
+    lines.push([c.number, STATUS_LABELS[c.status] || c.status, c.courtName || c.courtId,
+      c.result, c.legalForceDate, c.updatedAt, c.url].map(q).join(';'));
+  }
+  const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'courtdesk-cases-' + new Date().toISOString().slice(0, 10) + '.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  showToast(`Экспортировано дел: ${cases.length}`, 'success');
+}
 
 async function loadDashboard() {
   try {
