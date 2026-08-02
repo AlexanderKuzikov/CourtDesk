@@ -97,10 +97,11 @@ func main() {
 	}
 
 	a := &jsAPI{profile: profile, w: w, done: make(chan struct{})}
-	if err := w.Bind("courtdesk", a); err != nil {
+	if err := bindAPI(w, a); err != nil {
 		showError("CourtDesk", "Не удалось инициализировать приложение: "+err.Error())
 		os.Exit(1)
 	}
+	w.Init(`window.courtdesk={GetSettings:__cd_getSettings,SaveSettings:__cd_saveSettings,TestConnection:__cd_testConnection,Connect:__cd_connect,OpenSettings:__cd_openSettings,GoBack:__cd_goBack};`)
 
 	if checkHealth(profile.APIURL) {
 		a.goApp(profile.APIURL)
@@ -121,6 +122,22 @@ type jsAPI struct {
 	mode    string
 	fails   int
 	done    chan struct{}
+}
+
+func bindAPI(w webview.WebView, a *jsAPI) error {
+	for name, fn := range map[string]interface{}{
+		"__cd_getSettings":    a.GetSettings,
+		"__cd_saveSettings":   a.SaveSettings,
+		"__cd_testConnection": a.TestConnection,
+		"__cd_connect":        a.Connect,
+		"__cd_openSettings":   a.OpenSettings,
+		"__cd_goBack":         a.GoBack,
+	} {
+		if err := w.Bind(name, fn); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (a *jsAPI) GetSettings() Profile {
