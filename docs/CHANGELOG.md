@@ -4,6 +4,51 @@
 
 ---
 
+## [0.7.1] — 2026-08-03
+
+### Стабилизация: закрыты все 6 блокеров, тесты 97 → 180
+
+**Security (блокеры):**
+- **CR12-001 SSRF**: `assertCourtUrl()` применён в `POST /api/cases` и `PATCH /api/cases/:uid` до любого fetch, а также во всех точках выхода (`search/shared.ts`, `captcha/session.ts`, `scheduler/orchestrator.ts`). Не-судовой URL → 400 `INVALID_URL`.
+- **CR12-003**: проверено — ключ RuCaptcha в git-историю не попадал (txt-файлы содержали «Не удалять!», удалены). Ротация не требуется.
+- **CR11-002**: `rejectUnauthorized:false` сохранён, но только за allowlist'ом судовых доменов (ADR 2026-08-03).
+- **CR12-014**: error middleware отдаёт клиенту generic-сообщение, детали — в pino.
+- **CR12-015**: валидация значений `PUT /api/settings` (HH:mm, диапазоны часов, boolean) → 400 `INVALID_SETTINGS`.
+
+**Надёжность (блокеры):**
+- **CR11-003/CR11-005**: единый лок прогонов `withRunLock` + per-uid in-flight guard в `orchestrator.ts` (атомарный check-and-set). cron и API используют один guard; ручной перепарсинг не пересекается с пакетным прогоном (409 `PARSE_IN_PROGRESS`).
+- **CR12-S06**: tmp-файлы записи store через `crypto.randomUUID()` (нет коллизий на одну мс).
+- **CR12-013**: cron guard-ключ в локальной дате (раньше UTC-дата мешалась с локальными часами).
+
+**Репозиторий (блокеры):**
+- **CR11-004/CR12-017**: бинарники (`courtdesktop.exe`, `courtdesk-tui*.exe`, linux-бинарник) и `logs/courtdesk.log` убраны из индекса (`git rm --cached`), `*.exe` в `.gitignore`. История не переписывается (осознанно).
+
+**Код и тесты:**
+- **CR12-010**: `magistrate.ts` — plaintiff больше не перезаписывает defendant в поле `G1_PARTS__NAMESS` (де-факто одно поле участника).
+- **CR11-007**: единый HTTP-слой `fetchHtml` из `search/shared.ts` (убраны дубли в `cases.ts` и `orchestrator.ts`).
+- **CR12-012**: `smartFetch` бросает ошибку при капче без ключа вместо возврата HTML капчи.
+- **CR12-009**: пул браузера Puppeteer (`captcha/browser.ts`) — один Chrome на серию вызовов, закрытие по простою 30 с.
+- **CR11-011**: `POST /api/cases?parse=async` — 202 сразу, карточка в фоне (совместимость с 1С-таймаутами). `parse=true` сохранён.
+- **CR12-006**: ESLint заменён на **Biome** (typescript-eslint не поддерживает TS 7).
+- **CR12-S07**: coverage-провайдер v8 + пороги (lines 44 / functions 38 / branches 38 / statements 42).
+- **CR12-S04/S05**: hover в терминале не дёргает `selectRow` на каждый mouseover; `courts.ts`/`logger.ts` не падают при импорте без данных/логов.
+- **CR11-008**: версия health берётся из `package.json` (0.7.0).
+- **CR11-012**: результат капчи не логируется.
+- Новые фикстурные тесты: `search/shared`, `search/adapters/magistrate`, `parse/adapters/magistrate`, `parse/adapters/district`, `captcha/rucaptcha`, `captcha/browser`. Итого **180 тестов (22 файла)**.
+
+**CI:**
+- **CR12-016**: Windows matrix (ubuntu + windows), `tsc --noEmit`, `biome lint`, `npm test`; отдельная job `desktop` — `go vet` + `go build` courtdesktop с артефактом.
+
+**Web UI:**
+- **WEBUI-O8**: визуальный progress bar мониторинга.
+- **WEBUI-O3**: панель «Требует внимания» (дела с ошибками / с решением).
+- **WEBUI-O7**: экспорт отфильтрованных дел в CSV (BOM + `;` под русский Excel).
+- **WEBUI-O11**: сообщения об ошибках + кнопка «Повторить» (дашборд, поиск).
+- **WEBUI-O1**: skeleton-загрузчики таблицы.
+- Поиск: добавление дела через `parse=async` с поллингом готовности карточки.
+
+---
+
 ## [Unreleased] — 2026-07-30
 
 ### CR12 — контрольный аудит (документация)

@@ -23,7 +23,7 @@
   - **Поиск** (`/search.html`) — выбор суда, поиск по номеру/участникам/УИД, добавление в мониторинг.
 - **Desktop App** (`packages/courtdesktop/`) — нативное приложение на Go+WebView (6 MB). Использует тот же Web UI. Поддержка настраиваемого API URL.
 - **TUI** — терминальный интерфейс на Go (Bubble Tea), без внешних TUI-зависимостей.
-- **API** — REST/JSON, 25 эндпоинтов для 1С.
+- **API** — REST/JSON, 26 эндпоинтов для 1С.
 
 ## Быстрый старт
 
@@ -66,7 +66,7 @@ go build -ldflags="-H windowsgui" -o courtdesktop.exe .
 
 ## Статус
 
-**v0.7.0** — Desktop App на Go+WebView (6 MB). Web UI: Terminal + Skins + прогресс мониторинга. API: 94 теста, 25 эндпоинтов. Node ≥22.
+**v0.7.1** — стабилизация: закрыты блокеры безопасности (SSRF, URL-allowlist на всех fetch), гонки планировщика, бинарники в git. Desktop App на Go+WebView (6 MB). Web UI: Dashboard + Terminal + Search, Skins. API: 180 тестов, 26 эндпоинтов, coverage-гейт. Node ≥22.
 
 ## Лицензия
 
