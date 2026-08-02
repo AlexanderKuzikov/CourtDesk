@@ -1,5 +1,5 @@
 import { getSettings } from '../store/settings.js';
-import { runFull, runRetry } from './index.js';
+import { runFull, runRetry, getRunningMode } from './index.js';
 
 let _fullTimer: ReturnType<typeof setInterval> | null = null;
 // CR10-012: _retryTimer removed — was declared but never assigned
@@ -10,8 +10,10 @@ function pad2(n: number): string {
   return n.toString().padStart(2, '0');
 }
 
-function todayDate(): string {
-  return new Date().toISOString().slice(0, 10);
+// CR12-013 FIXED: scheduleFull интерпретируется в локальном времени сервера,
+// guard-ключ тоже локальный (раньше UTC-дата мешалась с локальными часами)
+function todayDateLocal(now: Date): string {
+  return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
 }
 
 /** Проверить, настало ли время полного прогона */
@@ -20,7 +22,7 @@ function shouldRunFull(now: Date, scheduleTime: string): boolean {
   const [h, m] = scheduleTime.split(':').map(Number);
   if (isNaN(h) || isNaN(m)) return false;
   // CR10-011: guard — не запускать дважды в одно окно (при задержке event loop)
-  const today = todayDate();
+  const today = todayDateLocal(now);
   if (_lastFullRunDate === `${today}T${pad2(h)}:${pad2(m)}`) return false;
   const diff = now.getHours() * 60 + now.getMinutes() - (h * 60 + m);
   return diff >= 0 && diff < 5;
@@ -38,14 +40,18 @@ async function tick() {
   try {
     const settings = getSettings();
     if (!settings.scheduleEnabled) return;
+    // CR11-005: не стартуем поверх идущего прогона (API или предыдущий cron);
+    // окно не «сжигаем» — повторим на следующем тике
+    if (getRunningMode()) return;
     const now = new Date();
 
     // Полный прогон по расписанию (раз в сутки)
     if (shouldRunFull(now, settings.scheduleFull)) {
       const [h, m] = settings.scheduleFull.split(':').map(Number);
-      _lastFullRunDate = `${todayDate()}T${pad2(h)}:${pad2(m)}`;
+      _lastFullRunDate = `${todayDateLocal(now)}T${pad2(h)}:${pad2(m)}`;
       console.log('[cron] запуск полного мониторинга по расписанию');
       runFull().catch(err => console.error('[cron] full error:', err));
+      return; // retry не в том же тике — runFull держит лок
     }
 
     // Retry-прогон каждые N часов

@@ -27,7 +27,8 @@ function readJson<T>(filename: string, fallback: T): T {
 function writeJson<T>(filename: string, data: T): void {
   ensureDataDir();
   const filepath = resolve(DATA_DIR, filename);
-  const tmp = filepath + '.tmp.' + Date.now();
+  // CR12-S06 FIXED: randomUUID вместо Date.now() — нет коллизий при записи в одну мс
+  const tmp = filepath + '.tmp.' + crypto.randomUUID();
   writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf-8');
   renameSync(tmp, filepath);
 }

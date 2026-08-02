@@ -5,14 +5,11 @@ import { findCourtByCodeOrSubdomain } from '../../core/index.js';
 import { fetchWithCaptcha } from '../../captcha/session.js';
 import { getRuCaptchaKey } from '../../core/config.js';
 import { assertCourtUrl, isCaptchaPage } from '../../core/errors.js';
-import { runFull, runRetry, runNew } from '../../scheduler/index.js';
+import { runFull, runRetry, runNew, getRunningMode } from '../../scheduler/index.js';
 import { saveCard } from '../../store/index.js';
 import { getProgress, setProgress, resetProgress } from '../../core/index.js';
 
 const router = Router();
-
-// CR5-012 FIXED: guard от параллельных runFull() → 409 Conflict если прогон уже идёт
-let _isRunning = false;
 
 function errMsg(err: unknown): string {
   return err instanceof Error ? err.message : 'Внутренняя ошибка';
@@ -76,8 +73,8 @@ router.post('/api/parse/url', async (req: Request, res: Response) => {
 });
 
 router.post('/api/parse/run', (req: Request, res: Response) => {
-  // CR5-012: отклоняем если прогон уже идёт
-  if (_isRunning) {
+  // CR5-012/CR11-005 FIXED: guard живёт в orchestrator — общий для API и cron
+  if (getRunningMode()) {
     return res.status(409).json({
       success: false,
       error: 'Прогон уже выполняется',
@@ -94,7 +91,6 @@ router.post('/api/parse/run', (req: Request, res: Response) => {
     default:       runner = runFull;  break;
   }
 
-  _isRunning = true;
   resetProgress();
   setProgress({ running: true });
   res.status(202).json({ success: true, data: { status: 'started', mode: mode ?? 'full' } });
@@ -107,9 +103,6 @@ router.post('/api/parse/run', (req: Request, res: Response) => {
     .catch(err => {
       console.error('[parse/run] background error:', err);
       setProgress({ running: false, errors: 1 });
-    })
-    .finally(() => {
-      _isRunning = false;
     });
 });
 

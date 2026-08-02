@@ -1,10 +1,9 @@
 // Оркестратор мониторинга
-import https from 'https';
-import iconv from 'iconv-lite'; // статический импорт — BUG-011
 import { listCases, updateCase, addEvent, getCase, getEvents, addNotification, saveCard } from '../store/index.js';
 import { getParseAdapter } from '../parse/index.js';
 import { getSearchAdapter } from '../search/index.js';
-import { assertCourtUrl, CourtUrlError, isCaptchaPage } from '../core/errors.js';
+import { fetchHtml as fetchCourtHtml } from '../search/shared.js';
+import { CourtUrlError, isCaptchaPage } from '../core/errors.js';
 import { getRuCaptchaKey } from '../core/config.js';
 import { findHigherCourt, findRsCandidatesForMs, saveMsToRsMapping, extractRegion, setProgress } from '../core/index.js';
 import { getSettings } from '../store/settings.js';
@@ -45,21 +44,58 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-export async function runFull(): Promise<{ ok: number; fail: number }> {
-  const cases = listCases({ status: ['monitoring', 'decision', 'enforced', 'error'] });
-  console.log(`[scheduler] runFull: ${cases.length} cases, statuses:`, cases.map(c => `${c.number}:${c.status}`));
-  return processBatch(cases);
+// CR11-005 FIXED: единый лок прогонов в orchestrator (не в роуте) —
+// cron и API используют один guard, check-and-set без await = атомарно
+let _runningMode: string | null = null;
+
+export function getRunningMode(): string | null {
+  return _runningMode;
 }
 
-export async function runRetry(): Promise<{ ok: number; fail: number }> {
-  const cases = listCases({ status: ['monitoring', 'error'] }).filter(isStale);
-  return processBatch(cases);
+async function withRunLock(
+  mode: string,
+  fn: () => Promise<{ ok: number; fail: number }>,
+): Promise<{ ok: number; fail: number }> {
+  if (_runningMode) {
+    console.warn(`[scheduler] ${mode} пропущен: уже выполняется ${_runningMode}`);
+    return { ok: 0, fail: 0 };
+  }
+  _runningMode = mode;
+  try {
+    return await fn();
+  } finally {
+    _runningMode = null;
+  }
+}
+
+// CR11-005: per-uid guard — ручной перепарсинг не пересекается с пакетным прогоном
+const _inFlight = new Set<string>();
+
+export function isCaseInFlight(uid: string): boolean {
+  return _inFlight.has(uid);
+}
+
+export function runFull(): Promise<{ ok: number; fail: number }> {
+  return withRunLock('full', async () => {
+    const cases = listCases({ status: ['monitoring', 'decision', 'enforced', 'error'] });
+    console.log(`[scheduler] runFull: ${cases.length} cases, statuses:`, cases.map(c => `${c.number}:${c.status}`));
+    return processBatch(cases);
+  });
+}
+
+export function runRetry(): Promise<{ ok: number; fail: number }> {
+  return withRunLock('retry', async () => {
+    const cases = listCases({ status: ['monitoring', 'error'] }).filter(isStale);
+    return processBatch(cases);
+  });
 }
 
 // BUG-002 FIXED: waiting-дела — поиск по участнику через searchAdapter
-export async function runNew(): Promise<{ ok: number; fail: number }> {
-  const cases = listCases({ status: 'waiting' });
-  return processWaitingBatch(cases);
+export function runNew(): Promise<{ ok: number; fail: number }> {
+  return withRunLock('new', async () => {
+    const cases = listCases({ status: 'waiting' });
+    return processWaitingBatch(cases);
+  });
 }
 
 async function processBatch(cases: WatchedCase[]): Promise<{ ok: number; fail: number }> {
@@ -68,6 +104,7 @@ async function processBatch(cases: WatchedCase[]): Promise<{ ok: number; fail: n
   setProgress({ total: cases.length });
   for (let i = 0; i < cases.length; i++) {
     const c = cases[i]!;
+    _inFlight.add(c.uid);
     try {
       await processOne(c);
       ok++;
@@ -86,6 +123,8 @@ async function processBatch(cases: WatchedCase[]): Promise<{ ok: number; fail: n
           lastError: err instanceof Error ? err.message.slice(0, 200) : 'Unknown error',
         });
       }
+    } finally {
+      _inFlight.delete(c.uid);
     }
     setProgress({ processed: ok + fail, errors: fail });
     // RATE-001: пауза между запросами (не после последнего)
@@ -99,12 +138,15 @@ async function processWaitingBatch(cases: WatchedCase[]): Promise<{ ok: number; 
   let fail = 0;
   for (let i = 0; i < cases.length; i++) {
     const c = cases[i]!;
+    _inFlight.add(c.uid);
     try {
       await processWaiting(c);
       ok++;
     } catch (err) {
       fail++;
       console.error(`[scheduler/new] fail ${c.uid}:`, err);
+    } finally {
+      _inFlight.delete(c.uid);
     }
     if (i < cases.length - 1) await sleep(RATE_DELAY_MS);
   }
@@ -333,32 +375,9 @@ async function processOne(c: WatchedCase): Promise<void> {
   updateCase(c.uid, updates);
 }
 
+// CR11-007 FIXED: HTTP-слой переиспользуется из search/shared (assertCourtUrl внутри)
 async function fetchHtml(url: string): Promise<string> {
-  assertCourtUrl(url);
-  const parsed = new URL(url);
-  const html = await new Promise<string>((resolve, reject) => {
-    https.get(url, {
-      rejectUnauthorized: false,
-      timeout: 120000,
-      headers: { 'User-Agent': 'CourtDesk/0.1' },
-    }, res => {
-      if (res.statusCode && res.statusCode >= 400) {
-        reject(new Error(`HTTP ${res.statusCode} — sudrf.ru временно недоступен`));
-        return;
-      }
-      const chunks: Buffer[] = [];
-      const ct = res.headers['content-type'] ?? '';
-      const cs = ct.match(/charset=([\w-]+)/i);
-      const encoding = (cs && cs[1]?.toLowerCase() === 'utf-8') ? 'utf8' : 'win1251';
-      res.on('data', (c: Buffer) => chunks.push(c));
-      res.on('end', () => {
-        try { resolve(iconv.decode(Buffer.concat(chunks), encoding)); }
-        catch { resolve(Buffer.concat(chunks).toString('utf8')); }
-      });
-    }).on('error', (err: Error) => {
-      reject(new Error(`Ошибка соединения с sudrf.ru: ${err.message}`));
-    }).on('timeout', function (this: any) { this.destroy(); reject(new Error('sudrf.ru временно недоступен (таймаут). Попробуйте позже.')); });
-  });
+  const html = await fetchCourtHtml(url);
 
   // Если капча или её ошибка — решаем через Puppeteer
   const NEEDS_CAPTCHA = 'Неверно указан проверочный код';
@@ -376,6 +395,13 @@ async function fetchHtml(url: string): Promise<string> {
 export async function runSingle(uid: string): Promise<boolean> {
   const c = getCase(uid);
   if (!c) return false;
-  await processOne(c);
-  return true;
+  // CR11-005: дело уже обрабатывается пакетным прогоном — не дублируем
+  if (_inFlight.has(uid)) return false;
+  _inFlight.add(uid);
+  try {
+    await processOne(c);
+    return true;
+  } finally {
+    _inFlight.delete(uid);
+  }
 }

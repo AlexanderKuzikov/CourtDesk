@@ -1,12 +1,11 @@
 import { Router, type Request, type Response } from 'express';
-import https from 'https';
-import iconvLite from 'iconv-lite';
 import { getCase, listCases, addCase, updateCase, deleteCase, getStats,
   deleteNotificationsByCase, deleteCard, getCard, saveCard } from '../../store/index.js';
+import { fetchHtml } from '../../search/shared.js';
 import { addEvent as addHistoryEvent, getEvents as getCaseEvents, clearEvents } from '../../store/events.js';
 import { findCourtByCodeOrSubdomain, getRuCaptchaKey } from '../../core/index.js';
 import { getParseAdapter } from '../../parse/index.js';
-import { isCaptchaPage } from '../../core/errors.js';
+import { isCaptchaPage, assertCourtUrl } from '../../core/errors.js';
 import { fetchWithCaptcha } from '../../captcha/session.js'; // CR10-009: static import
 import { runSingle } from '../../scheduler/index.js';
 import type { WatchedCase, CaseStatus } from '../../core/types.js';
@@ -72,6 +71,12 @@ router.post('/api/cases', async (req: Request, res: Response) => {
     if (!url || !courtId || !courtType || !caseNumber) {
       return fail(res, 'BAD_REQUEST', 'url, courtId, courtType, caseNumber обязательны');
     }
+    // CR12-001 FIXED: URL валидируется до любого fetch (защита от SSRF)
+    try {
+      assertCourtUrl(String(url));
+    } catch {
+      return fail(res, 'INVALID_URL', 'URL должен принадлежать судовой системе РФ (*.sudrf.ru или *.msudrf.ru)');
+    }
     const uid = crypto.randomUUID();
     const now = new Date().toISOString();
     const c: WatchedCase = {
@@ -100,14 +105,8 @@ router.post('/api/cases', async (req: Request, res: Response) => {
         const apiKey = getRuCaptchaKey();
 
         try {
-          html = await new Promise<string>((resolve, reject) => {
-            https.get(url, { rejectUnauthorized: false, timeout: 60000,
-              headers: { 'User-Agent': 'CourtDesk/0.1' } }, (res: any) => {
-              const chunks: Buffer[] = [];
-              res.on('data', (c: Buffer) => chunks.push(c));
-              res.on('end', () => { resolve(iconvLite.decode(Buffer.concat(chunks), 'win1251')); });
-            }).on('error', reject);
-          });
+          // CR11-007 FIXED: общий HTTP-слой из search/shared
+          html = await fetchHtml(url);
         } catch { /* fall through to captcha */ }
 
         if (!html || isCaptchaPage(html)) {
@@ -159,6 +158,14 @@ router.post('/api/cases/wait', (req: Request, res: Response) => {
 router.patch('/api/cases/:uid', (req: Request, res: Response) => {
   try {
     const body = req.body ?? {};
+    // CR12-001 FIXED: url в PATCH тоже проходит allowlist (его позже fetchит scheduler)
+    if (typeof body['url'] === 'string' && body['url'] !== '') {
+      try {
+        assertCourtUrl(body['url']);
+      } catch {
+        return fail(res, 'INVALID_URL', 'URL должен принадлежать судовой системе РФ (*.sudrf.ru или *.msudrf.ru)');
+      }
+    }
     const safeUpdates = Object.fromEntries(
       Object.entries(body).filter(([k]) => PATCH_ALLOWED.has(k as keyof WatchedCase)),
     ) as Partial<WatchedCase>;
@@ -207,7 +214,9 @@ router.post('/api/cases/:uid/parse', async (req: Request, res: Response) => {
   const uid = String(req.params['uid']);
   if (!getCase(uid)) return fail(res, 'NOT_FOUND', 'Дело не найдено', 404);
   try {
-    await runSingle(uid);
+    const done = await runSingle(uid);
+    // CR11-005: runSingle вернул false при живом деле = оно уже в пакетном прогоне
+    if (!done) return fail(res, 'PARSE_IN_PROGRESS', 'Дело уже обрабатывается', 409);
     ok(res, getCase(uid));
   } catch (e) { fail(res, 'PARSE_ERROR', 'Ошибка парсинга: ' + errMsg(e), 500); }
 });

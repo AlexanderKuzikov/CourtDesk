@@ -14,17 +14,19 @@ import type { SearchAdapter } from './types.js';
 import { SEARCH_PARAMS } from '../constants.js';
 
 /** Построить URL формы поиска msudrf (name_op=sf, не r) */
-function buildFormUrl(req: SearchRequest): string {
+export function buildFormUrl(req: SearchRequest): string {
   const params = SEARCH_PARAMS.magistrate;
   return `https://${req.courtId}.msudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=sf&delo_id=${params.delo_id}&case_type=${params.case_type}&new=${params.new_ ?? '0'}`;
 }
 
 /** Собрать поля для заполнения формы из SearchRequest */
-function buildFields(req: SearchRequest): Record<string, string> {
+export function buildFields(req: SearchRequest): Record<string, string> {
   const fields: Record<string, string> = {};
   if (req.caseNumber) fields['g1_case__CASE_NUMBERSS'] = req.caseNumber;
-  if (req.defendant) fields['G1_PARTS__NAMESS'] = req.defendant;
-  if (req.plaintiff) fields['G1_PARTS__NAMESS'] = req.plaintiff;
+  // CR12-010 FIXED: G1_PARTS__NAMESS — одно поле участника (как в shared.buildSearchUrl:
+  // defendant || plaintiff). Раньше plaintiff молча перезаписывал defendant.
+  const party = req.defendant || req.plaintiff;
+  if (party) fields['G1_PARTS__NAMESS'] = party;
   if (req.caseUid) fields['g1_case__JUDICIAL_UIDSS'] = req.caseUid;
   if (req.filingDateFrom) fields['g1_case__ENTRY_DATE1D'] = req.filingDateFrom;
   if (req.filingDateTo) fields['g1_case__ENTRY_DATE2D'] = req.filingDateTo;
@@ -37,7 +39,7 @@ function buildFields(req: SearchRequest): Record<string, string> {
  * Колонки msudrf: № дела | Категория/Лица | Судья | Дата решения | Решение
  * (отличается от sudrf, где 7 колонок с датой поступления и вступлением)
  */
-function parseResults(html: string, req: SearchRequest): SearchResult[] {
+export function parseResults(html: string, req: SearchRequest): SearchResult[] {
   const $ = cheerio.load(html);
   const results: SearchResult[] = [];
 
@@ -62,7 +64,8 @@ function parseResults(html: string, req: SearchRequest): SearchResult[] {
 
     results.push({
       caseNumber: num,
-      caseUrl: href.startsWith('http') ? href : `https://${req.courtId}.msudrf.ru${href}`,
+      // FIX: относительный href без ведущего «/» — нормализуем, иначе склейка «.rumodules.php»
+      caseUrl: href.startsWith('http') ? href : `https://${req.courtId}.msudrf.ru/${href.replace(/^\//, '')}`,
       uid: caseIdMatch ? caseIdMatch[1] : '',
       courtCode: req.courtCode,
       judge: cells.eq(2).text().trim() || null,

@@ -69,4 +69,34 @@ describe('PUT /api/settings', () => {
     expect(storeMock.updateSettings).toHaveBeenCalledWith({ scheduleFull: '05:00' });
     expect(storeMock.updateSettings.mock.calls[0][0]).not.toHaveProperty('maliciousField');
   });
+
+  // CR12-015: валидация значений
+  it.each([
+    ['scheduleFull не HH:mm', { scheduleFull: '9:00' }],
+    ['scheduleFull час > 23', { scheduleFull: '25:00' }],
+    ['scheduleFull минута > 59', { scheduleFull: '03:61' }],
+    ['scheduleFull не строка', { scheduleFull: 300 }],
+    ['retryIntervalHours = 0', { retryIntervalHours: 0 }],
+    ['retryIntervalHours отрицательный', { retryIntervalHours: -2 }],
+    ['retryIntervalHours не число', { retryIntervalHours: '3' }],
+    ['retryStaleHours > 720', { retryStaleHours: 10000 }],
+    ['scheduleEnabled не boolean', { scheduleEnabled: 'yes' }],
+  ])('400 INVALID_SETTINGS: %s', async (_name, payload) => {
+    const { default: supertest } = await import('supertest');
+    const res = await (supertest(app) as any).put('/api/settings')
+      .send(payload)
+      .set('Content-Type', 'application/json');
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('INVALID_SETTINGS');
+    expect(storeMock.updateSettings).not.toHaveBeenCalled();
+  });
+
+  it('принимает граничные валидные значения', async () => {
+    const { default: supertest } = await import('supertest');
+    const res = await (supertest(app) as any).put('/api/settings')
+      .send({ scheduleFull: '23:59', retryIntervalHours: 1, retryStaleHours: 720, scheduleEnabled: false })
+      .set('Content-Type', 'application/json');
+    expect(res.status).toBe(200);
+    expect(storeMock.updateSettings).toHaveBeenCalled();
+  });
 });

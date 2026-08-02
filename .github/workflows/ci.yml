@@ -8,8 +8,13 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        # CR12-016 FIXED: Windows добавлен — целевая платформа desktop-приложения
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v4
@@ -23,4 +28,33 @@ jobs:
 
       - run: npx tsc --noEmit
 
+      # CR12-006 FIXED: eslint заменён на Biome (ADR 2026-08-03)
+      - run: npx biome lint
+
       - run: npm test
+
+  # CR12-016 FIXED: Go-код desktop-оболочки компилируется в CI
+  desktop:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: packages/courtdesktop
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: packages/courtdesktop/go.mod
+          cache-dependency-path: packages/courtdesktop/go.sum
+
+      - run: go vet ./...
+
+      - run: go build -ldflags="-s -w -H windowsgui" -o courtdesktop.exe .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: courtdesktop-windows
+          path: packages/courtdesktop/courtdesktop.exe
+          retention-days: 7

@@ -1,6 +1,6 @@
 {
   "name": "courtdesk",
-  "version": "0.5.1",
+  "version": "0.7.0",
   "description": "CRM-оркестратор поиска и мониторинга судебных дел РФ.",
   "keywords": [
     "court",
@@ -35,8 +35,9 @@
     "dev": "npx tsx --watch packages/api/server.ts",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "lint": "npx tsc --noEmit",
-    "lint:eslint": "eslint packages/"
+    "lint:biome": "biome lint"
   },
   "dependencies": {
     "@types/react": "^19.2.17",
@@ -50,13 +51,11 @@
     "react": "^19.2.8"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.6",
     "@types/express": "^5.0.6",
     "@types/node": "^24.13.3",
     "@types/supertest": "^6.0.2",
-    "@typescript-eslint/eslint-plugin": "^8.65.0",
-    "@typescript-eslint/parser": "^8.65.0",
-    "eslint": "^10.8.0",
-    "eslint-config-prettier": "^10.1.8",
+    "@vitest/coverage-v8": "^4.1.10",
     "supertest": "^7.0.0",
     "tsx": "^4.23.0",
     "typescript": "^7.0.2",

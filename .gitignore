@@ -33,6 +33,10 @@ out/
 .nuxt/
 .output
 
+# Go-бинарники (CR11-004/CR12-017): собираются локально, релизы — через GitHub Releases
+*.exe
+courtdesk-tui-linux-*
+
 # IDE
 .vscode/
 .idea/

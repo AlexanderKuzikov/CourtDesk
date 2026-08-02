@@ -3,10 +3,11 @@
 
 import { writeFileSync, mkdirSync, existsSync } from 'fs';
 import { resolve } from 'path';
-import puppeteer, { type Page } from 'puppeteer';
+import type { Page } from 'puppeteer';
 import iconv from 'iconv-lite';
-import { isCaptchaPage } from '../core/errors.js';
+import { isCaptchaPage, assertCourtUrl } from '../core/errors.js';
 import { RuCaptchaClient } from './rucaptcha.js';
+import { getBrowser, releaseBrowser } from './browser.js';
 
 export interface FetchWithCaptchaOptions {
   url: string;
@@ -177,64 +178,59 @@ async function fillAndSubmit(page: Page, searchUrl: string, captchaText: string)
 }
 
 export async function fetchWithCaptcha(options: FetchWithCaptchaOptions): Promise<string> {
-  const headless: boolean | 'shell' = process.env['PUPPETEER_HEADLESS'] === 'false' ? false : 'shell';
-
-  const browser = await puppeteer.launch({
-    headless,
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-features=NetworkServiceInProcess',
-      '--ignore-certificate-errors',
-    ],
-  });
+  assertCourtUrl(options.url);
+  // CR12-009 FIXED: общий браузер из пула вместо launch на каждый вызов
+  const browser = await getBrowser();
 
   try {
     const page = await browser.newPage();
+    try {
+      const MAX_TRIES = 3;
+      for (let attempt = 1; attempt <= MAX_TRIES; attempt++) {
+        await page.goto(options.url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+        let html = await page.content();
+        let mode = detectMode(html);
 
-    const MAX_TRIES = 3;
-    for (let attempt = 1; attempt <= MAX_TRIES; attempt++) {
-      await page.goto(options.url, { waitUntil: 'domcontentloaded', timeout: 60000 });
-      let html = await page.content();
-      let mode = detectMode(html);
+        if (!mode && html.includes(CAPTCHA_ERROR)) {
+          await page.goto(buildFormUrl(options.url), { waitUntil: 'domcontentloaded', timeout: 60000 });
+          html = await page.content();
+          mode = detectMode(html);
+        }
 
-      if (!mode && html.includes(CAPTCHA_ERROR)) {
-        await page.goto(buildFormUrl(options.url), { waitUntil: 'domcontentloaded', timeout: 60000 });
+        if (!mode) return html;
+        if (options.debugDir) ensureDir(options.debugDir);
+
+        const client = new RuCaptchaClient({ apiKey: options.apiKey, softId: options.softId });
+        const imageBase64 = await readCaptchaImageBase64(page, mode);
+        const captchaText = await client.solveImage(imageBase64);
+
+        if (mode === 'msudrf') {
+          await fillCaptchaMsudrf(page, options.url, captchaText);
+        } else {
+          await fillAndSubmit(page, options.url, captchaText);
+        }
+
         html = await page.content();
-        mode = detectMode(html);
+
+        if (options.debugDir) {
+          writeFileSync(resolve(options.debugDir, 'captcha-last.html'), html, 'utf-8');
+        }
+
+        if (isCaptchaPage(html)) continue;
+        if (html.includes(CAPTCHA_ERROR)) {
+          console.warn(`[captcha] attempt ${attempt}/${MAX_TRIES}: wrong captcha, retry`);
+          continue;
+        }
+
+        return html;
       }
 
-      if (!mode) return html;
-      if (options.debugDir) ensureDir(options.debugDir);
-
-      const client = new RuCaptchaClient({ apiKey: options.apiKey, softId: options.softId });
-      const imageBase64 = await readCaptchaImageBase64(page, mode);
-      const captchaText = await client.solveImage(imageBase64);
-
-      if (mode === 'msudrf') {
-        await fillCaptchaMsudrf(page, options.url, captchaText);
-      } else {
-        await fillAndSubmit(page, options.url, captchaText);
-      }
-
-      html = await page.content();
-
-      if (options.debugDir) {
-        writeFileSync(resolve(options.debugDir, 'captcha-last.html'), html, 'utf-8');
-      }
-
-      if (isCaptchaPage(html)) continue;
-      if (html.includes(CAPTCHA_ERROR)) {
-        console.warn(`[captcha] attempt ${attempt}/${MAX_TRIES}: wrong captcha, retry`);
-        continue;
-      }
-
-      return html;
+      throw new Error('Captcha error: решение RuCaptcha не принято сервером после 3 попыток');
+    } finally {
+      await page.close().catch(() => {});
     }
-
-    throw new Error('Captcha error: решение RuCaptcha не принято сервером после 3 попыток');
   } finally {
-    await browser.close().catch(() => {});
+    releaseBrowser();
   }
 }
 
@@ -250,26 +246,30 @@ export { fetchWithCaptcha as fetchMagistrateHtml };
  * - Кнопка "Искать" — <input type="button" class="button-normal search">
  * - Результаты в <div id="search_results">
  */
-export async function fetchMsudrfSearch(options: {
+interface MsudrfSearchOptions {
   formUrl: string;
   fields: Record<string, string>;
   apiKey: string;
   debugDir?: string;
-}): Promise<string> {
-  const headless: boolean | 'shell' = process.env['PUPPETEER_HEADLESS'] === 'false' ? false : 'shell';
-  const browser = await puppeteer.launch({
-    headless,
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-features=NetworkServiceInProcess',
-      '--ignore-certificate-errors',
-    ],
-  });
+}
 
+export async function fetchMsudrfSearch(options: MsudrfSearchOptions): Promise<string> {
+  assertCourtUrl(options.formUrl);
+  // CR12-009 FIXED: общий браузер из пула
+  const browser = await getBrowser();
   try {
     const page = await browser.newPage();
+    try {
+      return await runMsudrfSearch(page, options);
+    } finally {
+      await page.close().catch(() => {});
+    }
+  } finally {
+    releaseBrowser();
+  }
+}
 
+async function runMsudrfSearch(page: Page, options: MsudrfSearchOptions): Promise<string> {
     // Шаг 1: открываем форму поиска (покажет kcaptchaForm)
     await page.goto(options.formUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
@@ -278,7 +278,7 @@ export async function fetchMsudrfSearch(options: {
     const MAX_TRIES = 3;
 
     for (let attempt = 1; attempt <= MAX_TRIES; attempt++) {
-      let pageHtml = await page.content();
+      const pageHtml = await page.content();
 
       // Если капчи нет — выходим из цикла
       if (!pageHtml.includes('kcaptchaForm')) break;
@@ -362,9 +362,6 @@ export async function fetchMsudrfSearch(options: {
     }
 
     return resultsHtml || (await page.content());
-  } finally {
-    await browser.close().catch(() => {});
-  }
 }
 
 function ensureDir(dir: string): void {

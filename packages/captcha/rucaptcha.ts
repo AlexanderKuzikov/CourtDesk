@@ -2,6 +2,8 @@
 // RuCaptcha API v2 (api.rucaptcha.com) — createTask / getTaskResult
 // Docs: https://rucaptcha.com/api-docs/normal-captcha
 
+import logger from '../core/logger.js';
+
 const API_BASE = 'https://api.rucaptcha.com';
 const NETWORK_RETRY_LIMIT = 2;
 
@@ -28,7 +30,8 @@ export class RuCaptchaClient {
   async solveImage(imageBase64: string): Promise<string> {
     const taskId = await this.createTask(imageBase64);
     const result = await this.pollResult(taskId);
-    console.log('[rucaptcha] solved:', result);
+    // CR11-012 FIXED: не логируем сам результат капчи
+    logger.debug({ taskId }, '[rucaptcha] captcha solved');
     return result;
   }
 

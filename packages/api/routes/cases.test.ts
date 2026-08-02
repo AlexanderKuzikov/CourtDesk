@@ -65,7 +65,10 @@ vi.mock('../../store/events.js', () => eventsMock);
 vi.mock('../../core/index.js', () => mockCore);
 vi.mock('../../parse/index.js', () => mockParse);
 vi.mock('../../captcha/session.js', () => mockCaptcha);
-vi.mock('../../core/errors.js', () => ({ isCaptchaPage: vi.fn(() => false) }));
+vi.mock('../../core/errors.js', async () => {
+  const actual = await vi.importActual<typeof import('../../core/errors.js')>('../../core/errors.js');
+  return { ...actual, isCaptchaPage: vi.fn(() => false) };
+});
 vi.mock('../../scheduler/index.js', () => schedulerMock);
 
 async function buildApp(): Promise<Express> {
@@ -198,6 +201,44 @@ describe('POST /api/cases — add to monitoring', () => {
     });
     expect(res.body.data.userId).toBe('1c-001');
   });
+
+  // CR12-001: SSRF — url из req.body не должен уходить в fetch без allowlist
+  it('400 INVALID_URL если url не судебный (SSRF)', async () => {
+    const res = await req(app, 'post', '/api/cases', {
+      url: 'http://169.254.169.254/latest/meta-data', courtId: 'kirov--perm',
+      courtType: 'district', caseNumber: '2-100/2026',
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('INVALID_URL');
+    expect(storeMock.addCase).not.toHaveBeenCalled();
+  });
+
+  it('400 INVALID_URL если url судебный, но http (не https)', async () => {
+    const res = await req(app, 'post', '/api/cases', {
+      url: 'http://kirov--perm.sudrf.ru/modules.php', courtId: 'kirov--perm',
+      courtType: 'district', caseNumber: '2-100/2026',
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('INVALID_URL');
+  });
+
+  it('400 INVALID_URL если url не парсится', async () => {
+    const res = await req(app, 'post', '/api/cases', {
+      url: 'not-a-url', courtId: 'kirov--perm',
+      courtType: 'district', caseNumber: '2-100/2026',
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('INVALID_URL');
+  });
+
+  it('принимает msudrf URL', async () => {
+    const res = await req(app, 'post', '/api/cases', {
+      url: 'https://msudrf.ru/modules.php?name_op=case&case_id=1', courtId: 'msudrf',
+      courtType: 'magistrate', caseNumber: '2-100/2026',
+    });
+    expect(res.status).toBe(200);
+    expect(storeMock.addCase).toHaveBeenCalledTimes(1);
+  });
 });
 
 // ---------- EVENTS ----------
@@ -309,6 +350,20 @@ describe('PATCH /api/cases/:uid — whitelist (BUG-004)', () => {
     expect(res.body.success).toBe(false);
     expect(res.body.code).toBe('NOT_FOUND');
   });
+
+  // CR12-001: url в PATCH тоже проходит allowlist
+  it('400 INVALID_URL при замене url на не-судебный', async () => {
+    const res = await req(app, 'patch', '/api/cases/u1', { url: 'https://evil.example.com/x' });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('INVALID_URL');
+    expect(storeMock.updateCase).not.toHaveBeenCalled();
+  });
+
+  it('пропускает валидный судебный url в PATCH', async () => {
+    const res = await req(app, 'patch', '/api/cases/u1', { url: 'https://kirov--perm.sudrf.ru/modules.php?case_id=2' });
+    expect(res.status).toBe(200);
+    expect(storeMock.updateCase).toHaveBeenCalledWith('u1', { url: 'https://kirov--perm.sudrf.ru/modules.php?case_id=2' });
+  });
 });
 
 // ---------- DELETE ----------
@@ -402,5 +457,13 @@ describe('POST /api/cases/:uid/parse — ручной перепарсинг д�
     const res = await req(app, 'post', '/api/cases/u1/parse');
     expect(res.status).toBe(500);
     expect(res.body.code).toBe('PARSE_ERROR');
+  });
+
+  it('409 PARSE_IN_PROGRESS если дело уже в пакетном прогоне (CR11-005)', async () => {
+    storeMock.getCase.mockReturnValue(baseCase);
+    schedulerMock.runSingle.mockResolvedValue(false);
+    const res = await req(app, 'post', '/api/cases/u1/parse');
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('PARSE_IN_PROGRESS');
   });
 });

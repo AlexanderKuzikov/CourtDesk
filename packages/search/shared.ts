@@ -5,11 +5,13 @@ import * as cheerio from 'cheerio';
 import iconv from 'iconv-lite';
 import https from 'https';
 import { encodeParam } from '../core/encoding.js';
-import { isCaptchaPage } from '../core/errors.js';
+import { isCaptchaPage, assertCourtUrl } from '../core/errors.js';
 import { getRuCaptchaKey } from '../core/config.js';
 import type { SearchRequest, SearchResult } from '../core/types.js';
 
 export function fetchHtml(url: string): Promise<string> {
+  // CR11-002: rejectUnauthorized:false допустим только за allowlist'ом судовых доменов
+  assertCourtUrl(url);
   return new Promise((resolve, reject) => {
     const parsed = new URL(url);
     https.get({
@@ -40,13 +42,14 @@ export function fetchHtml(url: string): Promise<string> {
 
 /** fetchHtml с fallback на captcha-resolution при детекте капчи */
 export async function smartFetch(url: string, alwaysCaptcha = false): Promise<string> {
+  assertCourtUrl(url);
   if (alwaysCaptcha) {
     const apiKey = getRuCaptchaKey();
     if (!apiKey) throw new Error('Для этого типа суда требуется ключ RuCaptcha в .env');
     const { fetchWithCaptcha } = await import('../captcha/session.js');
     return fetchWithCaptcha({ url, apiKey });
   }
-  let html = await fetchHtml(url);
+  const html = await fetchHtml(url);
   // После plain fetch проверяем, нет ли капчи или ошибки капчи
   if (html.includes('Неверно указан проверочный код')) {
     const apiKey = getRuCaptchaKey();
@@ -55,8 +58,9 @@ export async function smartFetch(url: string, alwaysCaptcha = false): Promise<st
     return fetchWithCaptcha({ url, apiKey });
   }
   if (!isCaptchaPage(html)) return html;
+  // CR12-012 FIXED: HTML капчи не возвращается как результат — явная ошибка
   const apiKey = getRuCaptchaKey();
-  if (!apiKey) return html;
+  if (!apiKey) throw new Error('Сервер требует капчу, но RUCAPTCHA_API_KEY не задан');
   const { fetchWithCaptcha } = await import('../captcha/session.js');
   return fetchWithCaptcha({ url, apiKey });
 }

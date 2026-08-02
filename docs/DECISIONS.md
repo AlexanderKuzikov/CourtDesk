@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-08-03: Biome вместо ESLint
+
+**Решение:** ESLint удалён (typescript-eslint не поддерживает TS 7 — CR12-006). Линтер — Biome (`npm run lint:biome`, конфиг `biome.json`): preset recommended, useConst/noVar — error, noExplicitAny/noConsole/noUnusedVariables — warn. Скоуп: `packages/**/*.ts(x)` кроме замороженного `packages/tui/`. Форматтер Biome не включён — переформатирование всей базы отдельным решением не одобрено.
+
+**Обоснование:** Biome не зависит от typescript-eslint (свой парсер), один бинарник, работает с TS 7. Типизацию по-прежнему проверяет `tsc --noEmit` (`npm run lint`).
+
+**Trade-off:** правила на основе type-information (как `project: tsconfig.json` у eslint) недоступны; 112 warn + 90 info легаси-шума не гейтятся (гейт — только error).
+
+---
+
+## 2026-08-03: TLS-верификация отключена только за allowlist'ом судовых доменов
+
+**Решение:** `rejectUnauthorized: false` остаётся на всех HTTPS-запросах к судам (кривые цепочки сертификатов sudrf/msudrf — реальность), но каждый fetch-путь теперь проходит через `assertCourtUrl()` (allowlist `*.sudrf.ru` / `*.msudrf.ru`, только https). Проверка добавлена во все точки выхода: `api/routes/cases.ts` (POST и PATCH), `api/routes/parse.ts`, `scheduler/orchestrator.ts`, `search/shared.ts` (fetchHtml, smartFetch), `captcha/session.ts` (fetchWithCaptcha, fetchMsudrfSearch).
+
+**Обоснование:** включение верификации ломает парсинг части судов (самозаверенные/неполные цепочки); SSRF-риск от отключённой верификации снимается allowlist'ом — внешний URL не достигает fetch.
+
+**Trade-off:** MITM в пределах доверенных доменов теоретически возможен. Принято: система работает в изолированной LAN заказчика (см. ADR 2026-08-02 про открытость API), а целевые домены — государственные системы ГАС «Правосудие».
+
+---
+
 ## 2026-08-02: WebView-оболочка — единственный клиент; TUI заморожены
 
 **Решение:** Развитие UI идёт только по пути Go+WebView (`packages/courtdesktop/`) поверх Web UI (`packages/viewer/public/`). `packages/tui/` (Node) и `packages/tui-go/` (Bubble Tea) заморожены — код сохраняется, но не дорабатывается и не тестируется. Все новые UI-функции — в viewer, оболочка их просто отображает.
