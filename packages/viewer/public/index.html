@@ -237,7 +237,6 @@ function renderTable() {
       <td>${esc(c.legalForceDate || '—')}</td>
       <td style="font-size:11px;color:var(--text-dim)">${formatTime(c.updatedAt)}</td>
       <td class="action-btns">
-        <span class="icon-btn" title="Детали" onclick="openDetail('${esc(c.uid)}')">👁</span>
         ${c.status !== 'archived'
           ? `<span class="icon-btn" title="Архивировать" onclick="archiveCase('${esc(c.uid)}')">📦</span>`
           : `<span class="icon-btn" title="Вернуть" onclick="unarchiveCase('${esc(c.uid)}')">↩</span>`}

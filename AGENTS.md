@@ -7,7 +7,7 @@
 - **test:** `npm test` — vitest (94 теста)
 - **lint:** `npm run lint` — tsc --noEmit
 - **lint:eslint:** `npm run lint:eslint` — eslint packages/ (⚠️ сломан: TS 7.0 не поддерживается)
-- **build:desktop:** `go build -ldflags="-s -w" -o courtdesktop.exe .` (в `packages/courtdesktop/`)
+- **build:desktop:** `go build -ldflags="-s -w -H windowsgui" -o courtdesktop.exe .` (в `packages/courtdesktop/`; `-H windowsgui` обязателен — без него рядом открывается чёрное консольное окно)
 
 ## Conventions
 

@@ -3,7 +3,10 @@ package main
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
 	"html"
+	"log"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -28,6 +31,24 @@ type ConnResult struct {
 const defaultAPIURL = "http://127.0.0.1:8767"
 const defaultTheme = "slate"
 const maxRecentURLs = 5
+
+var lg *log.Logger
+
+func initLog() {
+	path := filepath.Join(os.TempDir(), "courtdesktop.log")
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return
+	}
+	lg = log.New(f, "", log.LstdFlags)
+	lg.Printf("=== courtdesktop start ===")
+}
+
+func logf(format string, args ...interface{}) {
+	if lg != nil {
+		lg.Printf(format, args...)
+	}
+}
 
 func profilePath() string {
 	home, _ := os.UserHomeDir()
@@ -74,39 +95,51 @@ func checkHealth(baseURL string) bool {
 	client := &http.Client{Timeout: 2 * time.Second}
 	resp, err := client.Get(normalizeURL(baseURL) + "/api/health")
 	if err != nil {
+		logf("health FAIL %s: %v", baseURL, err)
 		return false
 	}
 	defer resp.Body.Close()
-	return resp.StatusCode == http.StatusOK
+	ok := resp.StatusCode == http.StatusOK
+	logf("health %s -> %d ok=%v", baseURL, resp.StatusCode, ok)
+	return ok
 }
 
 func main() {
+	initLog()
+
 	fullscreen := flag.Bool("fullscreen", false, "Full-screen mode")
 	flag.Parse()
 
 	profile := loadProfile()
+	logf("profile apiUrl=%q theme=%q recent=%v", profile.APIURL, profile.ThemeName, profile.RecentURLs)
 
 	w := webview.New(!*fullscreen)
 	defer w.Destroy()
 
 	w.SetTitle("CourtDesk")
 	w.SetSize(1920, 1080, webview.HintNone)
-
 	if *fullscreen {
 		w.SetSize(1920, 1080, webview.HintMax)
 	}
 
 	a := &jsAPI{profile: profile, w: w, done: make(chan struct{})}
 	if err := bindAPI(w, a); err != nil {
+		logf("bind error: %v", err)
 		showError("CourtDesk", "Не удалось инициализировать приложение: "+err.Error())
 		os.Exit(1)
 	}
-	w.Init(`window.courtdesk={GetSettings:__cd_getSettings,SaveSettings:__cd_saveSettings,TestConnection:__cd_testConnection,Connect:__cd_connect,OpenSettings:__cd_openSettings,GoBack:__cd_goBack};`)
+
+	srv, localURL := startLocalServer(a)
+	a.localURL = localURL
+	logf("local server at %s", localURL)
+	defer srv.Close()
 
 	if checkHealth(profile.APIURL) {
+		logf("startup -> app")
 		a.goApp(profile.APIURL)
 	} else {
-		a.showConnect("Сервер недоступен. Укажите адрес сервера.", false)
+		logf("startup -> connect")
+		a.showConnect("Сервер недоступен. Укажите адрес сервера.")
 	}
 
 	go a.watch()
@@ -116,12 +149,13 @@ func main() {
 }
 
 type jsAPI struct {
-	mu      sync.Mutex
-	profile *Profile
-	w       webview.WebView
-	mode    string
-	fails   int
-	done    chan struct{}
+	mu       sync.Mutex
+	profile  *Profile
+	w        webview.WebView
+	localURL string
+	mode     string
+	fails    int
+	done     chan struct{}
 }
 
 func bindAPI(w webview.WebView, a *jsAPI) error {
@@ -130,7 +164,6 @@ func bindAPI(w webview.WebView, a *jsAPI) error {
 		"__cd_saveSettings":   a.SaveSettings,
 		"__cd_testConnection": a.TestConnection,
 		"__cd_connect":        a.Connect,
-		"__cd_openSettings":   a.OpenSettings,
 		"__cd_goBack":         a.GoBack,
 	} {
 		if err := w.Bind(name, fn); err != nil {
@@ -155,6 +188,7 @@ func (a *jsAPI) SaveSettings(apiURL, themeName string) {
 	}
 	a.pushRecentLocked(a.profile.APIURL)
 	_ = saveProfile(a.profile)
+	logf("settings saved apiUrl=%q theme=%q", a.profile.APIURL, a.profile.ThemeName)
 }
 
 func (a *jsAPI) TestConnection(rawURL string) ConnResult {
@@ -175,11 +209,8 @@ func (a *jsAPI) Connect(rawURL string) {
 	a.pushRecentLocked(url)
 	_ = saveProfile(a.profile)
 	a.mu.Unlock()
+	logf("connect -> %s", url)
 	a.goApp(url)
-}
-
-func (a *jsAPI) OpenSettings() {
-	a.showSettings()
 }
 
 func (a *jsAPI) GoBack() {
@@ -189,7 +220,7 @@ func (a *jsAPI) GoBack() {
 	if checkHealth(url) {
 		a.goApp(url)
 	} else {
-		a.showConnect("Сервер недоступен", false)
+		a.showConnect("Сервер недоступен")
 	}
 }
 
@@ -214,20 +245,18 @@ func (a *jsAPI) goApp(url string) {
 	a.w.Navigate(url)
 }
 
+func (a *jsAPI) showConnect(msg string) {
+	a.mu.Lock()
+	a.mode = "connect"
+	a.mu.Unlock()
+	a.w.Navigate(a.localURL + "/connect?msg=" + urlQueryEscape(msg))
+}
+
 func (a *jsAPI) showSettings() {
 	a.mu.Lock()
 	a.mode = "settings"
-	p := *a.profile
 	a.mu.Unlock()
-	a.w.SetHtml(settingsPage(&p))
-}
-
-func (a *jsAPI) showConnect(msg string, ok bool) {
-	a.mu.Lock()
-	a.mode = "connect"
-	p := *a.profile
-	a.mu.Unlock()
-	a.w.SetHtml(connectPage(&p, msg, ok))
+	a.w.Navigate(a.localURL + "/settings")
 }
 
 func (a *jsAPI) watch() {
@@ -252,21 +281,32 @@ func (a *jsAPI) tick() {
 	ok := checkHealth(url)
 
 	a.mu.Lock()
-	defer a.mu.Unlock()
+	mode = a.mode
+	var action string
 	switch {
 	case mode == "app" && !ok:
 		a.fails++
 		if a.fails >= 3 {
 			a.fails = 0
 			a.mode = "connect"
-			a.w.Dispatch(func() { a.showConnect("Связь с сервером потеряна", false) })
+			action = "app->connect"
 		}
 	case mode == "app" && ok:
 		a.fails = 0
-	case mode == "connect" && ok:
+	case mode != "app" && ok:
 		a.mode = "app"
 		a.fails = 0
-		a.w.Dispatch(func() { a.w.Navigate(url) })
+		action = "connect->app"
+	}
+	a.mu.Unlock()
+
+	switch action {
+	case "app->connect":
+		logf("watcher: lost server, show connect")
+		a.w.Dispatch(func() { a.showConnect("Связь с сервером потеряна") })
+	case "connect->app":
+		logf("watcher: server back, go app %s", url)
+		a.w.Dispatch(func() { a.goApp(url) })
 	}
 }
 
@@ -282,6 +322,144 @@ func (a *jsAPI) onHotkeySettings() {
 			a.GoBack()
 		}
 	})
+}
+
+func urlQueryEscape(s string) string {
+	r := strings.NewReplacer("%", "%25", "&", "%26", "+", "%2B", " ", "+", "\n", "%0A", "\r", "")
+	return r.Replace(s)
+}
+
+func startLocalServer(a *jsAPI) (*http.Server, string) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/connect", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprint(w, a.connectHTML(r.URL.Query().Get("msg")))
+	})
+	mux.HandleFunc("/settings", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprint(w, a.settingsHTML())
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/connect?msg=Подключение", http.StatusFound)
+	})
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		showError("CourtDesk", "Не удалось запустить локальный сервер: "+err.Error())
+		os.Exit(1)
+	}
+	port := ln.Addr().(*net.TCPAddr).Port
+	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
+	go func() { _ = srv.Serve(ln) }()
+	return srv, fmt.Sprintf("http://127.0.0.1:%d", port)
+}
+
+func (a *jsAPI) settingsHTML() string {
+	a.mu.Lock()
+	p := *a.profile
+	a.mu.Unlock()
+	apiURL := html.EscapeString(p.APIURL)
+	theme := html.EscapeString(p.ThemeName)
+	return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>CourtDesk — Настройки</title>
+<style>` + pageStyles() + `</style>
+</head>
+<body data-theme="` + theme + `">
+<h1>Настройки</h1>
+<div class="subtitle">CourtDesk</div>
+<div class="card">
+  <label>Адрес сервера</label>
+  <input id="apiUrl" value="` + apiURL + `" placeholder="http://127.0.0.1:8767">
+  <label>Тема</label>
+  <select id="theme">` + themeOptions(p.ThemeName) + `</select>
+  <button onclick="saveConnect()">Сохранить и подключиться</button>
+  <button class="secondary" onclick="test()">Проверить</button>
+  <button class="secondary" onclick="back()">Назад</button>
+  <div class="status" id="status"></div>
+</div>
+<div class="hint">Ctrl+, — открыть/закрыть настройки.</div>
+<script>` + pageScript() + `</script>
+</body>
+</html>`
+}
+
+func (a *jsAPI) connectHTML(msg string) string {
+	a.mu.Lock()
+	p := *a.profile
+	a.mu.Unlock()
+	if msg == "" {
+		msg = "Сервер недоступен"
+	}
+	apiURL := html.EscapeString(p.APIURL)
+	theme := html.EscapeString(p.ThemeName)
+	var recent strings.Builder
+	for _, u := range p.RecentURLs {
+		eu := html.EscapeString(u)
+		recent.WriteString(`<li data-url="` + eu + `">` + eu + `</li>`)
+	}
+	recentBlock := ""
+	if recent.Len() > 0 {
+		recentBlock = `<label>Недавние серверы</label><ul class="recent" id="recent">` + recent.String() + `</ul>`
+	}
+	return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>CourtDesk — Подключение</title>
+<style>` + pageStyles() + `</style>
+</head>
+<body data-theme="` + theme + `">
+<h1>Подключение к серверу</h1>
+<div class="subtitle">CourtDesk</div>
+<div class="card">
+  <div class="status err" id="status">` + html.EscapeString(msg) + `</div>
+  <label style="margin-top:16px">Адрес сервера</label>
+  <input id="apiUrl" value="` + apiURL + `" placeholder="http://127.0.0.1:8767">
+  <button onclick="connect()">Подключиться</button>
+  <button class="secondary" onclick="test()">Проверить</button>
+</div>
+<div class="card" id="recentCard" style="display:none">` + recentBlock + `</div>
+<div class="hint">Если сервер запущен на этом компьютере, убедитесь, что выполнена команда: npm start</div>
+<script>` + pageScript() + `
+  const recentCard = document.getElementById('recentCard');
+  if (document.getElementById('recent')) {
+    recentCard.style.display = '';
+    document.getElementById('recent').addEventListener('click', function(e) {
+      const li = e.target.closest('li');
+      if (li) { urlInput.value = li.dataset.url; connect(); }
+    });
+  }
+</script>
+</body>
+</html>`
+}
+
+func pageScript() string {
+	return `
+  const urlInput = document.getElementById('apiUrl');
+  const themeSelect = document.getElementById('theme');
+  const status = document.getElementById('status');
+  if (themeSelect) themeSelect.addEventListener('change', function() {
+    document.body.setAttribute('data-theme', this.value);
+  });
+  async function test() {
+    status.textContent = 'Проверка…';
+    status.className = 'status';
+    const r = await __cd_testConnection(urlInput.value);
+    if (r.ok) { status.textContent = 'Сервер доступен'; status.className = 'status ok'; }
+    else { status.textContent = r.error; status.className = 'status err'; }
+    return r.ok;
+  }
+  async function connect() { if (await test()) __cd_connect(urlInput.value); }
+  async function saveConnect() {
+    await __cd_saveSettings(urlInput.value, themeSelect.value);
+    if (await test()) __cd_connect(urlInput.value);
+  }
+  function back() { __cd_goBack(); }
+`
 }
 
 func pageStyles() string {
@@ -315,7 +493,6 @@ func pageStyles() string {
   input, select { width:100%; padding:10px 12px; background:var(--input-bg); color:var(--fg); border:1px solid var(--border); border-radius:8px; font-size:14px; margin-bottom:16px; }
   button { padding:10px 24px; background:var(--primary); color:#000; border:none; border-radius:8px; font-size:14px; cursor:pointer; font-weight:600; margin-right:10px; }
   button:hover { opacity:0.9; }
-  button:disabled { opacity:0.5; cursor:default; }
   button.secondary { background:var(--surface); color:var(--fg); border:1px solid var(--border); }
   .status { margin-top:12px; font-size:13px; opacity:0.7; }
   .status.ok { opacity:1; color:var(--primary); }
@@ -344,134 +521,4 @@ func themeOptions(selected string) string {
 		b.WriteString(`<option value="` + o.value + `"` + sel + `>` + o.label + `</option>`)
 	}
 	return b.String()
-}
-
-func settingsPage(p *Profile) string {
-	apiURL := html.EscapeString(p.APIURL)
-	theme := html.EscapeString(p.ThemeName)
-	return `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<title>CourtDesk — Настройки</title>
-<style>` + pageStyles() + `</style>
-</head>
-<body data-theme="` + theme + `">
-<h1>Настройки</h1>
-<div class="subtitle">CourtDesk</div>
-<div class="card">
-  <label>Адрес сервера</label>
-  <input id="apiUrl" value="` + apiURL + `" placeholder="http://127.0.0.1:8767">
-  <label>Тема</label>
-  <select id="theme">` + themeOptions(p.ThemeName) + `</select>
-  <button onclick="saveConnect()">Сохранить и подключиться</button>
-  <button class="secondary" onclick="test()">Проверить</button>
-  <button class="secondary" onclick="back()">Назад</button>
-  <div class="status" id="status"></div>
-</div>
-<div class="hint">Ctrl+, — открыть/закрыть настройки.</div>
-<script>
-  const urlInput = document.getElementById('apiUrl');
-  const themeSelect = document.getElementById('theme');
-  const status = document.getElementById('status');
-  themeSelect.addEventListener('change', function() {
-    document.body.setAttribute('data-theme', this.value);
-  });
-  async function test() {
-    status.textContent = 'Проверка…';
-    status.className = 'status';
-    const r = await courtdesk.TestConnection(urlInput.value);
-    if (r.ok) {
-      status.textContent = 'Сервер доступен';
-      status.className = 'status ok';
-    } else {
-      status.textContent = r.error;
-      status.className = 'status err';
-    }
-    return r.ok;
-  }
-  async function saveConnect() {
-    await courtdesk.SaveSettings(urlInput.value, themeSelect.value);
-    if (await test()) {
-      courtdesk.Connect(urlInput.value);
-    }
-  }
-  function back() {
-    courtdesk.GoBack();
-  }
-</script>
-</body>
-</html>`
-}
-
-func connectPage(p *Profile, msg string, ok bool) string {
-	apiURL := html.EscapeString(p.APIURL)
-	theme := html.EscapeString(p.ThemeName)
-	statusClass := "status err"
-	if ok {
-		statusClass = "status ok"
-	}
-	var recent strings.Builder
-	for _, u := range p.RecentURLs {
-		eu := html.EscapeString(u)
-		recent.WriteString(`<li data-url="` + eu + `">` + eu + `</li>`)
-	}
-	recentBlock := ""
-	if recent.Len() > 0 {
-		recentBlock = `<label>Недавние серверы</label><ul class="recent" id="recent">` + recent.String() + `</ul>`
-	}
-	return `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<title>CourtDesk — Подключение</title>
-<style>` + pageStyles() + `</style>
-</head>
-<body data-theme="` + theme + `">
-<h1>Подключение к серверу</h1>
-<div class="subtitle">CourtDesk</div>
-<div class="card">
-  <div class="` + statusClass + `" id="status">` + html.EscapeString(msg) + `</div>
-  <label style="margin-top:16px">Адрес сервера</label>
-  <input id="apiUrl" value="` + apiURL + `" placeholder="http://127.0.0.1:8767">
-  <button onclick="connect()">Подключиться</button>
-  <button class="secondary" onclick="test()">Проверить</button>
-</div>
-<div class="card" id="recentCard" style="display:none">` + recentBlock + `</div>
-<div class="hint">Если сервер запущен на этом компьютере, убедитесь, что выполнена команда: npm start</div>
-<script>
-  const urlInput = document.getElementById('apiUrl');
-  const status = document.getElementById('status');
-  const recentCard = document.getElementById('recentCard');
-  if (document.getElementById('recent')) {
-    recentCard.style.display = '';
-    document.getElementById('recent').addEventListener('click', function(e) {
-      const li = e.target.closest('li');
-      if (li) {
-        urlInput.value = li.dataset.url;
-        connect();
-      }
-    });
-  }
-  async function test() {
-    status.textContent = 'Проверка…';
-    status.className = 'status';
-    const r = await courtdesk.TestConnection(urlInput.value);
-    if (r.ok) {
-      status.textContent = 'Сервер доступен';
-      status.className = 'status ok';
-    } else {
-      status.textContent = r.error;
-      status.className = 'status err';
-    }
-    return r.ok;
-  }
-  async function connect() {
-    if (await test()) {
-      courtdesk.Connect(urlInput.value);
-    }
-  }
-</script>
-</body>
-</html>`
 }
