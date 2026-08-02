@@ -2,67 +2,48 @@
 
 > CRM-система поиска и мониторинга судебных дел РФ.
 > Единый сервис для интеграции с 1С, Web UI и Desktop App на Go+WebView.
-> Последнее обновление: 2026-08-02
+> Последнее обновление: 2026-08-03
 
 ---
 
 ## Статус
 
-**v0.7.0** — Desktop App на Go+WebView (6 MB). Web UI: Terminal + Skins + прогресс мониторинга. API: 97 тестов, 26 эндпоинтов. Node ≥22.
+**v0.7.1** — стабилизация: закрыты все 6 блокеров (SSRF, TLS-allowlist, store-races, бинарники в git). 180 тестов, coverage-гейт, Biome, CI Windows+Go. Node ≥22.
 
 | Компонент | Статус | Заметка |
 |-----------|--------|---------|
 | Архитектура | ✅ Утверждена | docs/ARCHITECTURE.md |
-| API-контракты | ✅ 25 эндпоинтов | docs/API.md |
+| API-контракты | ✅ 26 эндпоинтов | docs/API.md, parse=async |
 | Core (типы) | ✅ errorCount, lastError, enforcedAt | |
-| Security (URL allowlist) | ✅ assertCourtUrl | ⚠️ не применён в cases.ts |
-| Store integrity | ✅ corrupt backup + throw | |
-| Captcha | ✅ msudrf AJAX + sudrf form | |
+| Security (URL allowlist) | ✅ assertCourtUrl | применён во всех fetch-точках (ADR 2026-08-03) |
+| Store integrity | ✅ corrupt backup + throw | tmp-файлы через randomUUID |
+| Captcha | ✅ msudrf AJAX + sudrf form | пул браузера Puppeteer |
 | Search | ✅ msudrf переписан (AJAX) | |
-| Parse | ✅ sync parse при добавлении | |
-| Scheduler | ✅ cron + double-fire guard | |
+| Parse | ✅ sync/async parse при добавлении | parse=async → 202 |
+| Scheduler | ✅ cron + лок прогонов в orchestrator | общий для API и cron |
 | Store | ✅ каскадное удаление + settings | |
 | API | ✅ 26 эндпоинтов | open LAN, без auth (ADR 2026-08-02) |
-| Viewer (Dashboard) | ⚠️ см. open-проблемы | |
-| Viewer (Search) | ⚠️ см. open-проблемы | |
-| Viewer (Terminal) | ✅ Bloomberg-style | |
+| Viewer (Dashboard) | ✅ attention-bar, progress bar, CSV, retry | |
+| Viewer (Search) | ✅ async-добавление, retry | |
+| Viewer (Terminal) | ✅ Bloomberg-style | hover-дедупликация |
 | Viewer (Skins) | ✅ 3 skin × 5 themes | |
 | Desktop App | ✅ Go+WebView, 6 MB | startup-подключение, watcher, Ctrl+, |
 | TUI (Node) | ❄ Заморожен | ADR 2026-08-02 |
 | TUI (Go) | ❄ Заморожен | ADR 2026-08-02 |
-| API tests | ✅ 94 теста | |
-| eslint | ⚠️ Сломан | TS 7.0 не поддерживается |
+| API tests | ✅ 180 тестов, coverage-гейт 44/38/38/42 | |
+| Линтер | ✅ Biome (вместо eslint) | ADR 2026-08-03 |
+| CI | ✅ ubuntu+windows, tsc+biome+test, go build | |
 
 ---
 
 ## Open-проблемы
 
-### BLOCKER
-
-| # | Описание | Файл |
-|---|----------|------|
-| CR12-001 | **SSRF.** `url` из `req.body` в `https.get()` без `assertCourtUrl()` | `api/routes/cases.ts:102` |
-| CR12-003 | **Утечка RuCaptcha-ключа.** txt-файлы = фрагменты ключа, git tracked (ротация отложена 2026-08-02) | корень репо |
-| CR11-002 | **rejectUnauthorized: false** на всех HTTPS | search, orchestrator, cases |
-| CR11-003 | **Race condition в store** (read-modify-write) | store/* |
-| CR11-004 | **Бинарники в git** (~20 MB) | courtdesktop.exe, tui-go .exe |
-| CR11-005 | **_isRunning guard неатомарен** + cron параллелизм | api/routes/parse.ts |
-
 ### HIGH
 
 | # | Описание |
 |---|----------|
-| CR11-006 | Нет тестов для parse/search/captcha (~40% кода) |
-| CR11-007 | Дублирование fetchHtml (search vs scheduler) |
-| CR12-006 | ESLint сломан: typescript-eslint не поддерживает TS 7.0 |
-| CR12-009 | Puppeteer: новый браузер на каждый вызов, --no-sandbox |
-| CR12-010 | magistrate.ts: plaintiff перезаписывает defendant |
-| CR12-011 | logs/courtdesk.log tracked в git |
-| CR12-016 | CI: Go не компилируется, нет Windows matrix |
-| CR12-017 | .gitignore без *.exe; .git = 95 MB |
-| WEBUI-O1 | Skeleton-загрузчики |
+| CR11-006 | Тесты parse/search/captcha: закрыты magistrate/district/rucaptcha/shared/browser; appeal/cassation parse-адаптеры всё ещё без фикстур |
 | WEBUI-O2 | Мобильная адаптация |
-| WEBUI-O3 | Дашборд «требует внимания» |
 | WEBUI-O4 | Карточка дела: вкладки/аккордеон |
 | WEBUI-O5 | Календарь по legalForceDate |
 
@@ -70,28 +51,18 @@
 
 | # | Описание |
 |---|----------|
-| CR11-008 | Версия health (0.4.0) ≠ package.json (0.5.1) ≠ README (0.7.0) |
-| CR11-010 | Мёртвые зависимости: react, ink, @types/react |
-| CR11-011 | POST /api/cases?parse=true — sync до 2 мин |
+| CR11-010 | Зависимости react/ink/@types/react — при замороженном packages/tui (до решения об удалении) |
 | CR12-004 | Navigation guard в courtdesktop: нет navigate handler в webview_go (XSS встроенных страниц закрыт 2026-08-02) |
-| CR12-012 | shared.ts:59 — HTML капчи как результат |
-| CR12-013 | cron.ts: local time vs UTC рассинхрон |
-| CR12-014 | error middleware отдаёт err.message клиенту |
-| CR12-015 | settings: нет валидации значений |
 | CR12-019 | store: кэши без eviction |
-| CR12-020 | 8 коммитов с сообщением «.» |
+| CR12-020 | 15 коммитов с сообщением «.» в истории (не переписывается осознанно; новые — по конвенции) |
 | WEBUI-O6 | Массовые операции |
-| WEBUI-O7 | Экспорт в CSV |
-| WEBUI-O8 | Визуальный progress bar |
 | WEBUI-O9 | Фильтр по userId |
 | WEBUI-O10 | Вынос JS из HTML |
-| WEBUI-O11 | Retry + сообщения при ошибках |
 
 ### LOW
 
 | # | Описание |
 |---|----------|
-| CR11-012 | console.log результата капчи |
 | WEBUI-O12..O15 | Кэширование, история, массовое добавление, Kanban/Calendar |
 | TEST-O1..O3 | Нет regression/UI/Go тестов |
 | INFRA-O1 | Monorepo без workspaces |
@@ -100,11 +71,7 @@
 
 | # | Файл | Описание |
 |---|------|----------|
-| CR12-S04 | `terminal.js:654` | `mouseover` → `selectRow()` → полная перерисовка statusbar на каждое движение мыши |
-| CR12-S05 | `core/courts.ts:116`, `core/logger.ts:8` | `readFileSync`/`mkdirSync` на уровне модуля — крах при импорте без graceful degradation |
-| CR12-S06 | `store/json-store.ts:30` | `Date.now()` в tmp-имени: две записи в одну мс = коллизия пути |
-| CR12-S07 | `vitest.config.ts` | Нет coverage-провайдера и порогов — реальное покрытие неизвестно |
-| CR12-S08 | `courtdesktop/go.mod` | `webview_go` на pseudo-version (коммит, не тег) — нет semver-гарантий |
+| CR12-S08 | `courtdesktop/go.mod` | `webview_go` на pseudo-version — тегов у проекта нет, апгрейд невозможен (проверено 2026-08-03) |
 | CR12-S09 | `.npmrc` | `legacy-peer-deps=true` маскирует конфликты peer-зависимостей |
 | CR12-S10 | `intake/classify.ts:8` | `[А-ЯA-Z]?` без `Ё`; латинские имена не классифицируются; нет лимита длины входа |
 
