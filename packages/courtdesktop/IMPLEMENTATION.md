@@ -32,8 +32,10 @@
 - **Минимальный бинарник**: 6 MB (WebView2 runtime встроен в Windows 10/11)
 - **Нативный рендеринг**: Edge Chromium на Windows, WebKitGTK на Linux, WKWebView на macOS
 - **Полный Web UI**: Dashboard, Terminal, Search, Skins — всё из коробки
-- **Настраиваемый сервер**: поддержка удалённых API серверов
-- **Горячие клавиши**: `Ctrl+,` — настройки, `F5` — refresh
+- **Настраиваемый сервер**: поддержка удалённых API серверов, список недавних серверов
+- **Подключение при старте**: health-check → приложение или встроенная страница подключения (не зависит от сервера)
+- **Контроль связи**: watcher каждые 10 с; при 3 сбоях подряд — страница подключения, при восстановлении — автовозврат
+- **Горячие клавиши**: `Ctrl+,` — настройки (Windows), `F5` — refresh
 
 ## File Structure
 
@@ -63,22 +65,30 @@ cd packages/courtdesktop
 
 ### Настройки
 
-**Ctrl+,** — открыть страницу настроек:
+**Ctrl+,** — открыть/закрыть страницу настроек:
 - **API URL** — адрес сервера (по умолчанию `http://127.0.0.1:8767`)
 - **Theme** — выбор темы (Slate/Light/Paper/Forest/Contrast)
 - Настройки сохраняются в `~/.config/courtdesk/profile.json`
-- Перезапустите приложение для применения изменений
+- «Сохранить и подключиться» применяет URL без перезапуска
 
 ### Если сервер недоступен
 
-Приложение загружается и показывает ошибки загрузки в Web UI. Через `Ctrl+,` можно настроить другой сервер.
+При старте выполняется health-check (`GET /api/health`, таймаут 2 с). Если сервер
+недоступен, открывается встроенная страница подключения: поле адреса, кнопка
+«Проверить», список недавних серверов. Страница встроена в бинарник (SetHtml)
+и не зависит от сервера.
+
+Во время работы watcher каждые 10 с проверяет связь; после 3 сбоев подряд
+открывается страница подключения («Связь с сервером потеряна»), при
+восстановлении доступности приложение возвращается автоматически.
 
 ## Technical Details
 
 - **Библиотека**: `github.com/webview/webview_go` (Go bindings для webview C library)
 - **WebView2**: Edge Chromium runtime (встроен в Windows 10/11)
-- **Bindings**: `courtdesk.OpenSettings()`, `courtdesk.SaveSettings()`, `courtdesk.GoBack()`
-- **Профиль**: JSON в `~/.config/courtdesk/profile.json`
+- **Bindings**: `courtdesk.GetSettings()`, `courtdesk.SaveSettings()`, `courtdesk.TestConnection()`, `courtdesk.Connect()`, `courtdesk.OpenSettings()`, `courtdesk.GoBack()`
+- **Профиль**: JSON в `~/.config/courtdesk/profile.json` (`apiUrl`, `themeName`, `recentUrls`)
+- **Горячие клавиши**: `GetAsyncKeyState`-поллинг (Windows), build tag `//go:build windows`
 
 ### API URL normalization
 

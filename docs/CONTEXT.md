@@ -2,7 +2,7 @@
 
 > CRM-система поиска и мониторинга судебных дел РФ.
 > Единый сервис для интеграции с 1С, Web UI и Desktop App на Go+WebView.
-> Последнее обновление: 2026-07-30
+> Последнее обновление: 2026-08-02
 
 ---
 
@@ -22,13 +22,14 @@
 | Parse | ✅ sync parse при добавлении | |
 | Scheduler | ✅ cron + double-fire guard | |
 | Store | ✅ каскадное удаление + settings | |
-| API | ✅ 25 эндпоинтов | |
+| API | ✅ 25 эндпоинтов | open LAN, без auth (ADR 2026-08-02) |
 | Viewer (Dashboard) | ⚠️ см. open-проблемы | |
 | Viewer (Search) | ⚠️ см. open-проблемы | |
 | Viewer (Terminal) | ✅ Bloomberg-style | |
 | Viewer (Skins) | ✅ 3 skin × 5 themes | |
-| TUI (Go) | 🆕 Bubble Tea, Win32 API | |
-| Desktop App | 🆕 Go+WebView, 6 MB | packages/courtdesktop/ |
+| Desktop App | ✅ Go+WebView, 6 MB | startup-подключение, watcher, Ctrl+, |
+| TUI (Node) | ❄ Заморожен | ADR 2026-08-02 |
+| TUI (Go) | ❄ Заморожен | ADR 2026-08-02 |
 | API tests | ✅ 94 теста | |
 | eslint | ⚠️ Сломан | TS 7.0 не поддерживается |
 
@@ -41,10 +42,7 @@
 | # | Описание | Файл |
 |---|----------|------|
 | CR12-001 | **SSRF.** `url` из `req.body` в `https.get()` без `assertCourtUrl()` | `api/routes/cases.ts:102` |
-| CR12-002 | **Data race.** `runCmd` мутирует модель из горутины | `tui-go/main.go:380` |
-| CR12-003 | **Утечка RuCaptcha-ключа.** txt-файлы = фрагменты ключа, git tracked | корень репо |
-| CR12-004 | **XSS + arbitrary navigation** в courtdesktop | `courtdesktop/main.go` |
-| CR11-001 | **CORS wildcard + нет auth API** | `api/server.ts:23` |
+| CR12-003 | **Утечка RuCaptcha-ключа.** txt-файлы = фрагменты ключа, git tracked (ротация отложена 2026-08-02) | корень репо |
 | CR11-002 | **rejectUnauthorized: false** на всех HTTPS | search, orchestrator, cases |
 | CR11-003 | **Race condition в store** (read-modify-write) | store/* |
 | CR11-004 | **Бинарники в git** (~20 MB) | courtdesktop.exe, tui-go .exe |
@@ -56,14 +54,12 @@
 |---|----------|
 | CR11-006 | Нет тестов для parse/search/captcha (~40% кода) |
 | CR11-007 | Дублирование fetchHtml (search vs scheduler) |
-| CR12-005 | UTF-8 коррупция в tui-go (pad/trunc по байтам) |
 | CR12-006 | ESLint сломан: typescript-eslint не поддерживает TS 7.0 |
 | CR12-009 | Puppeteer: новый браузер на каждый вызов, --no-sandbox |
 | CR12-010 | magistrate.ts: plaintiff перезаписывает defendant |
 | CR12-011 | logs/courtdesk.log tracked в git |
 | CR12-016 | CI: Go не компилируется, нет Windows matrix |
 | CR12-017 | .gitignore без *.exe; .git = 95 MB |
-| CR12-018 | tui-go: 6+ ignored errors |
 | WEBUI-O1 | Skeleton-загрузчики |
 | WEBUI-O2 | Мобильная адаптация |
 | WEBUI-O3 | Дашборд «требует внимания» |
@@ -77,9 +73,7 @@
 | CR11-008 | Версия health (0.4.0) ≠ package.json (0.5.1) ≠ README (0.7.0) |
 | CR11-010 | Мёртвые зависимости: react, ink, @types/react |
 | CR11-011 | POST /api/cases?parse=true — sync до 2 мин |
-| CR11-015 | Два TUI (TS + Go) дублируют |
-| CR12-007 | tui-go Init() мутирует value receiver |
-| CR12-008 | tui-go renderDetail guard мутирует копию |
+| CR12-004 | Navigation guard в courtdesktop: нет navigate handler в webview_go (XSS встроенных страниц закрыт 2026-08-02) |
 | CR12-012 | shared.ts:59 — HTML капчи как результат |
 | CR12-013 | cron.ts: local time vs UTC рассинхрон |
 | CR12-014 | error middleware отдаёт err.message клиенту |
@@ -98,20 +92,14 @@
 | # | Описание |
 |---|----------|
 | CR11-012 | console.log результата капчи |
-| CR11-014 | showError в Go desktop не вызывается |
 | WEBUI-O12..O15 | Кэширование, история, массовое добавление, Kanban/Calendar |
 | TEST-O1..O3 | Нет regression/UI/Go тестов |
-| GOUI-O1..O4 | TUI Go: доработка UI, web-режим, go:embed, автозапуск API |
 | INFRA-O1 | Monorepo без workspaces |
-| SEC-O1 | Zero-auth API (⏸ отложено 2026-07-27) |
 
 ### Советы (из code review)
 
 | # | Файл | Описание |
 |---|------|----------|
-| CR12-S01 | `tui-go/main.go:787` | `det`-замыкание определено и отброшено — мёртвый код |
-| CR12-S02 | `tui-go/main.go:110`, `tui/app.ts:27` | Оба TUI хардкодят `http://127.0.0.1:8767/api` — нет флага/env/конфига |
-| CR12-S03 | `tui/api.ts` vs `tui/app.ts` | Два параллельных API-клиента в TS TUI; `api.ts` не используется — мёртвый модуль |
 | CR12-S04 | `terminal.js:654` | `mouseover` → `selectRow()` → полная перерисовка statusbar на каждое движение мыши |
 | CR12-S05 | `core/courts.ts:116`, `core/logger.ts:8` | `readFileSync`/`mkdirSync` на уровне модуля — крах при импорте без graceful degradation |
 | CR12-S06 | `store/json-store.ts:30` | `Date.now()` в tmp-имени: две записи в одну мс = коллизия пути |
@@ -149,6 +137,7 @@
 
 | Дата | Изменение |
 |------|-----------|
+| 2026-08-02 | **Desktop: connection flow.** Health-check при старте → приложение или встроенная страница подключения (SetHtml). Watcher потери/восстановления связи (10 с, 3 сбоя). Ctrl+, через GetAsyncKeyState (Windows). recentUrls (до 5). XSS встроенных страниц закрыт (html.EscapeString), валидация схемы URL. ADR: WebView — единственный клиент, TUI заморожены, API открыт в LAN. CR11-001 закрыт (by design); CR12-002/005/007/008/018, CR11-015, GOUI-O*, CR12-S01..S03 сняты (TUI frozen). |
 | 2026-07-30 | **Реорганизация документации.** Удалены CODE_REVIEW.md, BUG_REPORT.md, SESSION_CONTINUE.md, PROMPT_WEBUI.md. Open-проблемы слиты сюда. Создан AGENTS.md. CRM-INTEGRATION.md → API.md. Создан knowledge base в `D:\GitHub\knowledge/`. |
 | 2026-07-30 | **CR12** — контрольный аудит. 21 новое замечание, 4 блокера. CR11 не исправлены. |
 | 2026-07-29 | **CR11** — полный аудит. 22 замечания, 5 блокеров. |
@@ -183,8 +172,8 @@ courtdesk/
 │   ├── scheduler/       # orchestrator + cron
 │   ├── store/           # cases, events, notifications, cards, settings
 │   ├── api/routes/      # 25 эндпоинтов + тесты
-│   ├── tui/             # Node TUI (deprecated)
-│   ├── tui-go/          # Go TUI (Bubble Tea)
+│   ├── tui/             # Node TUI (заморожен)
+│   ├── tui-go/          # Go TUI (заморожен)
 │   ├── courtdesktop/    # Go Desktop (WebView, 6 MB)
 │   └── viewer/public/   # Web UI (vanilla JS)
 ├── data/                # JSON-хранилище
