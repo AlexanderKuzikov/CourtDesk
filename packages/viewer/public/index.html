@@ -52,6 +52,16 @@
     .scan-bar { display: none; align-items: center; gap: 10px; padding: 10px 16px; background: var(--primary-bg); border-radius: var(--skin-radius); margin-bottom: 16px; font-size: 13px; color: var(--primary); flex-wrap: wrap; }
     .scan-bar.show { display: flex; }
     .scan-bar .spinner { flex-shrink: 0; }
+    /* WEBUI-O8: визуальный progress bar */
+    .scan-track { flex: 1; min-width: 140px; height: 6px; background: var(--surface-2); border-radius: 3px; overflow: hidden; }
+    .scan-fill { height: 100%; width: 0%; background: var(--primary); border-radius: 3px; transition: width .4s ease; }
+    /* WEBUI-O3: «требует внимания» */
+    .attention-bar { display: none; align-items: center; gap: 10px; padding: 10px 16px; background: var(--warning-bg); border: 1px solid var(--warning); border-radius: var(--skin-radius); margin-bottom: 16px; font-size: 13px; flex-wrap: wrap; }
+    .attention-bar.show { display: flex; }
+    .attention-bar .ab-label { color: var(--warning); font-weight: 600; }
+    /* WEBUI-O1: skeleton-загрузчики */
+    .skeleton-row { height: 34px; margin-bottom: 8px; border-radius: var(--skin-radius-sm); background: linear-gradient(90deg, var(--surface) 25%, var(--surface-2) 50%, var(--surface) 75%); background-size: 200% 100%; animation: skel 1.2s linear infinite; }
+    @keyframes skel { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
     .scan-progress { width: 100%; display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
     .scan-item { font-size: 11px; padding: 3px 8px; border-radius: 4px; background: var(--surface); border: 1px solid var(--border); }
     .scan-item.done { border-color: var(--success); color: var(--success); }
@@ -80,7 +90,13 @@
   <div class="scan-bar" id="scanBar">
     <span class="spinner"></span>
     <span id="scanStatus">Мониторинг...</span>
+    <div class="scan-track"><div class="scan-fill" id="scanFill"></div></div>
     <div class="scan-progress" id="scanProgress"></div>
+  </div>
+
+  <div class="attention-bar" id="attentionBar">
+    <span class="ab-label">⚠ Требует внимания:</span>
+    <span id="attentionContent"></span>
   </div>
 
   <div class="toolbar">
@@ -102,7 +118,7 @@
     </div>
   </div>
 
-  <div id="casesTable"><div class="empty"><h3>Загрузка...</h3></div></div>
+  <div id="casesTable"><div class="skeleton-row"></div><div class="skeleton-row"></div><div class="skeleton-row"></div><div class="skeleton-row"></div><div class="skeleton-row"></div></div>
   <div id="pagination"></div>
 
   <div class="notifications">
@@ -169,6 +185,30 @@ const PAGE_SIZE = 20;
 const STATUS_LABELS = { monitoring:'Мониторинг', waiting:'Ожидание', decision:'Решение', enforced:'Вступило', error:'Ошибка', archived:'Архив' };
 
 function onSearchInput(val) { searchQuery = val.trim().toLowerCase(); currentPage = 1; renderTable(); }
+
+// WEBUI-O8: текст + заполнение progress bar одним вызовом
+function setScanProgress(d) {
+  const fill = document.getElementById('scanFill');
+  if (d.total > 0) {
+    document.getElementById('scanStatus').textContent = `Мониторинг: ${d.processed}/${d.total} (ошибок: ${d.errors})`;
+    fill.style.width = Math.min(100, Math.round(d.processed / d.total * 100)) + '%';
+  } else {
+    fill.style.width = '0%';
+  }
+}
+
+// WEBUI-O3: дела, требующие внимания — ошибки и свежие решения
+function updateAttentionBar() {
+  const bar = document.getElementById('attentionBar');
+  const errors = allCases.filter(c => c.status === 'error').length;
+  const decisions = allCases.filter(c => c.status === 'decision').length;
+  if (errors === 0 && decisions === 0) { bar.classList.remove('show'); return; }
+  const parts = [];
+  if (errors > 0) parts.push(`<a href="#" onclick="setFilter('error',document.querySelector('[data-status=error]'));return false" style="color:var(--danger)">${errors} с ошибками</a>`);
+  if (decisions > 0) parts.push(`<a href="#" onclick="setFilter('decision',document.querySelector('[data-status=decision]'));return false" style="color:var(--success)">${decisions} с решением</a>`);
+  document.getElementById('attentionContent').innerHTML = parts.join(' · ');
+  bar.classList.add('show');
+}
 
 function setFilter(status, el) {
   currentFilter = status;
@@ -290,6 +330,7 @@ async function loadDashboard() {
     allCases = casesRes.data || [];
     renderTable();
     updateCounts();
+    updateAttentionBar();
     const notifs = (notifRes.data || []).slice(-15).reverse();
     document.getElementById('notifList').innerHTML = notifs.length === 0
       ? '<div class="empty"><h3>Нет уведомлений</h3></div>'
@@ -300,7 +341,8 @@ async function loadDashboard() {
           <span class="time">${formatTime(n.createdAt)}</span>
         </div>`).join('');
   } catch {
-    document.getElementById('casesTable').innerHTML = '<div class="empty"><h3>❌ Ошибка соединения</h3><p>Проверьте, что сервер запущен</p></div>';
+    // WEBUI-O11: retry прямо из состояния ошибки
+    document.getElementById('casesTable').innerHTML = '<div class="empty"><h3>❌ Ошибка соединения</h3><p>Проверьте, что сервер запущен</p><p style="margin-top:12px"><button class="btn btn-primary btn-sm" onclick="loadDashboard()">🔄 Повторить</button></p></div>';
   }
 }
 
@@ -456,13 +498,14 @@ async function runMonitor() {
     if (res.status === 409) {
       showToast('Прогон уже выполняется', 'error');
       scanBar.classList.add('show');
+      document.getElementById('scanFill').style.width = '0%';
       scanStatus.textContent = 'Мониторинг уже выполняется...';
       // Пытаемся слушать прогресс текущего прогона
       const poll = setInterval(async () => {
         try {
           const p = await (await fetch(apiUrl('/api/parse/progress'))).json();
           const d = p.data || {};
-          if (d.total > 0) scanStatus.textContent = `Мониторинг: ${d.processed}/${d.total} (ошибок: ${d.errors})`;
+          setScanProgress(d);
           updateScanProgress(startTime, scanProgress);
           if (!d.running) { clearInterval(poll); scanBar.classList.remove('show'); }
         } catch {}
@@ -473,6 +516,7 @@ async function runMonitor() {
     } else {
       showToast('Мониторинг запущен', 'success');
       scanBar.classList.add('show');
+      document.getElementById('scanFill').style.width = '0%';
       scanStatus.textContent = 'Мониторинг...';
       let polls = 0;
       const poll = setInterval(async () => {
@@ -482,9 +526,7 @@ async function runMonitor() {
         try {
           const p = await (await fetch(apiUrl('/api/parse/progress'))).json();
           const d = p.data || {};
-          if (d.total > 0) {
-            scanStatus.textContent = `Мониторинг: ${d.processed}/${d.total} (ошибок: ${d.errors})`;
-          }
+          setScanProgress(d);
           if (!d.running) {
             clearInterval(poll);
             scanBar.classList.remove('show');
