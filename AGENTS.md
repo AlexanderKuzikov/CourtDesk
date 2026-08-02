@@ -4,9 +4,10 @@
 
 - **start:** `npm start` — API на http://127.0.0.1:8767
 - **dev:** `npm run dev` — с watch-режимом
-- **test:** `npm test` — vitest (94 теста)
+- **test:** `npm test` — vitest (180 тестов)
+- **test:coverage:** `npm run test:coverage` — с coverage-гейтом (v8)
 - **lint:** `npm run lint` — tsc --noEmit
-- **lint:eslint:** `npm run lint:eslint` — eslint packages/ (⚠️ сломан: TS 7.0 не поддерживается)
+- **lint:biome:** `npm run lint:biome` — Biome, пакеты кроме замороженного tui (гейт — только error; warnings — легаси-шум)
 - **build:desktop:** `go build -ldflags="-s -w -H windowsgui" -o courtdesktop.exe .` (в `packages/courtdesktop/`; `-H windowsgui` обязателен — без него рядом открывается чёрное консольное окно)
 
 ## Conventions
@@ -30,8 +31,8 @@ CourtDesk/
 │   ├── intake/         # classify() — regex /iu
 │   ├── scheduler/      # orchestrator + cron
 │   ├── store/          # cases, events, notifications, cards, settings (JSON)
-│   ├── api/            # Express 5, 25 эндпоинтов
-│   │   ├── routes/     # +тесты (94 total)
+│   ├── api/            # Express 5, 26 эндпоинтов
+│   │   ├── routes/     # +тесты (180 total)
 │   │   └── middleware/
 │   ├── tui/            # Node TUI (deprecated)
 │   ├── tui-go/         # Go TUI (Bubble Tea)

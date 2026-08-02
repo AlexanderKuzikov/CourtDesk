@@ -79,24 +79,30 @@
 
 ## API-покрытие
 
-**97 тестов (16 файлов).** Все эндпоинты:
+**180 тестов (22 файла), coverage-гейт (v8): lines 44 / functions 38 / branches 38 / statements 42.** Все эндпоинты:
 
 | Файл | Эндпоинты |
 |------|-----------|
 | health.test.ts | GET /api/health |
 | status.test.ts | GET /api/status, GET/PATCH /api/notifications |
-| cases.test.ts | CRUD /api/cases + /events /card /stats /wait + POST /:uid/parse |
+| cases.test.ts | CRUD /api/cases (+SSRF, parse=async) + /events /card /stats /wait + POST /:uid/parse (+409) |
 | search.test.ts | POST /api/search/by-number, by-party, by-case-uid |
 | resolve.test.ts | POST /api/resolve |
 | parse.run.test.ts | POST /api/parse/run |
 | parse.url.test.ts | POST /api/parse/url |
 | progress.test.ts | GET /api/parse/progress |
-| settings.test.ts | GET/PUT /api/settings |
+| settings.test.ts | GET/PUT /api/settings (+валидация) |
 | courts.test.ts | GET /api/courts, /api/courts/:id |
 | intake.test.ts | POST /api/intake |
 | store/*.test.ts | store layer |
 | intake/classify.test.ts | classify() unit |
 | scheduler/*.test.ts | orchestrator, runNew |
+| search/shared.test.ts | buildSearchUrl, parseResults, URL-allowlist |
+| search/adapters/magistrate.test.ts | buildFields (CR12-010), buildFormUrl, parseResults msudrf |
+| parse/adapters/magistrate.test.ts | карточка мирового суда (фикстура) |
+| parse/adapters/district.test.ts | карточка районного суда (фикстура) |
+| captcha/rucaptcha.test.ts | RuCaptcha API v2: createTask/polling/retry/timeout |
+| captcha/browser.test.ts | пул браузера Puppeteer (CR12-009) |
 
 ---
 
@@ -104,6 +110,7 @@
 
 | Дата | Изменение |
 |------|-----------|
+| 2026-08-03 | **v0.7.1 — стабилизация.** Закрыты все 6 блокеров: CR12-001 SSRF (assertCourtUrl в cases.ts POST/PATCH + все fetch-точки: shared, session, orchestrator), CR12-003 (проверка: ключ в git не попадал, txt-пустышки удалены), CR11-002 (ADR: TLS только за allowlist), CR11-003/005 (лок прогонов + per-uid in-flight в orchestrator, cron поверх лока), CR11-004 (бинарники и лог untracked, *.exe в .gitignore). CR12-010 (plaintiff/defendant), CR12-012 (капча не возвращается как результат), CR11-007 (единый fetchHtml), CR12-009 (пул браузера), CR11-011 (parse=async 202), CR12-013/014/015, S04–S07, CR11-008/012. ESLint→Biome (ADR). CI: Windows matrix + go build courtdesktop. Coverage v8 + пороги. Тесты 97→180. Web UI: attention-bar, progress bar, CSV, retry, skeleton, async-добавление в поиске. |
 | 2026-08-02 | **Кнопка «Перепарсить» (вариант 2).** `POST /api/cases/:uid/parse` — тонкий роут над `scheduler.runSingle` (привязанный парсинг: saveCard под внутр. uid + обновление дела). 🔄 в строке дашборда и в карточке, guard от двойного клика. Убран глазик 👁 «Детали» (дубль клика по строке). Тесты 94→97. API.md §4.17. |
 | 2026-08-02 | **Desktop: connection flow.** Health-check при старте → приложение или встроенная страница подключения (SetHtml). Watcher потери/восстановления связи (10 с, 3 сбоя). Ctrl+, через GetAsyncKeyState (Windows). recentUrls (до 5). XSS встроенных страниц закрыт (html.EscapeString), валидация схемы URL. ADR: WebView — единственный клиент, TUI заморожены, API открыт в LAN. CR11-001 закрыт (by design); CR12-002/005/007/008/018, CR11-015, GOUI-O*, CR12-S01..S03 сняты (TUI frozen). |
 | 2026-07-30 | **Реорганизация документации.** Удалены CODE_REVIEW.md, BUG_REPORT.md, SESSION_CONTINUE.md, PROMPT_WEBUI.md. Open-проблемы слиты сюда. Создан AGENTS.md. CRM-INTEGRATION.md → API.md. Создан knowledge base в `D:\GitHub\knowledge/`. |
@@ -139,14 +146,15 @@ courtdesk/
 │   ├── intake/          # classify() (regex /iu)
 │   ├── scheduler/       # orchestrator + cron
 │   ├── store/           # cases, events, notifications, cards, settings
-│   ├── api/routes/      # 25 эндпоинтов + тесты
+│   ├── api/routes/      # 26 эндпоинтов + тесты
 │   ├── tui/             # Node TUI (заморожен)
 │   ├── tui-go/          # Go TUI (заморожен)
 │   ├── courtdesktop/    # Go Desktop (WebView, 6 MB)
 │   └── viewer/public/   # Web UI (vanilla JS)
 ├── data/                # JSON-хранилище
 ├── logs/                # pino-логи
-├── package.json         # version: 0.5.1
+├── biome.json           # линтер (Biome)
+├── package.json         # version: 0.7.0
 ├── tsconfig.json
-└── vitest.config.ts
+└── vitest.config.ts     # + coverage v8 с порогами
 ```
