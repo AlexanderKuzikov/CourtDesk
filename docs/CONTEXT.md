@@ -23,7 +23,7 @@
 | Scheduler | ✅ cron + лок прогонов в orchestrator | общий для API и cron |
 | Store | ✅ каскадное удаление + settings | |
 | API | ✅ 26 эндпоинтов | open LAN, без auth (ADR 2026-08-02) |
-| Viewer (Dashboard) | ✅ attention-bar, progress bar, CSV, retry | |
+| Viewer (Dashboard) | ✅ attention-bar, progress bar, XLS, retry | |
 | Viewer (Search) | ✅ async-добавление, retry | |
 | Viewer (Terminal) | ✅ Bloomberg-style | hover-дедупликация |
 | Viewer (Skins) | ✅ 3 skin × 5 themes | |
@@ -110,6 +110,7 @@
 
 | Дата | Изменение |
 |------|-----------|
+| 2026-08-03 | **Кроссплатформенность UI (Web=Windows=Linux).** Все emoji-иконки (не рендерились в Linux-WebKit без emoji-шрифта) заменены на inline SVG (stroke=currentColor, темы перекрашивают). Набор ICONS + `ic()`/`data-icon` в app.js, применён в index/search/terminal. Экспорт CSV → XLSX (zero-dep: zip-store + inline strings, Excel открывает без предупреждений). Перепарсинг: прогресс-бар (indeterminate + счётчик сек) и спиннер в строке; кнопки-дубли (архив/удалить/перепарсить) из карточки дела удалены. Linux-сборка courtdesktop: webkit2gtk-4.0→4.1 патч pkg-config в webview_go (в /tmp, в репо не зафиксировано — open: легализация). Проверено в WSLg (X11), API на Windows. |
 | 2026-08-03 | **v0.7.1 — стабилизация.** Закрыты все 6 блокеров: CR12-001 SSRF (assertCourtUrl в cases.ts POST/PATCH + все fetch-точки: shared, session, orchestrator), CR12-003 (проверка: ключ в git не попадал, txt-пустышки удалены), CR11-002 (ADR: TLS только за allowlist), CR11-003/005 (лок прогонов + per-uid in-flight в orchestrator, cron поверх лока), CR11-004 (бинарники и лог untracked, *.exe в .gitignore). CR12-010 (plaintiff/defendant), CR12-012 (капча не возвращается как результат), CR11-007 (единый fetchHtml), CR12-009 (пул браузера), CR11-011 (parse=async 202), CR12-013/014/015, S04–S07, CR11-008/012. ESLint→Biome (ADR). CI: Windows matrix + go build courtdesktop. Coverage v8 + пороги. Тесты 97→180. Web UI: attention-bar, progress bar, CSV, retry, skeleton, async-добавление в поиске. |
 | 2026-08-02 | **Кнопка «Перепарсить» (вариант 2).** `POST /api/cases/:uid/parse` — тонкий роут над `scheduler.runSingle` (привязанный парсинг: saveCard под внутр. uid + обновление дела). 🔄 в строке дашборда и в карточке, guard от двойного клика. Убран глазик 👁 «Детали» (дубль клика по строке). Тесты 94→97. API.md §4.17. |
 | 2026-08-02 | **Desktop: connection flow.** Health-check при старте → приложение или встроенная страница подключения (SetHtml). Watcher потери/восстановления связи (10 с, 3 сбоя). Ctrl+, через GetAsyncKeyState (Windows). recentUrls (до 5). XSS встроенных страниц закрыт (html.EscapeString), валидация схемы URL. ADR: WebView — единственный клиент, TUI заморожены, API открыт в LAN. CR11-001 закрыт (by design); CR12-002/005/007/008/018, CR11-015, GOUI-O*, CR12-S01..S03 сняты (TUI frozen). |

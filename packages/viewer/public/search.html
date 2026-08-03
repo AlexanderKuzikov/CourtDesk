@@ -37,21 +37,21 @@
 </head>
 <body>
 <header>
-  <h1><span>CourtDesk</span> 🏛️</h1>
+  <h1><span>CourtDesk</span> <span data-icon="court" data-size="22"></span></h1>
   <nav>
     <div class="skin-switcher">
-      <button type="button" class="skin-btn" onclick="toggleSkinMenu()" title="Оформление" aria-haspopup="menu" aria-controls="skinMenu">🎨</button>
+      <button type="button" class="skin-btn" onclick="toggleSkinMenu()" title="Оформление" aria-haspopup="menu" aria-controls="skinMenu"><span data-icon="brush"></span></button>
       <div class="skin-menu" id="skinMenu" role="menu"></div>
     </div>
-    <button id="themeToggle" class="theme-toggle" onclick="toggleTheme()">☀️</button>
-    <a href="/">📊 Дашборд</a>
+    <button id="themeToggle" class="theme-toggle" onclick="toggleTheme()"></button>
+    <a href="/"><span data-icon="chart"></span> Дашборд</a>
     <a href="/terminal.html">▶ Терминал</a>
-    <a href="/search.html" style="color:var(--primary)">🔍 Поиск</a>
+    <a href="/search.html" style="color:var(--primary)"><span data-icon="search"></span> Поиск</a>
   </nav>
 </header>
 <div class="app">
   <div class="sidebar">
-    <h2>🏛️ Суд</h2>
+    <h2><span data-icon="court"></span> Суд</h2>
     <div class="court-search">
       <label>Поиск по названию</label>
       <input id="courtSearch" placeholder="Например: индустриальный" oninput="searchCourts(this.value)" autocomplete="off">
@@ -63,7 +63,7 @@
       <span id="courtDisplay" style="font-size:12px;color:var(--text-dim);flex:1"></span>
     </div>
 
-    <h2>🔍 Режим</h2>
+    <h2><span data-icon="search"></span> Режим</h2>
     <div class="tabs" id="modeTabs">
       <button class="active" data-mode="party" onclick="switchMode('party',this)">По участникам</button>
       <button data-mode="case" onclick="switchMode('case',this)">По номеру</button>
@@ -88,14 +88,14 @@
       <div style="font-size:11px;color:var(--text-dim);margin-top:-4px">Формат: XXWWXXXX-XX-XXXX-XXXXXX-XX</div>
     </div>
 
-    <button class="btn btn-primary" onclick="doSearch()" id="searchBtn">🔍 Найти</button>
+    <button class="btn btn-primary" onclick="doSearch()" id="searchBtn"><span data-icon="search"></span> Найти</button>
 
-    <h2>⏳ Отслеживание появления</h2>
+    <h2><span data-icon="clock"></span> Отслеживание появления</h2>
     <label>Сторона (ФИО/название)</label>
     <input id="waitParty" placeholder="Фамилия истца/ответчика">
     <label>Дата подачи (приблизительно)</label>
     <input type="date" id="waitDate">
-    <button class="btn btn-secondary" onclick="addWait()" id="waitBtn">⏳ Следить за появлением</button>
+    <button class="btn btn-secondary" onclick="addWait()" id="waitBtn"><span data-icon="clock"></span> Следить за появлением</button>
   </div>
 
   <div class="main">
@@ -106,7 +106,7 @@
     </div>
     <div class="results" id="resultsTable"></div>
     <div class="empty" id="emptyState">
-      <h3>🔍 Поиск судебных дел</h3>
+      <h3><span data-icon="search"></span> Поиск судебных дел</h3>
       <p>Выберите суд и режим в боковой панели, затем нажмите «Найти»</p>
     </div>
   </div>
@@ -192,17 +192,17 @@ async function doSearch() {
     let body, url;
     if (mode === 'case') {
       const num = document.getElementById('caseNumber').value.trim();
-      if (!num) { showToast('Введите номер дела', 'error'); scanBar.style.display = 'none'; btn.disabled = false; btn.innerHTML = '🔍 Найти'; return; }
+      if (!num) { showToast('Введите номер дела', 'error'); scanBar.style.display = 'none'; btn.disabled = false; btn.innerHTML = `${ic('search')} Найти`; return; }
       body = { courtId: courtCode, caseNumber: num };
       url = '/api/search/by-number';
     } else if (mode === 'uid') {
       const uidVal = document.getElementById('caseUid').value.trim();
-      if (!uidVal) { showToast('Введите УИД', 'error'); scanBar.style.display = 'none'; btn.disabled = false; btn.innerHTML = '🔍 Найти'; return; }
+      if (!uidVal) { showToast('Введите УИД', 'error'); scanBar.style.display = 'none'; btn.disabled = false; btn.innerHTML = `${ic('search')} Найти`; return; }
       body = { courtId: courtCode, caseUid: uidVal };
       url = '/api/search/by-case-uid';
     } else {
       const def = document.getElementById('defendant').value.trim();
-      if (!def) { showToast('Введите ФИО или название', 'error'); scanBar.style.display = 'none'; btn.disabled = false; btn.innerHTML = '🔍 Найти'; return; }
+      if (!def) { showToast('Введите ФИО или название', 'error'); scanBar.style.display = 'none'; btn.disabled = false; btn.innerHTML = `${ic('search')} Найти`; return; }
       const from = document.getElementById('dateFrom').value;
       const to = document.getElementById('dateTo').value;
       body = { courtId: courtCode, defendant: def, from: from || undefined, to: to || undefined };
@@ -216,11 +216,11 @@ async function doSearch() {
     showResults(results, json.data?.count ?? results.length, json.data?.court);
   } catch (err) {
     // WEBUI-O11: сообщение + retry
-    document.getElementById('resultsTable').innerHTML = `<div class="empty"><h3>❌ Ошибка</h3><p>${esc(err.message)}</p><p style="margin-top:12px"><button class="btn btn-primary btn-sm" onclick="doSearch()">🔄 Повторить</button></p></div>`;
+    document.getElementById('resultsTable').innerHTML = `<div class="empty"><h3>${ic('error')} Ошибка</h3><p>${esc(err.message)}</p><p style="margin-top:12px"><button class="btn btn-primary btn-sm" onclick="doSearch()">${ic('refresh')} Повторить</button></p></div>`;
   }
   scanBar.style.display = 'none';
   btn.disabled = false;
-  btn.innerHTML = '🔍 Найти';
+  btn.innerHTML = `${ic('search')} Найти`;
 }
 
 function showResults(results, count, court) {
@@ -244,7 +244,7 @@ function renderResults() {
       <td>${esc((r.result || '—').substring(0, 35))}</td>
       <td>${esc(r.legalForceDate || '—')}</td>
       <td style="white-space:nowrap">
-        <button class="monitor-btn" data-idx="${i}" onclick="addToMonitor(${i});event.stopPropagation()">+📋</button>
+        <button class="monitor-btn" data-idx="${i}" onclick="addToMonitor(${i});event.stopPropagation()">${ic('filePlus')}</button>
       </td>
     </tr>`).join('');
 
@@ -336,7 +336,7 @@ async function openDetail(idx) {
       if (card) {
         // Информация о деле
         cardHtml = `
-          <h3 style="font-size:13px;margin:16px 0 8px;color:var(--primary)">🏛️ Дело</h3>
+          <h3 style="font-size:13px;margin:16px 0 8px;color:var(--primary)">${ic('court')} Дело</h3>
           <div class="info-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px 16px">
             <div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px">Тип</div><div class="val" style="margin-top:2px">${esc(card.type || '—')}</div></div>
             ${card.card ? `
@@ -356,7 +356,7 @@ async function openDetail(idx) {
         // Участники
         if (card.parties && card.parties.length > 0) {
           cardHtml += `
-            <h3 style="font-size:13px;margin:16px 0 8px;color:var(--primary)">👥 Участники (${card.parties.length})</h3>
+            <h3 style="font-size:13px;margin:16px 0 8px;color:var(--primary)">${ic('users')} Участники (${card.parties.length})</h3>
             <div style="overflow-x:auto">
             <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;min-width:500px">
               <tr style="background:var(--surface-2)"><th style="text-align:left;padding:4px 6px">Роль</th><th style="text-align:left;padding:4px 6px">Наименование</th><th style="text-align:left;padding:4px 6px">ИНН</th><th style="text-align:left;padding:4px 6px">КПП</th><th style="text-align:left;padding:4px 6px">ОГРН</th></tr>
@@ -367,7 +367,7 @@ async function openDetail(idx) {
         // События
         if (card.events && card.events.length > 0) {
           cardHtml += `
-            <h3 style="font-size:13px;margin:16px 0 8px;color:var(--primary)">📅 Движение дела (${card.events.length})</h3>
+            <h3 style="font-size:13px;margin:16px 0 8px;color:var(--primary)">${ic('calendar')} Движение дела (${card.events.length})</h3>
             <div style="overflow-x:auto">
             <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;min-width:600px">
               <tr style="background:var(--surface-2)"><th style="text-align:left;padding:4px 6px">Дата</th><th style="text-align:left;padding:4px 6px">Событие</th><th style="text-align:left;padding:4px 6px">Результат</th></tr>
@@ -395,7 +395,7 @@ async function openDetail(idx) {
     ${cardHtml}
 
     <div style="margin-top:16px">
-      <button class="btn btn-primary" style="width:auto;padding:8px 16px" onclick="addToMonitor(${idx});closeDetail()">📋 В мониторинг</button>
+      <button class="btn btn-primary" style="width:auto;padding:8px 16px" onclick="addToMonitor(${idx});closeDetail()">${ic('fileText')} В мониторинг</button>
     </div>`;
   document.getElementById('detailOverlay').classList.add('open');
 }

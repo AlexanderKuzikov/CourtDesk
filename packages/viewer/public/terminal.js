@@ -520,7 +520,7 @@ async function openDetail() {
     if (card) {
       const courtName = ca.courtName || card.court || ca.courtId;
       courtInfo = `
-        <div class="sub">🏛 Суд <span class="n"></span></div>
+        <div class="sub">${ic('court')} Суд <span class="n"></span></div>
         <div class="info-grid">
           <div class="info-item"><div class="key">Суд</div><div class="val">${esc(courtName)}</div></div>
           <div class="info-item"><div class="key">Тип</div><div class="val">${esc(card.courtType || ca.courtType || '—')}</div></div>
@@ -538,7 +538,7 @@ async function openDetail() {
     let partiesHtml = '';
     if (card && card.parties && card.parties.length) {
       partiesHtml = `
-        <div class="sub">👥 Участники <span class="n">${card.parties.length}</span></div>
+        <div class="sub">${ic('users')} Участники <span class="n">${card.parties.length}</span></div>
         <div style="overflow-x:auto">
           <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;min-width:500px">
             <tr style="background:var(--surface-2)"><th style="text-align:left;padding:4px 6px">Роль</th><th style="text-align:left;padding:4px 6px">Наименование</th><th style="text-align:left;padding:4px 6px">ИНН</th><th style="text-align:left;padding:4px 6px">КПП</th><th style="text-align:left;padding:4px 6px">ОГРН</th></tr>
@@ -550,7 +550,7 @@ async function openDetail() {
     let cardEventsHtml = '';
     if (card && card.events && card.events.length) {
       cardEventsHtml = `
-        <div class="sub">📅 Движение дела <span class="n">${card.events.length}</span></div>
+        <div class="sub">${ic('calendar')} Движение дела <span class="n">${card.events.length}</span></div>
         <div style="overflow-x:auto">
           <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;min-width:600px">
             <tr style="background:var(--surface-2)"><th style="text-align:left;padding:4px 6px">Дата</th><th style="text-align:left;padding:4px 6px">Событие</th><th style="text-align:left;padding:4px 6px">Результат</th></tr>
@@ -575,12 +575,10 @@ async function openDetail() {
       ${courtInfo}
       ${partiesHtml}
       ${cardEventsHtml}
-      <div class="sub">📋 История мониторинга</div>
+      <div class="sub">${ic('clipboard')} История мониторинга</div>
       <div class="timeline">${timelineHtml}</div>
       <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">
-        ${ca.status !== 'archived' ? `<button class="btn btn-secondary btn-sm" onclick="archiveSelected();closeDetail()">📦 Архивировать</button>` : `<button class="btn btn-secondary btn-sm" onclick="archiveSelected();closeDetail()">↩ Вернуть</button>`}
-        <button class="btn btn-danger btn-sm" onclick="deleteSelected();closeDetail()">🗑 Удалить</button>
-        <button class="btn btn-secondary btn-sm" onclick="window.print()">🖨 Печать</button>
+        <button class="btn btn-secondary btn-sm" onclick="window.print()">${ic('printer')} Печать</button>
         <button class="btn btn-secondary btn-sm" onclick="closeDetail()">Закрыть (q)</button>
       </div>`;
     document.getElementById('detailOverlay').classList.add('open');
