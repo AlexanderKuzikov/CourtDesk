@@ -20,6 +20,11 @@ type CaptchaMode = 'msudrf' | 'sudrf';
 
 const CAPTCHA_ERROR = 'Неверно указан проверочный код';
 
+// WAF ГАС «Правосудие» замедляет ответы до 1-2 минут (наблюдение 2026-08-05).
+// Таймауты подняты, чтобы пайплайн капчи переживал тормоза вместо обрыва.
+const NAV_TIMEOUT_MS = 120_000;   // page.goto / waitForNavigation
+const WAIT_TIMEOUT_MS = 90_000;   // waitForFunction / locator
+
 function detectMode(html: string): CaptchaMode | null {
   if (html.includes('kcaptchaForm')) return 'msudrf';
   if (html.includes('id="captcha"') || html.includes('name="captcha"')) return 'sudrf';
@@ -47,7 +52,7 @@ async function readCaptchaImageBase64(page: Page, mode: CaptchaMode): Promise<st
     );
     if (!src) throw new Error('Captcha image src not found');
     return page.evaluate(async (imgSrc: string) => {
-      const res = await fetch(imgSrc, { credentials: 'include' });
+      const res = await fetch(imgSrc, { credentials: 'include', signal: AbortSignal.timeout(60_000) });
       if (!res.ok) throw new Error(`Captcha image fetch failed: HTTP ${res.status}`);
       const buf = await res.arrayBuffer();
       let binary = '';
@@ -82,7 +87,7 @@ async function fillCaptchaMsudrf(page: Page, searchUrl: string, captchaText: str
     await page.waitForFunction(() => {
       const html = document.body?.innerHTML || '';
       return html.includes('sud_delo') && !html.includes('kcaptchaForm');
-    }, { timeout: 30000 });
+    }, { timeout: WAIT_TIMEOUT_MS });
   } catch {
     // Если после капчи снова капча — выходим, caller retry
     return;
@@ -112,7 +117,7 @@ async function fillCaptchaMsudrf(page: Page, searchUrl: string, captchaText: str
     await page.waitForFunction(() => {
       const html = document.body?.innerHTML || '';
       return html.includes('№ дела') || html.includes('Данных по запросу') || html.includes('Неверно указан');
-    }, { timeout: 30000 });
+    }, { timeout: WAIT_TIMEOUT_MS });
   } catch {}
   await new Promise(r => setTimeout(r, 1000));
 }
@@ -171,7 +176,7 @@ async function fillAndSubmit(page: Page, searchUrl: string, captchaText: string)
     await page.waitForFunction(() => {
       const html = document.body?.innerHTML || '';
       return html.includes('№ дела') || html.includes('Данных по запросу') || html.includes('Неверно указан');
-    }, { timeout: 30000 });
+    }, { timeout: WAIT_TIMEOUT_MS });
   } catch {}
   // Даём время на завершение рендеринга
   await new Promise(r => setTimeout(r, 1000));
@@ -185,14 +190,17 @@ export async function fetchWithCaptcha(options: FetchWithCaptchaOptions): Promis
   try {
     const page = await browser.newPage();
     try {
+      // WAF-тормоза: locator/fill/click по умолчанию ждут 30с — поднимаем
+      page.setDefaultTimeout(WAIT_TIMEOUT_MS);
+      page.setDefaultNavigationTimeout(NAV_TIMEOUT_MS);
       const MAX_TRIES = 3;
       for (let attempt = 1; attempt <= MAX_TRIES; attempt++) {
-        await page.goto(options.url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+        await page.goto(options.url, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT_MS });
         let html = await page.content();
         let mode = detectMode(html);
 
         if (!mode && html.includes(CAPTCHA_ERROR)) {
-          await page.goto(buildFormUrl(options.url), { waitUntil: 'domcontentloaded', timeout: 60000 });
+          await page.goto(buildFormUrl(options.url), { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT_MS });
           html = await page.content();
           mode = detectMode(html);
         }
@@ -270,8 +278,11 @@ export async function fetchMsudrfSearch(options: MsudrfSearchOptions): Promise<s
 }
 
 async function runMsudrfSearch(page: Page, options: MsudrfSearchOptions): Promise<string> {
+    // WAF-тормоза: locator/fill/click по умолчанию ждут 30с — поднимаем
+    page.setDefaultTimeout(WAIT_TIMEOUT_MS);
+    page.setDefaultNavigationTimeout(NAV_TIMEOUT_MS);
     // Шаг 1: открываем форму поиска (покажет kcaptchaForm)
-    await page.goto(options.formUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await page.goto(options.formUrl, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT_MS });
 
     // Шаг 2: решаем капчу с retry (как fetchWithCaptcha)
     const client = new RuCaptchaClient({ apiKey: options.apiKey });
@@ -291,7 +302,7 @@ async function runMsudrfSearch(page: Page, options: MsudrfSearchOptions): Promis
       if (!src) throw new Error('Captcha image src not found');
 
       const imageBase64 = await page.evaluate(async (imgSrc: string) => {
-        const res = await fetch(imgSrc, { credentials: 'include' });
+        const res = await fetch(imgSrc, { credentials: 'include', signal: AbortSignal.timeout(60_000) });
         if (!res.ok) throw new Error(`Captcha image fetch failed: HTTP ${res.status}`);
         const buf = await res.arrayBuffer();
         let binary = '';
@@ -307,7 +318,7 @@ async function runMsudrfSearch(page: Page, options: MsudrfSearchOptions): Promis
 
       // Ждём navigation/network после submit (POST → новая страница)
       await Promise.all([
-        page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {}),
+        page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT_MS }).catch(() => {}),
         page.locator('form#kcaptchaForm button[type="submit"]').click(),
       ]);
     }
@@ -345,7 +356,7 @@ async function runMsudrfSearch(page: Page, options: MsudrfSearchOptions): Promis
         } catch {
           return el.innerHTML.trim().length > 0;
         }
-      }, { timeout: 30000 });
+      }, { timeout: WAIT_TIMEOUT_MS });
     } catch {
       // Таймаут — возможно результатов нет
     }
