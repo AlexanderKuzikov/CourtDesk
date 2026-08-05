@@ -347,7 +347,6 @@ async function openDetail(idx) {
               <div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px">Признак рассмотрения</div><div class="val" style="margin-top:2px">${esc(card.card.proceedingType || '—')}</div></div>
               <div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px">Результат</div><div class="val" style="margin-top:2px"><strong>${esc(card.card.result || '—')}</strong></div></div>
             ` : ''}
-            <div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px">Номер дела (УИД)</div><div class="val" style="margin-top:2px;font-family:monospace;font-size:11px">${esc(card.uid || '—')}</div></div>
             ${card.identifiers?.case_uid ? `<div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px">УИД ГАС</div><div class="val" style="margin-top:2px;font-family:monospace;font-size:11px">${esc(card.identifiers.case_uid)}</div></div>` : ''}
             ${card.publishedAt ? `<div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px">Опубликовано</div><div class="val" style="margin-top:2px;font-size:11px">${esc(card.publishedAt)}</div></div>` : ''}
             ${card.modifiedAt ? `<div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px">Изменено</div><div class="val" style="margin-top:2px;font-size:11px">${esc(card.modifiedAt)}</div></div>` : ''}

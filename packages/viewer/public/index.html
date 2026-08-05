@@ -461,7 +461,6 @@ async function openDetail(uid) {
           <div class="info-item"><div class="key">Дата слушания</div><div class="val">${esc(card.card.hearingDate || '—')}</div></div>
           <div class="info-item"><div class="key">Признак рассмотрения</div><div class="val">${esc(card.card.proceedingType || '—')}</div></div>
           <div class="info-item"><div class="key">Результат</div><div class="val"><strong>${esc(card.card.result || '—')}</strong></div></div>
-          <div class="info-item"><div class="key">УИД дела</div><div class="val" style="font-family:monospace;font-size:11px">${esc(card.uid || '—')}</div></div>
           ${card.identifiers?.case_uid ? `<div class="info-item"><div class="key">УИД ГАС</div><div class="val" style="font-family:monospace;font-size:11px">${esc(card.identifiers.case_uid)}</div></div>` : ''}
           ${card.identifiers?.delo_id ? `<div class="info-item"><div class="key">Delo ID</div><div class="val" style="font-family:monospace;font-size:11px">${esc(card.identifiers.delo_id)}</div></div>` : ''}
           ${card.publishedAt ? `<div class="info-item"><div class="key">Опубликовано</div><div class="val" style="font-size:11px">${esc(card.publishedAt)}</div></div>` : ''}
