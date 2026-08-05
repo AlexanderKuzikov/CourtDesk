@@ -67,7 +67,7 @@ go build -ldflags="-H windowsgui" -o courtdesktop.exe .
 
 ## Статус
 
-**v0.7.1** — стабилизация: закрыты блокеры безопасности (SSRF, URL-allowlist на всех fetch), гонки планировщика, бинарники в git. Desktop App на Go+WebView (6.9 MB). Web UI: Dashboard + Terminal + Search, Skins (3 скина × 2 темы). API: 181 тест, 26 эндпоинтов, coverage-гейт. Node ≥22. Русификация UI, нормализация номеров дела.
+**v0.7.1** — стабилизация: закрыты блокеры безопасности (SSRF, URL-allowlist на всех fetch), гонки планировщика, бинарники в git. Desktop App на Go+WebView (6.9 MB). Web UI: Dashboard + Terminal + Search, Skins (3 скина × 2 темы). API: 213 тестов, 26 эндпоинтов, coverage-гейт. Node ≥22. Русификация UI, нормализация номеров дела, backoff при 403 (WAF).
 
 ## Лицензия
 

@@ -4,7 +4,7 @@
 
 - **start:** `npm start` — API на http://127.0.0.1:8767
 - **dev:** `npm run dev` — с watch-режимом
-- **test:** `npm test` — vitest (181 тест)
+- **test:** `npm test` — vitest (213 тестов)
 - **test:coverage:** `npm run test:coverage` — с coverage-гейтом (v8)
 - **lint:** `npm run lint` — tsc --noEmit
 - **lint:biome:** `npm run lint:biome` — Biome, пакеты кроме замороженного tui (гейт — только error; warnings — легаси-шум)
@@ -32,7 +32,7 @@ CourtDesk/
 │   ├── scheduler/      # orchestrator + cron
 │   ├── store/          # cases, events, notifications, cards, settings (JSON)
 │   ├── api/            # Express 5, 26 эндпоинтов
-│   │   ├── routes/     # +тесты (181 total)
+│   │   ├── routes/     # +тесты (213 total)
 │   │   └── middleware/
 │   ├── tui/            # Node TUI (заморожен)
 │   ├── tui-go/         # Go TUI (заморожен)

@@ -30,7 +30,7 @@
 | Desktop App | ✅ Go+WebView, ~6.9 MB | startup-подключение, watcher, Ctrl+, |
 | TUI (Node) | ❄ Заморожен | ADR 2026-08-02 |
 | TUI (Go) | ❄ Заморожен | ADR 2026-08-02 |
-| API tests | ✅ 181 тест, coverage-гейт 44/38/38/42 | |
+| API tests | ✅ 213 тестов, coverage-гейт 54/52/50/55 | |
 | Линтер | ✅ Biome (вместо eslint) | ADR 2026-08-03 |
 | CI | ✅ ubuntu+windows, tsc+biome+test, go build | |
 

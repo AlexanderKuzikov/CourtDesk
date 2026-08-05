@@ -23,7 +23,7 @@
 │   - Express 5                       │
 │   - Puppeteer + RuCaptcha           │
 │   - 26 REST endpoints               │
-│   - 181 tests                        │
+│   - 213 tests                        │
 └─────────────────────────────────────┘
 ```
 
