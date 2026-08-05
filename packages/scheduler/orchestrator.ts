@@ -402,6 +402,23 @@ export async function runSingle(uid: string): Promise<boolean> {
   try {
     await processOne(c);
     return true;
+  } catch (err) {
+    // Ошибка перепарсинга фиксируется в деле (как в processBatch),
+    // иначе lastError остаётся устаревшим после ручного перепарсинга.
+    // Исключение пробрасывается в роут → 500 PARSE_ERROR (не 409).
+    if (err instanceof CourtUrlError) {
+      console.warn(`[scheduler] archive ${uid} (${c.number}): invalid URL`);
+      updateCase(uid, { status: 'archived', lastChecked: now() });
+      addEvent(uid, makeEvent(uid, 'archived', 'Заархивировано: URL не принадлежит судовой системе РФ'));
+    } else {
+      console.error(`[scheduler] fail ${uid} (${c.number}):`, err);
+      updateCase(uid, {
+        status: 'error', lastChecked: now(),
+        errorCount: (c.errorCount ?? 0) + 1,
+        lastError: err instanceof Error ? err.message.slice(0, 200) : 'Unknown error',
+      });
+    }
+    throw err;
   } finally {
     _inFlight.delete(uid);
   }
