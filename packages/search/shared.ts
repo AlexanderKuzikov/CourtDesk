@@ -130,13 +130,15 @@ export function parseResults(html: string, req: SearchRequest): SearchResult[] {
     const link = cells.eq(0).find('a');
     const href = link.attr('href') || '';
     const num = link.text().trim().split(/\s+/)[0] || '';
-    const uidMatch = href.match(/case_uid=([a-f0-9-]+)/i);
+    const caseUidMatch = href.match(/case_uid=([a-f0-9-]+)/i);
+    const caseIdMatch = href.match(/case_id=(\d+)/i);
     const caseUidRaw = cells.eq(2).find('.case-uid, .uid').text().trim()
       || cells.find('input[name="g2_case__JUDICIAL_UIDSS"]').val() as string | undefined;
     results.push({
       caseNumber: num,
       caseUrl: href.startsWith('http') ? href : `https://${req.courtId}.sudrf.ru${href}`,
-      uid: uidMatch ? uidMatch[1] : '',
+      caseUid: caseUidRaw || (caseUidMatch ? caseUidMatch[1] : null),
+      caseId: caseIdMatch ? caseIdMatch[1] : null,
       courtCode: req.courtCode,
       judge: cells.eq(3).text().trim() || null,
       result: cells.eq(5).text().trim() || null,
@@ -146,7 +148,6 @@ export function parseResults(html: string, req: SearchRequest): SearchResult[] {
       parties: [],
       courtId: req.courtId,
       courtType: req.courtType,
-      caseUid: caseUidRaw || undefined,
     });
   });
   return results;

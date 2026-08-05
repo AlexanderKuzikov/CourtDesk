@@ -71,9 +71,9 @@ describe('parseResults — таблица sudrf', () => {
     expect(results).toHaveLength(1);
     const r = results[0]!;
     expect(r.caseNumber).toBe('2-100/2026');
-    expect(r.uid).toBe('abc-def-123');
-    expect(r.filingDate).toBe('01.04.2026');
     expect(r.caseUid).toBe('54RS0001-01-2026-000123-45');
+    expect(r.caseId).toBeNull();
+    expect(r.filingDate).toBe('01.04.2026');
     expect(r.judge).toBe('Иванова Т.П.');
     expect(r.decisionDate).toBe('15.05.2026');
     expect(r.result).toBe('Удовлетворено');

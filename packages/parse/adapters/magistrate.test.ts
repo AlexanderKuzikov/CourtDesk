@@ -84,6 +84,7 @@ describe('MagistrateAdapter.parse — карточка мирового суда
     const card = await adapter.parse(CASE_HTML, URL);
     expect(card.identifiers.delo_id).toBe('1540005');
     expect(card.identifiers.case_type).toBe('1');
+    expect(card.identifiers.case_id).toBe('12345');
   });
 
   it('страница капчи — CaptchaRequiredError', async () => {

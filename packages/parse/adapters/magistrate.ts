@@ -105,6 +105,7 @@ export class MagistrateAdapter implements CourtAdapter {
         delo_id: parsedUrl.searchParams.get('delo_id'),
         case_uid: null,
         case_type: parsedUrl.searchParams.get('op'),
+        case_id: parsedUrl.searchParams.get('case_id'),
       },
       publishedAt: null,
       modifiedAt: null,

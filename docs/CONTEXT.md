@@ -2,13 +2,13 @@
 
 > CRM-система поиска и мониторинга судебных дел РФ.
 > Единый сервис для интеграции с 1С, Web UI и Desktop App на Go+WebView.
-> Последнее обновление: 2026-08-03
+> Последнее обновление: 2026-08-05
 
 ---
 
 ## Статус
 
-**v0.7.1** — стабилизация: закрыты все 6 блокеров (SSRF, TLS-allowlist, store-races, бинарники в git). 180 тестов, coverage-гейт, Biome, CI Windows+Go. Node ≥22.
+**v0.7.1** — стабилизация: закрыты все 6 блокеров (SSRF, TLS-allowlist, store-races, бинарники в git). 181 тест, coverage-гейт, Biome, CI Windows+Go. Node ≥22. Русификация UI, нормализация номеров дела (caseNumber / caseUid / caseId).
 
 | Компонент | Статус | Заметка |
 |-----------|--------|---------|
@@ -26,11 +26,11 @@
 | Viewer (Dashboard) | ✅ attention-bar, progress bar, XLS, retry | |
 | Viewer (Search) | ✅ async-добавление, retry | |
 | Viewer (Terminal) | ✅ Bloomberg-style | hover-дедупликация |
-| Viewer (Skins) | ✅ 3 skin × 5 themes | |
-| Desktop App | ✅ Go+WebView, 6 MB | startup-подключение, watcher, Ctrl+, |
+| Viewer (Skins) | ✅ 3 skin × 2 themes | 5 тем — только в desktop-страницах |
+| Desktop App | ✅ Go+WebView, ~6.9 MB | startup-подключение, watcher, Ctrl+, |
 | TUI (Node) | ❄ Заморожен | ADR 2026-08-02 |
 | TUI (Go) | ❄ Заморожен | ADR 2026-08-02 |
-| API tests | ✅ 180 тестов, coverage-гейт 44/38/38/42 | |
+| API tests | ✅ 181 тест, coverage-гейт 44/38/38/42 | |
 | Линтер | ✅ Biome (вместо eslint) | ADR 2026-08-03 |
 | CI | ✅ ubuntu+windows, tsc+biome+test, go build | |
 
@@ -42,6 +42,7 @@
 
 | # | Описание |
 |---|----------|
+| INFR-001 | **ENOTFOUND судовых субдоменов** (live): `oblsud--perm.sudrf.ru`, `2.perm.msudrf.ru` — `getaddrinfo ENOTFOUND`. Проверить актуальность субдоменов в справочнике судов |
 | CR11-006 | Тесты parse/search/captcha: закрыты magistrate/district/rucaptcha/shared/browser; appeal/cassation parse-адаптеры всё ещё без фикстур |
 | WEBUI-O2 | Мобильная адаптация |
 | WEBUI-O4 | Карточка дела: вкладки/аккордеон |
@@ -79,7 +80,7 @@
 
 ## API-покрытие
 
-**180 тестов (22 файла), coverage-гейт (v8): lines 44 / functions 38 / branches 38 / statements 42.** Все эндпоинты:
+**181 тест (22 файла), coverage-гейт (v8): lines 44 / functions 38 / branches 38 / statements 42.** Все эндпоинты:
 
 | Файл | Эндпоинты |
 |------|-----------|
@@ -110,10 +111,11 @@
 
 | Дата | Изменение |
 |------|-----------|
+| 2026-08-05 | **Русификация UI + нормализация номеров дела.** Бейджи типа суда: `COURT_TYPE_LABELS` в app.js (district→Районный суд, appeal→Апелляционный, cassation→Кассационный, magistrate→Мировой), применён в index/search/terminal. «Case UID»/«UID дела» → «УИД». Desktop-темы русифицированы (Slate (Dark)→Slate (тёмная) и т.д.). **NUM-001:** `SearchResult.uid` (смешивал case_uid и case_id) → `caseId` + `caseUid`; `CaseCard.uid` = судебный номер для всех судов (district/appeal/cassation переведены с judicial_uid); `identifiers.case_id` добавлен; `caseUid` теперь передаётся при добавлении из поиска и заполняется в processWaiting. API.md: 26 эндпоинтов, коды ошибок, v0.7.1. ARCHITECTURE.md: 26 эндпоинтов, 8 PATCH-полей, enforced в runFull, структура пакетов. Создан docs/PLANS.md. Тесты 180→181. |
 | 2026-08-03 | **Кроссплатформенность UI (Web=Windows=Linux).** Все emoji-иконки (не рендерились в Linux-WebKit без emoji-шрифта) заменены на inline SVG (stroke=currentColor, темы перекрашивают). Набор ICONS + `ic()`/`data-icon` в app.js, применён в index/search/terminal. Экспорт CSV → XLSX (zero-dep: zip-store + inline strings, Excel открывает без предупреждений). Перепарсинг: прогресс-бар (indeterminate + счётчик сек) и спиннер в строке; кнопки-дубли (архив/удалить/перепарсить) из карточки дела удалены. Linux-сборка courtdesktop: webkit2gtk-4.0→4.1 патч pkg-config в webview_go (в /tmp, в репо не зафиксировано — open: легализация). Проверено в WSLg (X11), API на Windows. |
 | 2026-08-03 | **v0.7.1 — стабилизация.** Закрыты все 6 блокеров: CR12-001 SSRF (assertCourtUrl в cases.ts POST/PATCH + все fetch-точки: shared, session, orchestrator), CR12-003 (проверка: ключ в git не попадал, txt-пустышки удалены), CR11-002 (ADR: TLS только за allowlist), CR11-003/005 (лок прогонов + per-uid in-flight в orchestrator, cron поверх лока), CR11-004 (бинарники и лог untracked, *.exe в .gitignore). CR12-010 (plaintiff/defendant), CR12-012 (капча не возвращается как результат), CR11-007 (единый fetchHtml), CR12-009 (пул браузера), CR11-011 (parse=async 202), CR12-013/014/015, S04–S07, CR11-008/012. ESLint→Biome (ADR). CI: Windows matrix + go build courtdesktop. Coverage v8 + пороги. Тесты 97→180. Web UI: attention-bar, progress bar, CSV, retry, skeleton, async-добавление в поиске. |
 | 2026-08-02 | **Кнопка «Перепарсить» (вариант 2).** `POST /api/cases/:uid/parse` — тонкий роут над `scheduler.runSingle` (привязанный парсинг: saveCard под внутр. uid + обновление дела). 🔄 в строке дашборда и в карточке, guard от двойного клика. Убран глазик 👁 «Детали» (дубль клика по строке). Тесты 94→97. API.md §4.17. |
-| 2026-08-02 | **Desktop: connection flow.** Health-check при старте → приложение или встроенная страница подключения (SetHtml). Watcher потери/восстановления связи (10 с, 3 сбоя). Ctrl+, через GetAsyncKeyState (Windows). recentUrls (до 5). XSS встроенных страниц закрыт (html.EscapeString), валидация схемы URL. ADR: WebView — единственный клиент, TUI заморожены, API открыт в LAN. CR11-001 закрыт (by design); CR12-002/005/007/008/018, CR11-015, GOUI-O*, CR12-S01..S03 сняты (TUI frozen). |
+| 2026-08-02 | **Desktop: connection flow.** Health-check при старте → приложение или встроенная страница подключения (локальный HTTP-сервер :0 + Navigate). Watcher потери/восстановления связи (10 с, 3 сбоя). Ctrl+, через GetAsyncKeyState (Windows). recentUrls (до 5). XSS встроенных страниц закрыт (html.EscapeString), валидация схемы URL. ADR: WebView — единственный клиент, TUI заморожены, API открыт в LAN. CR11-001 закрыт (by design); CR12-002/005/007/008/018, CR11-015, GOUI-O*, CR12-S01..S03 сняты (TUI frozen). |
 | 2026-07-30 | **Реорганизация документации.** Удалены CODE_REVIEW.md, BUG_REPORT.md, SESSION_CONTINUE.md, PROMPT_WEBUI.md. Open-проблемы слиты сюда. Создан AGENTS.md. CRM-INTEGRATION.md → API.md. Создан knowledge base в `D:\GitHub\knowledge/`. |
 | 2026-07-30 | **CR12** — контрольный аудит. 21 новое замечание, 4 блокера. CR11 не исправлены. |
 | 2026-07-29 | **CR11** — полный аудит. 22 замечания, 5 блокеров. |
@@ -138,6 +140,7 @@ courtdesk/
 │   ├── CONTEXT.md       # Этот файл
 │   ├── DECISIONS.md     # ADR
 │   ├── ARCHITECTURE.md  # Архитектура, data flow
+│   ├── PLANS.md         # Бэклог работ (приоритеты)
 │   └── API.md           # API-документация для 1С
 ├── packages/
 │   ├── core/            # Типы, суды, encoding, config, logger, progress
@@ -150,7 +153,7 @@ courtdesk/
 │   ├── api/routes/      # 26 эндпоинтов + тесты
 │   ├── tui/             # Node TUI (заморожен)
 │   ├── tui-go/          # Go TUI (заморожен)
-│   ├── courtdesktop/    # Go Desktop (WebView, 6 MB)
+│   ├── courtdesktop/    # Go Desktop (WebView, ~6.9 MB)
 │   └── viewer/public/   # Web UI (vanilla JS)
 ├── data/                # JSON-хранилище
 ├── logs/                # pino-логи

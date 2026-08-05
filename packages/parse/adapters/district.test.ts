@@ -40,21 +40,26 @@ const CASE_HTML = `
 describe('DistrictAdapter.parse — карточка районного суда', () => {
   const adapter = new DistrictAdapter();
 
-  it('uid из HTML ( judicial_uid ), fallback — URL', async () => {
+  it('uid — судебный номер дела (из .casenumber)', async () => {
     const card = await adapter.parse(CASE_HTML, URL);
-    expect(card.uid).toBe('54RS0001-01-2026-000123-45');
+    expect(card.uid).toBe('2-100/2026');
+    expect(card.number).toBe('2-100/2026');
   });
 
-  it('uid из URL если в HTML нет', async () => {
+  it('УИД ГАС извлекается в identifiers.case_uid (HTML/URL)', async () => {
+    const card = await adapter.parse(CASE_HTML, URL);
+    expect(card.identifiers.case_uid).toBe('54RS0001-01-2026-000123-45');
+  });
+
+  it('УИД из URL если в HTML нет', async () => {
     const html = CASE_HTML.replace(/<a href="modules\.php[^>]*>[^<]*<\/a>/, '');
     const card = await adapter.parse(html, URL);
-    expect(card.uid).toBe('54RS0001-01-2026-000123-45');
+    expect(card.identifiers.case_uid).toBe('54RS0001-01-2026-000123-45');
   });
 
-  it('нет uid нигде — ошибка', async () => {
-    const html = CASE_HTML.replace(/<a href="modules\.php[^>]*>[^<]*<\/a>/, '');
-    const noUidUrl = 'https://kirov--perm.sudrf.ru/modules.php?name_op=case';
-    await expect(adapter.parse(html, noUidUrl)).rejects.toThrow('не удалось определить UID');
+  it('нет номера дела — ошибка', async () => {
+    const html = CASE_HTML.replace(/<div class="casenumber">[^<]*<\/div>/, '');
+    await expect(adapter.parse(html, URL)).rejects.toThrow('не удалось определить номер дела');
   });
 
   it('тип и номер дела', async () => {
@@ -116,6 +121,7 @@ describe('DistrictAdapter.parse — карточка районного суда
       delo_id: '1540005',
       case_uid: '54RS0001-01-2026-000123-45',
       case_type: '0',
+      case_id: null,
     });
   });
 

@@ -506,11 +506,11 @@ func pageStyles() string {
 
 func themeOptions(selected string) string {
 	opts := []struct{ value, label string }{
-		{"slate", "Slate (Dark)"},
-		{"light", "Light"},
-		{"paper", "Paper"},
-		{"forest", "Forest"},
-		{"contrast", "High Contrast"},
+		{"slate", "Slate (тёмная)"},
+		{"light", "Светлая"},
+		{"paper", "Бумага"},
+		{"forest", "Лес"},
+		{"contrast", "Высокий контраст"},
 	}
 	var b strings.Builder
 	for _, o := range opts {

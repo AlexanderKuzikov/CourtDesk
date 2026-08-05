@@ -234,6 +234,7 @@ async function processWaiting(c: WatchedCase): Promise<void> {
     status: 'monitoring',
     url: r.caseUrl,
     number: r.caseNumber,
+    caseUid: r.caseUid ?? c.caseUid,
     lastChecked: now(),
   });
   addEvent(c.uid, makeEvent(c.uid, 'found', `Дело появилось: ${r.caseNumber}`, { caseUrl: r.caseUrl }));

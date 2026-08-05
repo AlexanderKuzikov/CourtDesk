@@ -117,6 +117,17 @@ function closeSkinMenu() {
   if (m) m.classList.remove('open');
 }
 
+// --- Labels ---
+const COURT_TYPE_LABELS = {
+  district: 'Районный суд',
+  appeal: 'Апелляционный суд',
+  cassation: 'Кассационный суд',
+  magistrate: 'Мировой суд',
+};
+function courtTypeLabel(t) {
+  return COURT_TYPE_LABELS[t] || t || '?';
+}
+
 // --- Utilities ---
 function esc(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');

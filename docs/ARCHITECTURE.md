@@ -32,9 +32,12 @@ CourtDesk — **не набор микросервисов**. Это один п
 - Hostname: ends with `.sudrf.ru` или `.msudrf.ru`
 - Блокирует: `file://`, `http://`, `localhost`, IP-адреса, cloud metadata (`169.254.169.254`)
 
-Применение:
+Применение (CR12-001 — все fetch-точки):
+- `POST /api/cases` и `PATCH /api/cases/:uid` — проверка до любого fetch
 - `POST /api/parse/url` — проверка перед fetch
-- `orchestrator.fetchHtml` — проверка перед fetch
+- `search/shared.ts` — `fetchHtml`, `smartFetch` (единый HTTP-слой)
+- `captcha/session.ts` — `fetchWithCaptcha`, `fetchMsudrfSearch`
+- `scheduler/orchestrator.ts` — `fetchHtml` перед fetch
 
 ### 2.2 Store Integrity (CR6-001)
 
@@ -74,9 +77,10 @@ API без аутентификации (локальная сеть). При п
 - Уведомление / отметка при наступлении даты
 
 ### 3.4 Справочник судов
-- 10 287 записей (unified-courts.json, OKTMO + телефоны)
+- 10 287 записей (`packages/core/data/courts.json`, OKTMO + телефоны; источник — CourtOktmo/data/unified-courts.json)
 - O(1)-lookup по code и subdomain
-- AND-поиск по названию (`filter → slice → map`)
+- AND-поиск по названию (`filter → slice → map`, лимит 50)
+- Иерархия: `findHigherCourt`, `CASSATION_MAP` (89 регионов → 9 кассационных), кэш MS→RS в `data/court-hierarchy.json`
 
 ---
 
@@ -85,49 +89,60 @@ API без аутентификации (локальная сеть). При п
 ```
 courtdesk/
 ├── packages/
-│   ├── core/              # Фундамент: типы, справочник, encoding, config, errors (assertCourtUrl)
+│   ├── core/              # Фундамент: типы, справочник, encoding, config, errors, logger, progress
 │   │   ├── types.ts       # Единые типы
-│   │   ├── courts.ts      # Справочник судов (unified-courts.json)
+│   │   ├── courts.ts      # Справочник судов (data/courts.json, 10 287 записей)
 │   │   ├── encoding.ts    # CP1251 percent-encoder
-│   │   ├── errors.ts      # CaptchaRequiredError, CourtUrlError, assertCourtUrl
-│   │   └── config.ts      # .env + config.json
+│   │   ├── errors.ts      # CaptchaRequiredError, CourtUrlError, assertCourtUrl, isCaptchaPage
+│   │   ├── config.ts      # .env (RUCAPTCHA_API_KEY, TWOCAPTCHA_API_KEY)
+│   │   ├── logger.ts      # pino (файл + stdout)
+│   │   └── progress.ts    # ScanProgress (in-memory)
 │   │
 │   ├── captcha/           # Puppeteer + RuCaptcha
 │   │   ├── session.ts     # Browser-сессия: капча → решение → поиск
-│   │   └── rucaptcha.ts   # Клиент RuCaptcha API v2
+│   │   ├── rucaptcha.ts   # Клиент RuCaptcha API v2
+│   │   └── browser.ts     # Пул браузера Puppeteer (idle-close 30 с)
 │   │
 │   ├── search/            # Поиск дел
 │   │   ├── adapters/      # district, appeal, cassation, magistrate
-│   │   ├── shared.ts      # fetchHtml + parseResults
+│   │   ├── shared.ts      # fetchHtml, smartFetch, buildSearchUrl, parseResults
 │   │   └── constants.ts   # SEARCH_PARAMS (delo_id, case_type)
 │   │
 │   ├── parse/             # Парсинг карточек дел
 │   │   ├── adapters/      # district, appeal, cassation, magistrate
-│   │   └── shared.ts      # extractCourtSubdomain, parseDate, parsePublishInfo
+│   │   └── shared.ts      # extractCourtSubdomain, parseDate, parsePublishInfo, cleanText
 │   │
 │   ├── intake/            # Классификатор запросов
-│   │   └── classify.ts    # classify(input) → Classification
+│   │   ├── classify.ts    # classify(), identifyCourt()
+│   │   ├── types.ts       # Classification
+│   │   └── index.ts
 │   │
 │   ├── scheduler/         # Оркестратор мониторинга
-│   │   └── orchestrator.ts # runFull / runRetry / runNew / runSingle
+│   │   ├── orchestrator.ts # runFull / runRetry / runNew / runSingle + withRunLock + in-flight guard
+│   │   ├── cron.ts        # setInterval 60 с поверх лока прогонов
+│   │   └── index.ts
 │   │
 │   ├── store/             # Хранилище состояния
 │   │   ├── cases.ts       # CRUD + in-memory cache
 │   │   ├── events.ts      # История изменений
 │   │   ├── notifications.ts # Уведомления + deleteNotificationsByCase
+│   │   ├── cards.ts       # CaseCard (полные карточки)
+│   │   ├── settings.ts    # AppSettings (расписание)
 │   │   └── json-store.ts  # Атомарная запись (tmp+rename, corrupt backup)
 │   │
-│   ├── tui/               # Терминальный интерфейс (blessed, deprecated)
+│   ├── tui/               # ❄ Заморожен (ADR 2026-08-02)
 │   │   ├── index.ts       # Точка входа
 │   │   ├── app.ts         # screen, list, detail, клавиши
 │   │   └── fetch.ts       # tuiFetch() с AbortController
 │   │
-│   ├── tui-go/            # Go TUI (Bubble Tea) + Web UI (plan)
-│   │   ├── main.go        # Bubble Tea TUI (1144 строк)
-│   │   ├── go.mod         # Go модуль
-│   │   ├── go.sum
-│   │   ├── courtdesk-tui.exe    # Windows бинарник (7 MB)
-│   │   └── courtdesk-tui-linux-amd64 # Linux бинарник (7 MB)
+│   ├── tui-go/            # ❄ Заморожен (ADR 2026-08-02)
+│   │   └── main.go        # Bubble Tea TUI (1146 строк)
+│   │
+│   ├── courtdesktop/      # Go Desktop App (WebView, ~6.9 MB)
+│   │   ├── main.go        # WebView-оболочка: health-check, watcher, настройки, Ctrl+,
+│   │   ├── hotkeys_windows.go / hotkeys_other.go
+│   │   ├── msgbox_windows.go / msgbox_other.go
+│   │   └── go.mod / go.sum
 │   │
 │   └── api/               # Express-сервер
 │       ├── server.ts      # createApp() + CORS + graceful shutdown
@@ -135,19 +150,23 @@ courtdesk/
 │       │   ├── health.ts         # GET /api/health
 │       │   ├── status.ts         # GET /api/status
 │       │   ├── notifications.ts  # GET /api/notifications, PATCH read
-│       │   ├── cases.ts          # CRUD /api/cases + /events
-│       │   ├── search.ts         # POST /api/search/by-number, by-party
-│       │   ├── parse.ts          # POST /api/parse/url (assertCourtUrl), /run
+│       │   ├── cases.ts          # CRUD /api/cases + /card /events /wait /:uid/parse
+│       │   ├── search.ts         # POST /api/search/by-number, by-party, by-case-uid
+│       │   ├── parse.ts          # POST /api/parse/url (assertCourtUrl), /run, GET /progress
 │       │   ├── resolve.ts        # POST /api/resolve (URL builder)
-│       │   ├── courts.ts         # GET /api/courts
-│       │   └── intake.ts         # POST /api/intake
+│       │   ├── courts.ts         # GET /api/courts, /api/courts/:id
+│       │   ├── intake.ts         # POST /api/intake
+│       │   └── settings.ts       # GET/PUT /api/settings
 │       └── middleware/
 │           └── error.ts          # Global error handler
 │
-└── viewer/
-    └── public/
-        ├── index.html      # Дашборд: счётчики, фильтры, таблица, детали, управление
-        └── search.html     # Поиск: суд, режим, результаты, +в мониторинг, +waiting
+└── packages/viewer/public/ # Web UI (vanilla JS, без бандлера)
+    ├── index.html      # Дашборд: счётчики, фильтры, таблица, детали, управление
+    ├── search.html     # Поиск: суд, режим, результаты, +в мониторинг, +waiting
+    ├── terminal.html   # Терминал (Bloomberg-стиль)
+    ├── app.js          # Общие утилиты, иконки, темы, скины, labels
+    ├── terminal.js     # Логика терминала
+    └── theme.css       # Темы (dark/light) × скины (corporate/legal/compact)
 ```
 
 ---
@@ -169,7 +188,7 @@ Dashboard ──→ POST /api/parse/run { mode: 'full' }
   → 202 Accepted (или 409 если уже идёт)
   → runFull() в фоне
        │
-       ├─→ listCases({ status: ['monitoring', 'decision', 'error'] })
+       ├─→ listCases({ status: ['monitoring', 'decision', 'enforced', 'error'] })
        ├─→ processOne(case)
        │     ├─→ assertCourtUrl(url)
        │     ├─→ fetchHtml(url)
@@ -206,18 +225,21 @@ Dashboard ──→ POST /api/parse/run { mode: 'full' }
 | `GET` | `/api/cases` | Список дел (`?status=&userId=&courtId=&q=`) |
 | `GET` | `/api/cases/stats` | Детальная статистика |
 | `GET` | `/api/cases/:uid` | Карточка дела |
+| `GET` | `/api/cases/:uid/card` | Полная CaseCard (404 до готовности) |
 | `GET` | `/api/cases/:uid/events` | События дела (timeline) |
-| `POST`| `/api/cases` | Добавить в мониторинг |
+| `POST`| `/api/cases` | Добавить в мониторинг (`?parse=true` sync / `?parse=async` 202) |
 | `POST`| `/api/cases/wait` | Отслеживать появление |
 | `PATCH`| `/api/cases/:uid` | Обновить разрешённые поля |
-| `DELETE`| `/api/cases/:uid` | Удалить (каскадно: events + notifications) |
+| `DELETE`| `/api/cases/:uid` | Удалить (каскадно: events + notifications + card) |
+| `POST`| `/api/cases/:uid/parse` | Перепарсинг карточки (409 `PARSE_IN_PROGRESS`) |
 | `POST`| `/api/search/by-number` | Поиск по номеру |
 | `POST`| `/api/search/by-party` | Поиск по участникам |
+| `POST`| `/api/search/by-case-uid` | Поиск по УИД |
 | `POST`| `/api/parse/url` | Парсинг карточки (assertCourtUrl) |
 | `POST`| `/api/parse/run` | Запуск прогона (202/409) |
 | `GET` | `/api/parse/progress` | Прогресс мониторинга |
 | `POST`| `/api/resolve` | Суд + номер → URL (builder) |
-| `GET` | `/api/courts` | Поиск судов |
+| `GET` | `/api/courts` | Поиск судов (`?q=`, лимит 30) |
 | `GET` | `/api/courts/:id` | Инфо о суде |
 | `POST`| `/api/intake` | Классификация текста |
 | `GET` | `/api/settings` | Настройки расписания |
@@ -230,7 +252,7 @@ interface ApiError { success: false; error: string; code: string; }
 ```
 
 ### 6.3 PATCH whitelist
-Только: `status`, `result`, `legalForceDate`, `legalForceNotified`, `userId`, `url`.
+Только: `status`, `result`, `legalForceDate`, `legalForceNotified`, `userId`, `url`, `errorCount`, `lastError`.
 Нельзя: `uid`, `createdAt`, `courtId`, `courtType`, `number`.
 
 ---
@@ -303,9 +325,9 @@ HTTP :8767                      HTTP :8768
 | Размер | 200+ MB + Node.js | 7 MB статический .exe |
 | Кроссплатформенность | Только сборка под свою ОС | `GOOS=linux go build` |
 
-### 9.3 Текущий прототип
+### 9.3 Текущий прототип (❄ заморожен, ADR 2026-08-02)
 
-**`packages/tui-go/main.go`** — Bubble Tea TUI (1144 строк):
+**`packages/tui-go/main.go`** — Bubble Tea TUI (1146 строк):
 - Список дел (номер, суд, участники, статус, дата)
 - Детали дела + события (timeline)
 - Добавление/удаление дел
@@ -313,9 +335,9 @@ HTTP :8767                      HTTP :8768
 - Уведомления
 - Фильтр по номеру/суду/cтатусу
 - Поиск
-- F-keys: F2=прогон, F3=добавить, F5=обновить, F10=выход
+- F-keys: F4=full, F5=retry, F6=new
 
-Планируется: Web-режим (`--serve`) с админским интерфейсом (html/template).
+Код сохраняется, но не дорабатывается. Web-режим `--serve` не развивается — единственный клиент — WebView-оболочка (`packages/courtdesktop/`).
 
 ---
 
@@ -325,7 +347,7 @@ HTTP :8767                      HTTP :8768
 
 | Режим | Что делает |
 |-------|-----------|
-| **full** | monitoring + decision + error дела |
+| **full** | monitoring + decision + enforced + error дела |
 | **retry** | Устаревшие monitoring + error |
 | **new** | waiting → searchByParty |
 

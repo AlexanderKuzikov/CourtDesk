@@ -95,7 +95,7 @@ describe('runNew — waiting-кейсы через searchByParty (BUG-002)', () 
     searchAdapter.searchByParty.mockResolvedValue([{
       caseNumber: '2-100/2026',
       caseUrl: 'https://kirov--perm.sudrf.ru/modules.php?name_op=case&case_id=1',
-      uid: 'w2',
+      caseUid: null, caseId: null,
       judge: null, result: null, legalForceDate: null, filingDate: '2026-06-01',
       decisionDate: null, parties: [], courtId: 'kirov--perm', courtType: 'district',
     }]);

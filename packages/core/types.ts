@@ -42,9 +42,10 @@ export interface SearchRequest {
 }
 
 export interface SearchResult {
-  caseNumber: string;
+  caseNumber: string;   // судебный номер дела, напр. «2-124/2026» — то, чем оперируют люди
   caseUrl: string;
-  uid: string;
+  caseUid: string | null;   // УИД ГАС «Правосудие» (XXWWXXXX-XX-XXXX-XXXXXX-XX)
+  caseId: string | null;    // номер карточки в картотеке суда (case_id из URL)
   judge: string | null;
   result: string | null;
   legalForceDate: string | null;
@@ -54,22 +55,22 @@ export interface SearchResult {
   courtId: string;
   courtCode?: string;
   courtType: CourtType;
-  caseUid?: string;       // УИД (XXWWXXXX-XX-XXXX-XXXXXX-XX)
   matchScore?: number;
 }
 
 // ---- Парсинг карточки (из CourtFlow) ----
 export interface CaseCard {
   $schema: string;
-  uid: string;
+  uid: string;      // судебный номер дела, напр. «2-2808/2026» (единый смысл для всех судов)
   type: string;
-  number: string;
+  number: string;   // судебный номер дела (дублирует uid — для совместимости с CourtFlow)
   court: string; // subdomain без суффикса .sudrf.ru / .msudrf.ru
   courtType: CourtType;
   identifiers: {
     delo_id: string | null;
-    case_uid: string | null;
+    case_uid: string | null;  // УИД ГАС «Правосудие» (XXWWXXXX-XX-XXXX-XXXXXX-XX)
     case_type: string | null;
+    case_id: string | null;   // номер карточки в картотеке суда
   };
   publishedAt: string | null; // ISO
   modifiedAt: string | null;

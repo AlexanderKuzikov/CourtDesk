@@ -21,7 +21,7 @@
   - **Дашборд** (`/`) — счётчики, фильтры, таблица дел с детальной модалкой, настройки расписания.
   - **Терминал** (`/terminal.html`) — Bloomberg-стиль: sticky cmd-bar, multi-sort, vim-keys, режимы, saved views, statusline.
   - **Поиск** (`/search.html`) — выбор суда, поиск по номеру/участникам/УИД, добавление в мониторинг.
-- **Desktop App** (`packages/courtdesktop/`) — нативное приложение на Go+WebView (6 MB). Использует тот же Web UI. Поддержка настраиваемого API URL.
+- **Desktop App** (`packages/courtdesktop/`) — нативное приложение на Go+WebView (~6.9 MB). Использует тот же Web UI. Поддержка настраиваемого API URL.
 - **TUI** — терминальный интерфейс на Go (Bubble Tea), без внешних TUI-зависимостей.
 - **API** — REST/JSON, 26 эндпоинтов для 1С.
 
@@ -55,18 +55,19 @@ go build -ldflags="-H windowsgui" -o courtdesktop.exe .
 
 **Настройки:** `Ctrl+,` — открыть настройки (выбор API URL и темы). Профиль в `~/.config/courtdesk/profile.json`.
 
-**Кроссплатформенность:** Windows (WebView2), Linux (WebKitGTK), macOS (WKWebView). Размер бинарника ~6 MB.
+**Кроссплатформенность:** Windows (WebView2), Linux (WebKitGTK), macOS (WKWebView). Размер бинарника ~6.9 MB.
 
 ## Документация
 
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — архитектура, data flow, модули
 - [`docs/CONTEXT.md`](docs/CONTEXT.md) — состояние, open-проблемы, журнал работ
 - [`docs/DECISIONS.md`](docs/DECISIONS.md) — архитектурные решения (ADR)
-- [`docs/API.md`](docs/API.md) — 25 эндпоинтов API для 1С, примеры
+- [`docs/PLANS.md`](docs/PLANS.md) — приоритизированный бэклог работ
+- [`docs/API.md`](docs/API.md) — 26 эндпоинтов API для 1С, примеры
 
 ## Статус
 
-**v0.7.1** — стабилизация: закрыты блокеры безопасности (SSRF, URL-allowlist на всех fetch), гонки планировщика, бинарники в git. Desktop App на Go+WebView (6 MB). Web UI: Dashboard + Terminal + Search, Skins. API: 180 тестов, 26 эндпоинтов, coverage-гейт. Node ≥22.
+**v0.7.1** — стабилизация: закрыты блокеры безопасности (SSRF, URL-allowlist на всех fetch), гонки планировщика, бинарники в git. Desktop App на Go+WebView (6.9 MB). Web UI: Dashboard + Terminal + Search, Skins (3 скина × 2 темы). API: 181 тест, 26 эндпоинтов, coverage-гейт. Node ≥22. Русификация UI, нормализация номеров дела.
 
 ## Лицензия
 

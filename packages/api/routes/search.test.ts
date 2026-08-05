@@ -69,7 +69,7 @@ describe('POST /api/search/by-number', () => {
   it('200 с результатами поиска', async () => {
     const results: SearchResult[] = [{
       caseNumber: '2-100/2026', caseUrl: 'https://leninsky--perm.sudrf.ru/...',
-      uid: 'u1', judge: 'Иванов И.И.', result: 'Удовлетворено',
+      caseUid: null, caseId: 'u1', judge: 'Иванов И.И.', result: 'Удовлетворено',
       legalForceDate: '2026-08-15', filingDate: '2026-03-01', decisionDate: null,
       parties: [], courtId: 'leninsky--perm', courtType: 'district',
     }];
@@ -102,7 +102,7 @@ describe('POST /api/search/by-party', () => {
   it('200 с результатами поиска по ответчику', async () => {
     const results: SearchResult[] = [{
       caseNumber: '2-101/2026', caseUrl: 'https://leninsky--perm.sudrf.ru/...',
-      uid: 'u2', judge: null, result: null,
+      caseUid: null, caseId: 'u2', judge: null, result: null,
       legalForceDate: null, filingDate: '2026-03-15', decisionDate: null,
       parties: [{ role: 'Ответчик', name: 'Иванов Иван' }],
       courtId: 'leninsky--perm', courtType: 'district',
@@ -137,7 +137,7 @@ describe('POST /api/search/by-case-uid', () => {
   it('200 с результатами поиска по УИД', async () => {
     searchAdapter.searchByCaseUid.mockResolvedValue([{
       caseNumber: '2-100/2026', caseUrl: 'https://leninsky--perm.sudrf.ru/...',
-      uid: 'u3', judge: null, result: null,
+      caseUid: null, caseId: 'u3', judge: null, result: null,
       legalForceDate: null, filingDate: null, decisionDate: null,
       parties: [], courtId: 'leninsky--perm', courtType: 'district',
     }]);

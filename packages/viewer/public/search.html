@@ -239,7 +239,7 @@ function renderResults() {
   const tbody = allResults.map((r, i) => `
     <tr data-idx="${i}" style="cursor:pointer">
       <td><b>${esc(r.caseNumber)}</b></td>
-      <td><span class="badge badge-${esc(r.courtType)}">${esc(r.courtType || '?')}</span></td>
+      <td><span class="badge badge-${esc(r.courtType)}">${esc(courtTypeLabel(r.courtType))}</span></td>
       <td>${esc(r.judge || '—')}</td>
       <td>${esc((r.result || '—').substring(0, 35))}</td>
       <td>${esc(r.legalForceDate || '—')}</td>
@@ -270,7 +270,7 @@ async function addToMonitor(idx) {
     // CR11-011: parse=async — не держим соединение, карточка догружается в фоне
     const res = await fetch(apiUrl('/api/cases?parse=async'), {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ url:r.caseUrl, courtId:r.courtId, courtCode:r.courtCode||r.courtId, courtType:r.courtType, caseNumber:r.caseNumber }),
+      body:JSON.stringify({ url:r.caseUrl, courtId:r.courtId, courtCode:r.courtCode||r.courtId, courtType:r.courtType, caseNumber:r.caseNumber, caseUid:r.caseUid || undefined }),
     });
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || 'Ошибка');
@@ -347,8 +347,8 @@ async function openDetail(idx) {
               <div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px">Признак рассмотрения</div><div class="val" style="margin-top:2px">${esc(card.card.proceedingType || '—')}</div></div>
               <div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px">Результат</div><div class="val" style="margin-top:2px"><strong>${esc(card.card.result || '—')}</strong></div></div>
             ` : ''}
-            <div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px">UID дела</div><div class="val" style="margin-top:2px;font-family:monospace;font-size:11px">${esc(card.uid || '—')}</div></div>
-            ${card.identifiers?.case_uid ? `<div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px">Case UID</div><div class="val" style="margin-top:2px;font-family:monospace;font-size:11px">${esc(card.identifiers.case_uid)}</div></div>` : ''}
+            <div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px">Номер дела (УИД)</div><div class="val" style="margin-top:2px;font-family:monospace;font-size:11px">${esc(card.uid || '—')}</div></div>
+            ${card.identifiers?.case_uid ? `<div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px">УИД ГАС</div><div class="val" style="margin-top:2px;font-family:monospace;font-size:11px">${esc(card.identifiers.case_uid)}</div></div>` : ''}
             ${card.publishedAt ? `<div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px">Опубликовано</div><div class="val" style="margin-top:2px;font-size:11px">${esc(card.publishedAt)}</div></div>` : ''}
             ${card.modifiedAt ? `<div class="info-item"><div class="key" style="color:var(--text-muted);font-size:11px">Изменено</div><div class="val" style="margin-top:2px;font-size:11px">${esc(card.modifiedAt)}</div></div>` : ''}
           </div>`;
@@ -383,7 +383,7 @@ async function openDetail(idx) {
     <h2>${esc(r.caseNumber)}</h2>
     <div class="case-num"><a href="${esc(url)}" target="_blank" rel="noopener noreferrer" style="color:var(--primary)">${esc(url)}</a></div>
     <table style="width:100%;border-collapse:collapse;font-size:13px">
-      <tr><td style="color:var(--text-muted);width:40%;padding:4px 8px;border-bottom:1px solid var(--border)">Тип суда</td><td style="padding:4px 8px;border-bottom:1px solid var(--border)"><span class="badge badge-${esc(r.courtType)}">${esc(r.courtType || '?')}</span></td></tr>
+      <tr><td style="color:var(--text-muted);width:40%;padding:4px 8px;border-bottom:1px solid var(--border)">Тип суда</td><td style="padding:4px 8px;border-bottom:1px solid var(--border)"><span class="badge badge-${esc(r.courtType)}">${esc(courtTypeLabel(r.courtType))}</span></td></tr>
       <tr><td style="color:var(--text-muted);padding:4px 8px;border-bottom:1px solid var(--border)">Судья</td><td style="padding:4px 8px;border-bottom:1px solid var(--border)">${esc(r.judge || '—')}</td></tr>
       <tr><td style="color:var(--text-muted);padding:4px 8px;border-bottom:1px solid var(--border)">Дата поступления</td><td style="padding:4px 8px;border-bottom:1px solid var(--border)">${esc(r.filingDate || '—')}</td></tr>
       <tr><td style="color:var(--text-muted);padding:4px 8px;border-bottom:1px solid var(--border)">Дата решения</td><td style="padding:4px 8px;border-bottom:1px solid var(--border)">${esc(r.decisionDate || '—')}</td></tr>

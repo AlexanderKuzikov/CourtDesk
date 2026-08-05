@@ -523,7 +523,7 @@ async function openDetail() {
         <div class="sub">${ic('court')} Суд <span class="n"></span></div>
         <div class="info-grid">
           <div class="info-item"><div class="key">Суд</div><div class="val">${esc(courtName)}</div></div>
-          <div class="info-item"><div class="key">Тип</div><div class="val">${esc(card.courtType || ca.courtType || '—')}</div></div>
+          <div class="info-item"><div class="key">Тип</div><div class="val">${esc(courtTypeLabel(card.courtType || ca.courtType || '—'))}</div></div>
           <div class="info-item"><div class="key">Тип дела</div><div class="val">${esc(card.type || '—')}</div></div>
           ${card.card ? `
             <div class="info-item"><div class="key">Категория</div><div class="val" style="font-size:11px">${esc((card.card.category || []).join(' → ') || '—')}</div></div>

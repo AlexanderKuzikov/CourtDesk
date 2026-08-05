@@ -22,14 +22,14 @@
 │   Node.js API Server (:8767)        │
 │   - Express 5                       │
 │   - Puppeteer + RuCaptcha           │
-│   - 25 REST endpoints               │
-│   - 94 tests                        │
+│   - 26 REST endpoints               │
+│   - 181 tests                        │
 └─────────────────────────────────────┘
 ```
 
 ## Key Features
 
-- **Минимальный бинарник**: 6 MB (WebView2 runtime встроен в Windows 10/11)
+- **Минимальный бинарник**: ~6.9 MB (WebView2 runtime встроен в Windows 10/11)
 - **Нативный рендеринг**: Edge Chromium на Windows, WebKitGTK на Linux, WKWebView на macOS
 - **Полный Web UI**: Dashboard, Terminal, Search, Skins — всё из коробки
 - **Настраиваемый сервер**: поддержка удалённых API серверов, список недавних серверов
@@ -41,10 +41,11 @@
 
 ```
 packages/courtdesktop/
-├── main.go              # WebView implementation (~200 строк)
+├── main.go              # WebView implementation (524 строки)
 ├── go.mod               # Dependencies (webview_go)
 ├── go.sum               # Dependency checksums
-├── courtdesktop.exe     # Windows binary (6 MB)
+├── hotkeys_windows.go / hotkeys_other.go
+├── msgbox_windows.go / msgbox_other.go
 └── IMPLEMENTATION.md    # This file
 ```
 
@@ -53,8 +54,7 @@ packages/courtdesktop/
 ### Запуск
 
 ```bash
-# 1. Запустить API сервер
-cd packages/api
+# 1. Запустить API сервер (из корня проекта)
 npm start
 
 # 2. Запустить desktop app
@@ -67,7 +67,7 @@ cd packages/courtdesktop
 
 **Ctrl+,** — открыть/закрыть страницу настроек:
 - **API URL** — адрес сервера (по умолчанию `http://127.0.0.1:8767`)
-- **Theme** — выбор темы (Slate/Light/Paper/Forest/Contrast)
+- **Theme** — выбор темы (Slate (тёмная)/Светлая/Бумага/Лес/Высокий контраст)
 - Настройки сохраняются в `~/.config/courtdesk/profile.json`
 - «Сохранить и подключиться» применяет URL без перезапуска
 
@@ -75,8 +75,9 @@ cd packages/courtdesktop
 
 При старте выполняется health-check (`GET /api/health`, таймаут 2 с). Если сервер
 недоступен, открывается встроенная страница подключения: поле адреса, кнопка
-«Проверить», список недавних серверов. Страница встроена в бинарник (SetHtml)
-и не зависит от сервера.
+«Проверить», список недавних серверов. Страница подаётся локальным HTTP-сервером
+(127.0.0.1:0, `startLocalServer`) + `Navigate` на `/connect` и `/settings` —
+не зависит от API-сервера.
 
 Во время работы watcher каждые 10 с проверяет связь; после 3 сбоев подряд
 открывается страница подключения («Связь с сервером потеряна»), при
@@ -124,7 +125,7 @@ Cross-compile с Windows на Linux требует CGo toolchain и Linux-заг
 
 | Метрика | Fyne | WebView |
 |---------|------|---------|
-| Размер бинарника | 40 MB | 6 MB |
+| Размер бинарника | 40 MB | ~6.9 MB |
 | Рендеринг | Custom (OpenGL) | Нативный браузер |
 | Код UI | Дублирование | Переиспользование Web UI |
 | Поддержка | Ограниченная | Полная (HTML/CSS/JS) |
@@ -138,7 +139,7 @@ Cross-compile с Windows на Linux требует CGo toolchain и Linux-заг
 - Дублирование кода с Web UI
 - Проблемы с Linux cross-compile
 
-**v0.7.0** — Миграция на WebView (6 MB):
+**v0.7.0** — Миграция на WebView (~6.9 MB):
 - Нативный браузерный движок
 - 100% переиспользование Web UI
 - Настраиваемый API URL

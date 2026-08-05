@@ -1,8 +1,8 @@
 # Интеграция CourtDesk с 1С CRM — API-документация
 
-> Дата: 2026-07-27
-> Версия приложения: v0.5.2
-> Всего тестов: 94 (passed)
+> Дата: 2026-08-05
+> Версия приложения: v0.7.1
+> Всего тестов: 181 (passed)
 
 ---
 
@@ -17,7 +17,7 @@
 | Порт по умолчанию | 8767 |
 | Bind по умолчанию | 127.0.0.1 (локальная сеть / reverse-proxy) |
 | Rate limit | 1500ms между запросами к sudrf.ru (встроен в scheduler) |
-| Аутентификация | Отсутствует (только loopback или VPN). Опционально: `COURTDESK_API_TOKEN` в `.env` |
+| Аутентификация | Отсутствует (доверенная LAN, ADR 2026-08-02). При публичном хостинге — обязательный возврат к токену (не реализован) |
 
 ## 2. Полный список эндпоинтов
 
@@ -35,19 +35,20 @@
 | 10 | `POST` | `/api/cases` | Добавить дело в мониторинг (`?parse=true` синхронно / `?parse=async` — 202) |
 | 11 | `PATCH` | `/api/cases/:uid` | Обновить поля дела (whitelist) |
 | 12 | `DELETE` | `/api/cases/:uid` | Удалить дело (каскадно: events + notifications + card) |
-| 13 | `POST` | `/api/cases/wait` | Отслеживать появление дела (по ФИО + дате) |
-| 14 | `POST` | `/api/search/by-number` | Поиск по номеру дела |
-| 15 | `POST` | `/api/search/by-party` | Поиск по участникам |
-| 16 | `POST` | `/api/search/by-case-uid` | Поиск по УИД (уникальному идентификатору дела) |
-| 17 | `POST` | `/api/parse/url` | Парсинг карточки дела по URL (с SSRF-защитой) |
-| 18 | `POST` | `/api/parse/run` | Запуск циклического мониторинга (202 Accepted / 409 Conflict) |
-| 19 | `GET` | `/api/parse/progress` | Прогресс текущего прогона мониторинга |
-| 20 | `POST` | `/api/resolve` | Суд + номер дела → ссылка на карточку |
-| 21 | `GET` | `/api/courts?q=` | Поиск судов по названию (лимит 30) |
-| 22 | `GET` | `/api/courts/:id` | Информация о конкретном суде |
-| 23 | `POST` | `/api/intake` | Классификация входного текста (URL/номер/ФИО) |
-| 24 | `GET` | `/api/settings` | Настройки расписания мониторинга |
-| 25 | `PUT` | `/api/settings` | Сохранить настройки расписания |
+| 13 | `POST` | `/api/cases/:uid/parse` | Перепарсинг карточки дела (409 `PARSE_IN_PROGRESS`) |
+| 14 | `POST` | `/api/cases/wait` | Отслеживать появление дела (по ФИО + дате) |
+| 15 | `POST` | `/api/search/by-number` | Поиск по номеру дела |
+| 16 | `POST` | `/api/search/by-party` | Поиск по участникам |
+| 17 | `POST` | `/api/search/by-case-uid` | Поиск по УИД (уникальному идентификатору дела) |
+| 18 | `POST` | `/api/parse/url` | Парсинг карточки дела по URL (с SSRF-защитой) |
+| 19 | `POST` | `/api/parse/run` | Запуск циклического мониторинга (202 Accepted / 409 Conflict) |
+| 20 | `GET` | `/api/parse/progress` | Прогресс текущего прогона мониторинга |
+| 21 | `POST` | `/api/resolve` | Суд + номер дела → ссылка на карточку |
+| 22 | `GET` | `/api/courts?q=` | Поиск судов по названию (лимит 30) |
+| 23 | `GET` | `/api/courts/:id` | Информация о конкретном суде |
+| 24 | `POST` | `/api/intake` | Классификация входного текста (URL/номер/ФИО) |
+| 25 | `GET` | `/api/settings` | Настройки расписания мониторинга |
+| 26 | `PUT` | `/api/settings` | Сохранить настройки расписания |
 
 ## 3. Ключевые объекты
 
@@ -520,7 +521,8 @@ POST /api/cases/:uid/parse HTTP/1.1
 (переиспользует `scheduler.runSingle` → `orchestrator.processOne`): fetch `url` дела
 (при капче — RuCaptcha), `saveCard(uid, card)` под внутренним uid, обновление
 `result` / `legalForceDate` / `lastChecked` / `caseUid`, события и уведомления при
-реальных изменениях. Ошибки: `404 NOT_FOUND` (дела нет), `500 PARSE_ERROR`.
+реальных изменениях. Ошибки: `404 NOT_FOUND` (дела нет), `409 PARSE_IN_PROGRESS`
+(дело уже в пакетном прогоне), `500 PARSE_ERROR`.
 
 ## 5. Коды ошибок
 
@@ -528,18 +530,23 @@ POST /api/cases/:uid/parse HTTP/1.1
 |------|------|-------|
 | 400 | `BAD_REQUEST` | Неверное тело запроса (отсутствуют обязательные поля) |
 | 400 | `INVALID_URL` | URL не принадлежит судовой системе РФ |
+| 400 | `INVALID_SETTINGS` | Невалидные значения `PUT /api/settings` |
+| 400 | `RESOLVE_ERROR` | Не удалось построить URL карточки (`POST /api/resolve`) |
 | 404 | `NOT_FOUND` | Дело / суд / уведомление не найдены |
 | 404 | `COURT_NOT_FOUND` | Суд не найден (поиск) |
 | 409 | `RUN_IN_PROGRESS` | Прогон уже запущен (повторный `POST /api/parse/run`) |
+| 409 | `PARSE_IN_PROGRESS` | Дело уже обрабатывается (`POST /api/cases/:uid/parse`) |
 | 500 | `STORE_ERROR` | Ошибка хранилища |
 | 500 | `PARSE_ERROR` | Ошибка парсинга |
 | 500 | `SEARCH_ERROR` | Ошибка поиска |
+| 500 | `SETTINGS_ERROR` | Ошибка чтения/записи настроек |
+| 500 | `INTERNAL_ERROR` | Необработанная ошибка (global error handler) |
 | 503 | `CAPTCHA_KEY_MISSING` | RuCaptcha не настроен (требуется для капчи) |
 
 ## 6. Безопасность
 
 ### 6.1 SSRF-защита (assertCourtUrl)
-`POST /api/parse/url` и `orchestrator.fetchHtml` проверяют URL через `assertCourtUrl()`:
+`assertCourtUrl()` применяется во всех fetch-точках (CR12-001): `POST /api/cases`, `PATCH /api/cases/:uid`, `POST /api/parse/url`, `search/shared.ts` (fetchHtml, smartFetch), `captcha/session.ts`, `scheduler/orchestrator.ts`:
 - Protocol: `https:` только
 - Hostname: `*.sudrf.ru` или `*.msudrf.ru`
 - Блокируется: `file://`, `http://`, `localhost`, IP-адреса, cloud metadata
@@ -584,4 +591,4 @@ PATCH разрешает только: `status`, `result`, `legalForceDate`, `le
 
 ---
 
-*Документ актуален для CourtDesk v0.5.2 (94 теста).*
+*Документ актуален для CourtDesk v0.7.1 (181 тест).*

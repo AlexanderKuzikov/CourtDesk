@@ -13,16 +13,17 @@ export class DistrictAdapter implements CourtAdapter {
         // FIX (CODE_REVIEW #1): decodeEntities удалён — в cheerio 1.x эта опция убрана из CheerioOptions, false является дефолтом.
         const $ = cheerio.load(html);
 
-    // BUG-009: uid ищем в HTML, fallback — case_uid из URL
+    // BUG-009/UID-NORM: uid — судебный номер дела (единый смысл для всех судов).
+    // УИД ГАС отдельно в identifiers.case_uid, картотечный номер — в identifiers.case_id.
     const parsedUrl = new URL(url);
-    const uidFromHtml = $('#cont1 a[href*="judicial_uid"]').text().trim()
-      || $('a[href*="judicial_uid"]').first().text().trim();
-    const uid = uidFromHtml || parsedUrl.searchParams.get('case_uid') || parsedUrl.searchParams.get('case_id') || '';
+    const number = $('div.casenumber, .case-num, span[class*="number"]').first().text().replace(/ДЕЛО\s*№/i, '').trim();
+    const judicialUid = $('#cont1 a[href*="judicial_uid"]').text().trim()
+      || $('a[href*="judicial_uid"]').first().text().trim()
+      || parsedUrl.searchParams.get('case_uid') || '';
 
-    if (!uid) throw new Error(`DistrictAdapter: не удалось определить UID`);
+    if (!number) throw new Error(`DistrictAdapter: не удалось определить номер дела`);
 
     const type = $('div.title, h1.case-title, .delo_name').first().text().trim();
-    const number = $('div.casenumber, .case-num, span[class*="number"]').first().text().replace(/ДЕЛО\s*№/i, '').trim();
 
     // Карточка дела
     const rawCard: Record<string, string> = {};
@@ -81,15 +82,16 @@ export class DistrictAdapter implements CourtAdapter {
 
     return {
       $schema:   'courtflow/case/v1',
-      uid,
+      uid: number,
       type,
       number,
       court:     extractCourtSubdomain(url, 'district'),
       courtType: 'district',
       identifiers: {
         delo_id:   parsedUrl.searchParams.get('delo_id'),
-        case_uid:  parsedUrl.searchParams.get('case_uid'),
+        case_uid:  judicialUid || null,
         case_type: parsedUrl.searchParams.get('case_type'),
+        case_id:   parsedUrl.searchParams.get('case_id'),
       },
       publishedAt: null,
       modifiedAt:  null,

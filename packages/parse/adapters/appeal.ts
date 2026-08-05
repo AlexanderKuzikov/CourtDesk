@@ -21,17 +21,15 @@ export class AppealAdapter implements CourtAdapter {
     const $ = cheerio.load(html);
     const parsedUrl = new URL(url);
 
-    // UID
-    const uidFromHtml = $('#cont1 a[href*="judicial_uid"]').text().trim()
-      || $('a[href*="judicial_uid"]').first().text().trim();
-    const uid = uidFromHtml
-      || parsedUrl.searchParams.get('case_uid')
-      || parsedUrl.searchParams.get('case_id')
-      || '';
-    if (!uid) throw new Error('AppealAdapter: не удалось определить UID');
+    // UID-NORM: uid — судебный номер дела (единый смысл для всех судов).
+    // УИД ГАС отдельно в identifiers.case_uid, картотечный номер — в identifiers.case_id.
+    const number = $('div.casenumber').first().text().replace(/ДЕЛО\s*№/i, '').trim();
+    const judicialUid = $('#cont1 a[href*="judicial_uid"]').text().trim()
+      || $('a[href*="judicial_uid"]').first().text().trim()
+      || parsedUrl.searchParams.get('case_uid') || '';
+    if (!number) throw new Error('AppealAdapter: не удалось определить номер дела');
 
     const type   = $('div.title').first().text().trim();
-    const number = $('div.casenumber').first().text().replace(/ДЕЛО\s*№/i, '').trim();
 
     // publishedAt / modifiedAt — из #cont5 .publishInfo
     const publishInfo = parsePublishInfo($('#cont5 .publishInfo').text());
@@ -95,13 +93,14 @@ export class AppealAdapter implements CourtAdapter {
 
     return {
       $schema: 'courtflow/case/v1',
-      uid, type, number,
+      uid: number, type, number,
       court: extractCourtSubdomain(url, 'appeal'),
       courtType: 'appeal',
       identifiers: {
         delo_id:   parsedUrl.searchParams.get('delo_id'),
-        case_uid:  parsedUrl.searchParams.get('case_uid'),
+        case_uid:  judicialUid || null,
         case_type: parsedUrl.searchParams.get('case_type'),
+        case_id:   parsedUrl.searchParams.get('case_id'),
       },
       publishedAt: publishInfo.publishedAt,
       modifiedAt:  publishInfo.modifiedAt,

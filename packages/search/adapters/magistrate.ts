@@ -66,7 +66,8 @@ export function parseResults(html: string, req: SearchRequest): SearchResult[] {
       caseNumber: num,
       // FIX: относительный href без ведущего «/» — нормализуем, иначе склейка «.rumodules.php»
       caseUrl: href.startsWith('http') ? href : `https://${req.courtId}.msudrf.ru/${href.replace(/^\//, '')}`,
-      uid: caseIdMatch ? caseIdMatch[1] : '',
+      caseUid: null,
+      caseId: caseIdMatch ? caseIdMatch[1] : null,
       courtCode: req.courtCode,
       judge: cells.eq(2).text().trim() || null,
       result: cells.eq(4).text().trim() || null,
@@ -107,7 +108,8 @@ export class MagistrateSearchAdapter implements SearchAdapter {
       return [{
         caseNumber: card.number,
         caseUrl: req.caseNumber,
-        uid: card.uid,
+        caseUid: card.identifiers?.case_uid ?? null,
+        caseId: card.identifiers?.case_id ?? null,
         courtCode: req.courtCode,
         judge: card.card.judge,
         result: card.card.result,

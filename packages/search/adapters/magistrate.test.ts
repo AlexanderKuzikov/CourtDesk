@@ -96,7 +96,8 @@ describe('parseResults — таблица результатов msudrf', () => 
   it('относительный href превращается в абсолютный URL msudrf', () => {
     const results = parseResults(RESULTS_HTML, baseReq);
     expect(results[0]!.caseUrl).toBe('https://35.perm.msudrf.ru/modules.php?name_op=case&case_id=12345');
-    expect(results[0]!.uid).toBe('12345');
+    expect(results[0]!.caseId).toBe('12345');
+    expect(results[0]!.caseUid).toBeNull();
   });
 
   it('абсолютный href сохраняется как есть', () => {
