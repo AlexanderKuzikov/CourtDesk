@@ -8,7 +8,7 @@
 
 ## Статус
 
-**v0.7.1** — стабилизация: закрыты все 6 блокеров (SSRF, TLS-allowlist, store-races, бинарники в git). 181 тест, coverage-гейт, Biome, CI Windows+Go. Node ≥22. Русификация UI, нормализация номеров дела (caseNumber / caseUid / caseId).
+**v0.7.1** — стабилизация: закрыты все 6 блокеров (SSRF, TLS-allowlist, store-races, бинарники в git). 213 тестов, coverage-гейт, Biome, CI Windows+Go. Node ≥22. Русификация UI, нормализация номеров дела (caseNumber / caseUid / caseId), backoff при 403 (WAF), фикстуры appeal/cassation.
 
 | Компонент | Статус | Заметка |
 |-----------|--------|---------|
@@ -42,8 +42,6 @@
 
 | # | Описание |
 |---|----------|
-| INFR-001 | **ENOTFOUND судовых субдоменов** (live): `oblsud--perm.sudrf.ru`, `2.perm.msudrf.ru` — `getaddrinfo ENOTFOUND`. Проверить актуальность субдоменов в справочнике судов |
-| CR11-006 | Тесты parse/search/captcha: закрыты magistrate/district/rucaptcha/shared/browser; appeal/cassation parse-адаптеры всё ещё без фикстур |
 | WEBUI-O2 | Мобильная адаптация |
 | WEBUI-O4 | Карточка дела: вкладки/аккордеон |
 | WEBUI-O5 | Календарь по legalForceDate |
@@ -74,13 +72,12 @@
 |---|------|----------|
 | CR12-S08 | `courtdesktop/go.mod` | `webview_go` на pseudo-version — тегов у проекта нет, апгрейд невозможен (проверено 2026-08-03) |
 | CR12-S09 | `.npmrc` | `legacy-peer-deps=true` маскирует конфликты peer-зависимостей |
-| CR12-S10 | `intake/classify.ts:8` | `[А-ЯA-Z]?` без `Ё`; латинские имена не классифицируются; нет лимита длины входа |
 
 ---
 
 ## API-покрытие
 
-**181 тест (22 файла), coverage-гейт (v8): lines 44 / functions 38 / branches 38 / statements 42.** Все эндпоинты:
+**213 тест (24 файла), coverage-гейт (v8): lines 54 / functions 52 / branches 50 / statements 55.** Все эндпоинты:
 
 | Файл | Эндпоинты |
 |------|-----------|
@@ -102,6 +99,8 @@
 | search/adapters/magistrate.test.ts | buildFields (CR12-010), buildFormUrl, parseResults msudrf |
 | parse/adapters/magistrate.test.ts | карточка мирового суда (фикстура) |
 | parse/adapters/district.test.ts | карточка районного суда (фикстура) |
+| parse/adapters/appeal.test.ts | карточка апелляционного суда (фикстура, 5 вкладок) |
+| parse/adapters/cassation.test.ts | карточка кассационного суда (фикстура, 5 вкладок) |
 | captcha/rucaptcha.test.ts | RuCaptcha API v2: createTask/polling/retry/timeout |
 | captcha/browser.test.ts | пул браузера Puppeteer (CR12-009) |
 
@@ -111,6 +110,7 @@
 
 | Дата | Изменение |
 |------|-----------|
+| 2026-08-05 | **Backoff при 403 + фикстуры appeal/cassation + CR12-S10 + проверка RuCaptcha.** fetchHtml ретраит 403/429 с экспоненциальным backoff (5с, 10с, MAX 3) — WAF ГАС банит по rate-limit (тесты с моком https + fake timers). Тесты parse-адаптеров appeal/cassation (inline-фикстуры 5 вкладок, 22 теста) — CR11-006 закрыт. **Попутно найден и исправлен реальный баг:** `parsePublishInfo` не парсил даты (regex `опубликован\w*` — `\w` не матчит кириллицу, в live-данных все publishedAt/modifiedAt были null) — теперь `опубликован[а-яё]*` + опциональное двоеточие. classify.ts: Ё/ё в regex номера дела, латиница в именах (WORD_RE), лимит длины входа 500 — CR12-S10 закрыт. RuCaptcha-ключ проверен через getBalance: валиден, баланс 240.58 ₽ (ERROR_KEY_DOES_NOT_EXIST был временным). Тесты 181→213, tsc/biome (0 errors) чисто, coverage 54/52/50/55. |
 | 2026-08-05 | **Капча-пайплайн: таймауты под WAF-тормоза ГАС.** WAF замедляет ответы до 1-2 минут (видно вручную: капча думает минуту+). Пайплайн падал по дефолтным таймаутам Puppeteer (30-60с): `Execution context was destroyed`, `Captcha image fetch failed: HTTP 502`. Подняты в `captcha/session.ts`: goto/navigation → 120с, waitForFunction/locator → 90с, fetch капчи-картинки → 60с (AbortSignal). Проверено end-to-end: fetchMsudrfSearch (поиск 42-91с) и fetchWithCaptcha (карточка 1.8с) работают, карточка 2-800/2026 спарсилась (uid=судебный номер, case_id=1284505). Дело 2-800 вышло из error→monitoring; все 4 дела в норме (0 error). Таймауты зафиксированы константами NAV_TIMEOUT_MS/WAIT_TIMEOUT_MS. |
 | 2026-08-05 | **Диагностика live-ошибок + фикс runSingle.** Субдомены ГАС живы (DNS ок); утренний ENOTFOUND — временный DNS-сбой. district/appeal перепарсируются (35-46с, WAF замедляет); appeal 33-8030 вышел из error→monitoring. **INFR-001 закрыт:** WAF ГАС банит IP по rate-limit (наш IP 196.61.180.141 после серии тестов получает 403 на sudrf+msudrf; телефон/VPN с другим IP открывают msudrf без проблем); RuCaptcha-ключ невалиден (ERROR_KEY_DOES_NOT_EXIST — проверить ротацию). **NUM-002:** `runSingle` не фиксировал ошибки в деле (lastError оставался устаревшим) — добавлен catch с записью errorCount/lastError/status, ошибка пробрасывается в роут (500 PARSE_ERROR, не 409). Тесты 181, tsc/biome чисто. |
 | 2026-08-05 | **Русификация UI + нормализация номеров дела.** Бейджи типа суда: `COURT_TYPE_LABELS` в app.js (district→Районный суд, appeal→Апелляционный, cassation→Кассационный, magistrate→Мировой), применён в index/search/terminal. «Case UID»/«UID дела» → «УИД». Desktop-темы русифицированы (Slate (Dark)→Slate (тёмная) и т.д.). **NUM-001:** `SearchResult.uid` (смешивал case_uid и case_id) → `caseId` + `caseUid`; `CaseCard.uid` = судебный номер для всех судов (district/appeal/cassation переведены с judicial_uid); `identifiers.case_id` добавлен; `caseUid` теперь передаётся при добавлении из поиска и заполняется в processWaiting. API.md: 26 эндпоинтов, коды ошибок, v0.7.1. ARCHITECTURE.md: 26 эндпоинтов, 8 PATCH-полей, enforced в runFull, структура пакетов. Создан docs/PLANS.md. Тесты 180→181. |

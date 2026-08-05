@@ -80,6 +80,38 @@ describe('classify', () => {
     }
   });
 
+  it('search: номер дела с Ё в префиксе и суффиксе (CR12-S10)', () => {
+    expect(classify('Ё101-124/2026').type).toBe('search');
+    expect(classify('2ё-124/2026').type).toBe('search');
+  });
+
+  it('search: буквенный префикс перед номером', () => {
+    expect(classify('А12-105/2026').type).toBe('search');
+  });
+
+  it('search: латинские ФИО (CR12-S10)', () => {
+    const r = classify('Smith John');
+    expect(r.type).toBe('search');
+    if (r.type === 'search') {
+      expect(r.defendant).toBe('Smith John');
+    }
+  });
+
+  it('search: смешанные кириллица+латиница', () => {
+    const r = classify('ООО Alpha Group');
+    expect(r.type).toBe('search');
+  });
+
+  it('malformed: вход длиннее лимита (CR12-S10)', () => {
+    const r = classify('А'.repeat(501));
+    expect(r.type).toBe('malformed');
+  });
+
+  it('search: вход ровно на лимите', () => {
+    const r = classify('Иванов ' + 'И'.repeat(493));
+    expect(r.type).toBe('search');
+  });
+
   it('search: ФИО', () => {
     const r = classify('Иванов Иван');
     expect(r.type).toBe('search');

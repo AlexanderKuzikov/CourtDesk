@@ -3,12 +3,17 @@ import type { Classification, CaseCardClassification, SearchClassification } fro
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+// CR12-S10 FIXED: Ё/ё в префиксе и суффиксе номера дела, /iu
 // NEW-010 FIXED: расширенный паттерн номеров дел РФ
 // CR5-005 FIXED: /iu вместо /i — корректный Unicode case-insensitive для кириллицы
-const CASE_NUMBER_RE = /^[А-ЯA-Z]?\d+[а-яa-z]?[-–][А-ЯёЁа-яёЁ\d]+([-–][А-ЯёЁа-яёЁ\d]+)*(\/\d{4})?$/iu;
+const CASE_NUMBER_RE = /^[А-ЯЁA-Z]?\d+[а-яёa-z]?[-–][А-ЯёЁа-яёЁ\d]+([-–][А-ЯёЁа-яёЁ\d]+)*(\/\d{4})?$/iu;
 
+// CR12-S10 FIXED: латиница допускается — иностранные ФИО/организации
 // CR5-005 FIXED: /u для корректного Unicode matching
-const CYRILLIC_WORD_RE = /^[А-ЯЁа-яё]+(-[А-ЯЁа-яё]+)?$/u;
+const WORD_RE = /^[А-ЯЁа-яёA-Za-z]+(-[А-ЯЁа-яёA-Za-z]+)?$/u;
+
+// CR12-S10 FIXED: лимит длины входа — защита от патологических строк
+const MAX_INPUT_LENGTH = 500;
 
 function detectCourtTypeFromHost(host: string, deloId: string | null): CourtType {
   if (host.endsWith('.msudrf.ru')) return 'magistrate';
@@ -67,6 +72,8 @@ function tryParseCaseCardUrl(input: string): CaseCardClassification | null {
 function tryParseSearchText(input: string): SearchClassification | null {
   const trimmed = input.trim();
   if (!trimmed || trimmed.length < 3) return null;
+  // CR12-S10: патологические входы (тысячи символов) — не regex, а malformed
+  if (trimmed.length > MAX_INPUT_LENGTH) return null;
 
   if (CASE_NUMBER_RE.test(trimmed)) {
     return { type: 'search', caseNumber: trimmed };
@@ -76,7 +83,7 @@ function tryParseSearchText(input: string): SearchClassification | null {
   if (
     words.length >= 2 &&
     words.length <= 4 &&
-    words.every(w => CYRILLIC_WORD_RE.test(w))
+    words.every(w => WORD_RE.test(w))
   ) {
     return { type: 'search', defendant: trimmed };
   }

@@ -1,8 +1,13 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { EventEmitter } from 'node:events';
 import { buildSearchUrl, parseResults, fetchHtml, smartFetch } from './shared.js';
 import { CourtUrlError } from '../core/errors.js';
 import { encodeParam } from '../core/encoding.js';
 import type { SearchRequest } from '../core/types.js';
+
+const { mockedGet } = vi.hoisted(() => ({ mockedGet: vi.fn() }));
+
+vi.mock('https', () => ({ default: { get: mockedGet }, get: mockedGet }));
 
 const districtReq: SearchRequest = {
   courtId: 'kirov--perm',
@@ -108,5 +113,81 @@ describe('fetchHtml/smartFetch — только судовые домены', ()
 
   it('smartFetch отклоняет не-судовой домен', async () => {
     await expect(smartFetch('https://169.254.169.254/')).rejects.toThrow(CourtUrlError);
+  });
+});
+
+// ---------- backoff при 403/429 (WAF rate-limit) ----------
+
+function fakeRes(statusCode: number): NodeJS.ReadableStream & { statusCode: number; headers: Record<string, string> } {
+  const res = new EventEmitter() as NodeJS.ReadableStream & { statusCode: number; headers: Record<string, string> };
+  res.statusCode = statusCode;
+  res.headers = { 'content-type': 'text/html; charset=utf-8' };
+  return res;
+}
+
+function fakeGet(emitter: EventEmitter, res: ReturnType<typeof fakeRes>, body = '') {
+  mockedGet.mockImplementationOnce((_opts: unknown, cb: (r: typeof res) => void) => {
+    cb(res);
+    if (res.statusCode < 400) {
+      setTimeout(() => {
+        res.emit('data', Buffer.from(body));
+        res.emit('end');
+      }, 0);
+    }
+    return emitter;
+  });
+}
+
+describe('fetchHtml — backoff при 403/429 (WAF rate-limit)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    mockedGet.mockReset();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('403 → повторные попытки с backoff, потом успех', async () => {
+    const emitter = new EventEmitter();
+    fakeGet(emitter, fakeRes(403));
+    fakeGet(emitter, fakeRes(403));
+    fakeGet(emitter, fakeRes(200), '<html>ok</html>');
+    const p = fetchHtml('https://kirov--perm.sudrf.ru/');
+    await vi.advanceTimersByTimeAsync(5000);
+    await vi.advanceTimersByTimeAsync(10_000);
+    await vi.advanceTimersByTimeAsync(100);
+    await expect(p).resolves.toBe('<html>ok</html>');
+    expect(mockedGet).toHaveBeenCalledTimes(3);
+  });
+
+  it('403 трижды — ошибка HTTP 403 после исчерпания попыток', async () => {
+    const emitter = new EventEmitter();
+    fakeGet(emitter, fakeRes(403));
+    fakeGet(emitter, fakeRes(403));
+    fakeGet(emitter, fakeRes(403));
+    const p = fetchHtml('https://kirov--perm.sudrf.ru/');
+    const assertion = expect(p).rejects.toThrow('HTTP 403');
+    await vi.advanceTimersByTimeAsync(60_000);
+    await assertion;
+    expect(mockedGet).toHaveBeenCalledTimes(3);
+  });
+
+  it('404 не ретраится (не rate-limit)', async () => {
+    const emitter = new EventEmitter();
+    fakeGet(emitter, fakeRes(404));
+    const p = fetchHtml('https://kirov--perm.sudrf.ru/');
+    const assertion = expect(p).rejects.toThrow('HTTP 404');
+    await vi.advanceTimersByTimeAsync(60_000);
+    await assertion;
+    expect(mockedGet).toHaveBeenCalledTimes(1);
+  });
+
+  it('200 без ретраев', async () => {
+    const emitter = new EventEmitter();
+    fakeGet(emitter, fakeRes(200), '<html>ok</html>');
+    const p = fetchHtml('https://kirov--perm.sudrf.ru/');
+    await vi.advanceTimersByTimeAsync(100);
+    await expect(p).resolves.toBe('<html>ok</html>');
+    expect(mockedGet).toHaveBeenCalledTimes(1);
   });
 });

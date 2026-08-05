@@ -9,10 +9,21 @@ import { isCaptchaPage, assertCourtUrl } from '../core/errors.js';
 import { getRuCaptchaKey } from '../core/config.js';
 import type { SearchRequest, SearchResult } from '../core/types.js';
 
+// WAF ГАС «Правосудие» банит IP по rate-limit (403) — ретраим с экспоненциальным backoff
+// (наблюдение 2026-08-05: бан временный, суды доступны с другого IP)
+const RETRY_STATUSES = new Set([403, 429]);
+const MAX_ATTEMPTS = 3;
+const BACKOFF_BASE_MS = 5000;
+
+function isRetryableStatus(status: number): boolean {
+  return RETRY_STATUSES.has(status);
+}
+
 export function fetchHtml(url: string): Promise<string> {
   // CR11-002: rejectUnauthorized:false допустим только за allowlist'ом судовых доменов
   assertCourtUrl(url);
-  return new Promise((resolve, reject) => {
+
+  const attempt = (n: number): Promise<string> => new Promise((resolve, reject) => {
     const parsed = new URL(url);
     https.get({
       hostname: parsed.hostname,
@@ -22,6 +33,11 @@ export function fetchHtml(url: string): Promise<string> {
       headers: { 'User-Agent': 'CourtDesk/0.1' },
     }, res => {
       if (res.statusCode && res.statusCode >= 400) {
+        if (isRetryableStatus(res.statusCode) && n < MAX_ATTEMPTS) {
+          const backoff = BACKOFF_BASE_MS * 2 ** (n - 1);
+          setTimeout(() => resolve(attempt(n + 1)), backoff);
+          return;
+        }
         reject(new Error(`HTTP ${res.statusCode} — sudrf.ru временно недоступен`));
         return;
       }
@@ -38,6 +54,8 @@ export function fetchHtml(url: string): Promise<string> {
       reject(new Error(`Ошибка соединения с sudrf.ru: ${err.message}`));
     }).on('timeout', function (this: any) { this.destroy(); reject(new Error('sudrf.ru временно недоступен (таймаут). Попробуйте позже.')); });
   });
+
+  return attempt(1);
 }
 
 /** fetchHtml с fallback на captcha-resolution при детекте капчи */

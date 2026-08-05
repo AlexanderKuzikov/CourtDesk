@@ -19,8 +19,9 @@ export function parseDate(raw: string | undefined | null): string | null {
 }
 
 export function parsePublishInfo(text: string): { publishedAt: string | null; modifiedAt: string | null } {
-  const pubM = text.match(/опубликован\w*\s+([\d.]+\s+[\d:]+)/);
-  const modM = text.match(/изменено\s+([\d.]+\s+[\d:]+)/);
+  // CR11-006 FIXED: \w не матчит кириллицу — «опубликовано» не ловилось, publishedAt всегда null
+  const pubM = text.match(/опубликован[а-яё]*\s*:?\s*([\d.]+\s+[\d:]+)/i);
+  const modM = text.match(/изменен[а-яё]*\s*:?\s*([\d.]+\s+[\d:]+)/i);
   const toIso = (s: string) => {
     const [date, time] = s.trim().split(/\s+/);
     const d = parseDate(date);
