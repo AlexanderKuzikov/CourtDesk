@@ -2,13 +2,15 @@
 
 > CRM-система поиска и мониторинга судебных дел РФ.
 > Единый сервис для интеграции с 1С, Web UI и Desktop App на Go+WebView.
-> Последнее обновление: 2026-08-05
+> Последнее обновление: 2026-08-12
 
 ---
 
 ## Статус
 
 **v0.7.1** — стабилизация: закрыты все 6 блокеров (SSRF, TLS-allowlist, store-races, бинарники в git). 213 тестов, coverage-гейт, Biome, CI Windows+Go. Node ≥22. Русификация UI, нормализация номеров дела (caseNumber / caseUid / caseId), backoff при 403 (WAF), фикстуры appeal/cassation.
+
+⚠️ **Открыта регрессия MSUDRF-001:** мировые суды (*.msudrf.ru) перестали корректно искаться/парситься после правок 2026-08-05 (таймауты капчи, backoff, переработка капча-пайплайна). Диагноз по коду — в open-проблемах и журнале от 2026-08-12; live-проверка debugDir не проводилась.
 
 | Компонент | Статус | Заметка |
 |-----------|--------|---------|
@@ -17,15 +19,15 @@
 | Core (типы) | ✅ errorCount, lastError, enforcedAt | |
 | Security (URL allowlist) | ✅ assertCourtUrl | применён во всех fetch-точках (ADR 2026-08-03) |
 | Store integrity | ✅ corrupt backup + throw | tmp-файлы через randomUUID |
-| Captcha | ✅ msudrf AJAX + sudrf form | пул браузера Puppeteer |
-| Search | ✅ msudrf переписан (AJAX) | |
+| Captcha | ⚠️ Регрессия msudrf (MSUDRF-001) | пул браузера Puppeteer; sudrf-ветка ок |
+| Search | ⚠️ msudrf не работает (MSUDRF-001) | district/appeal/cassation ок |
 | Parse | ✅ sync/async parse при добавлении | parse=async → 202 |
 | Scheduler | ✅ cron + лок прогонов в orchestrator | общий для API и cron |
 | Store | ✅ каскадное удаление + settings | |
 | API | ✅ 26 эндпоинтов | open LAN, без auth (ADR 2026-08-02) |
-| Viewer (Dashboard) | ✅ attention-bar, progress bar, XLS, retry | |
-| Viewer (Search) | ✅ async-добавление, retry | |
-| Viewer (Terminal) | ✅ Bloomberg-style | hover-дедупликация |
+| Viewer (Dashboard) | ⚠️ attention-bar, progress bar, XLS, retry | ревью 2026-08-12: гонки, saveSettings (WEBUI-O18..O20) |
+| Viewer (Search) | ⚠️ async-добавление, retry | поиск мимо настраиваемого API URL (WEBUI-O16) |
+| Viewer (Terminal) | ⚠️ Bloomberg-style | Ctrl+D = удаление (WEBUI-O17), рендер 10K (WEBUI-O21) |
 | Viewer (Skins) | ✅ 3 skin × 2 themes | 5 тем — только в desktop-страницах |
 | Desktop App | ✅ Go+WebView, ~6.9 MB | startup-подключение, watcher, Ctrl+, |
 | TUI (Node) | ❄ Заморожен | ADR 2026-08-02 |
@@ -42,9 +44,12 @@
 
 | # | Описание |
 |---|----------|
+| MSUDRF-001 | **Регрессия пайплайна мировых судов после правок 2026-08-05.** Диагноз по коду (top-3): (1) `runMsudrfSearch` — `locator().fill()` требует видимый элемент, форма msudrf с вкладками → поля на неактивной вкладке молча не заполняются (`.catch(() => {})`) → пустой запрос → пустые результаты; (2) после капчи нет проверки/re-goto на форму поиска (`formUrl`), `Promise.all([waitForNavigation.catch(()=>{}), click])` глотает таймаут при WAF-тормозах и AJAX-сабмите → ложный «Captcha loop»; (3) HTTP 403/429 в Puppeteer-ветке не проверяется — backoff только в `shared.fetchHtml`, HTML WAF-бана возвращается как результат → `parseResults` → []. Вторично: клик «Искать» без catch с узким селектором (session.ts:500); детект таблицы строго по тексту «№ дела» (search/adapters/magistrate.ts:50). План фикса и диагностика — журнал 2026-08-12, план работ в PLANS.md |
 | WEBUI-O2 | Мобильная адаптация |
 | WEBUI-O4 | Карточка дела: вкладки/аккордеон |
 | WEBUI-O5 | Календарь по legalForceDate |
+| WEBUI-O16 | **search.html:212 — `doSearch` делает `fetch(url)` без `apiUrl()`**: единственная точка, игнорирующая настраиваемый API base — при заданном внешнем API URL поиск дел ломается (запрос уходит на хост viewer'а). Ревью 2026-08-12 |
+| WEBUI-O17 | **Terminal: Ctrl+D открывает удаление вместо полстраницы вниз** — switch ловит `case 'd'` (deleteSelected) раньше проверки `e.ctrlKey` (terminal.js:620-646). Деструктивная коллизия клавиш; Ctrl+U работает. Ревью 2026-08-12 |
 
 ### MEDIUM
 
@@ -52,17 +57,24 @@
 |---|----------|
 | CR11-010 | Зависимости react/ink/@types/react — при замороженном packages/tui (до решения об удалении) |
 | CR12-004 | Navigation guard в courtdesktop: нет navigate handler в webview_go (XSS встроенных страниц закрыт 2026-08-02) |
+| MSUDRF-002 | Пул браузера: проверить семантику `releaseBrowser()` (refcount vs безусловный close) — при параллельных мониторингах scheduler возможна гонка «Target closed» посреди пайплайна (вытекает из MSUDRF-001) |
+| MSUDRF-003 | Пустой результат msudrf неотличим от «дела не существует» (`resultsHtml \|\| page.content()` → тихий []); в data/ остаток `cases.json.tmp.*` — след краха процесса при записи store (вероятно, unhandled rejection на длинных таймаутах) |
 | CR12-019 | store: кэши без eviction |
 | CR12-020 | 15 коммитов с сообщением «.» в истории (не переписывается осознанно; новые — по конвенции) |
 | WEBUI-O6 | Массовые операции |
 | WEBUI-O9 | Фильтр по userId |
 | WEBUI-O10 | Вынос JS из HTML |
+| WEBUI-O18 | **saveSettings (index.html:696-711):** auto-reload после смены API URL мёртв (после `setApiBase` условие `newApiUrl !== getApiBase()` всегда false → `location.reload()` не выполняется); PUT настроек уходит уже на новый base вместо текущего. Ревью 2026-08-12 |
+| WEBUI-O19 | **Гонки viewer'а:** loadDashboard/loadData без seq-token/AbortController (stale-overwrite после CRUD и при накладывающихся поллингах); runMonitor разблокирует кнопку через фикс. 5с → повторный клик при 409 создаёт второй poll; pollMonitor (terminal.js:490) после принудительного стопа 240с не снимает scanBar; reparseCase и runMonitor делят scanBar/scanFill; addToMonitor не блокирует кнопку до ответа (двойной POST). Нет таймаутов/AbortController ни в одном fetch. Ревью 2026-08-12 |
+| WEBUI-O20 | **XSS-харднинг:** системный дефект — inline onclick с `esc()` в JS-контексте (`onclick="fn('${esc(uid)}')"`: HTML-парсер декодирует `&#39;` до JS-парсера → кавычка оживает; нарушение конвенции delegation + data-*); счётчики (index.html:412-415) и `class="dot ${n.type}"` (index.html:424) без esc при API «open LAN без auth»; нет проверки `res.ok` в loadDashboard/loadData (500 с JSON трактуется как данные); мёртвый запрос `/api/courts/` в openDetail (dataset.courtId не устанавливается, index.html:441); краш updateScanProgress при number=null (index.html:662). Эксплуатируемость низкая (uid серверный), но дефект системный. Ревью 2026-08-12 |
+| WEBUI-O21 | **Производительность terminal при 10K дел:** полный re-render всех строк на каждый кейстрок `/поиска` и каждые 30с (innerHTML ~10K строк = 0.5-1с jank); нужен debounce + виртуализация/пейджинг; `filtered()` вызывается 2-4 раза за цикл (повторные сортировки); `markAllRead()` в terminal — мёртвый код (нет клавиши/команды, hint «m прочитать» неверен — m = прогон); openDetail в search.html — синхронный POST /api/parse/url до показа модалки без индикатора (выглядит как зависание). Ревью 2026-08-12 |
 
 ### LOW
 
 | # | Описание |
 |---|----------|
 | WEBUI-O12..O15 | Кэширование, история, массовое добавление, Kanban/Calendar |
+| WEBUI-O22 | **Темы/доступность:** контраст `--text-dim` во всех светлых темах ~2.3-2.9:1 (провал WCAG AA), btn-primary corporate dark ~2.6:1 (белый на #38bdf8); нет `:focus-visible` на кнопках/чипах; модалки без role=dialog/aria-modal/focus-trap (Tab уходит под оверлей); нет `prefers-reduced-motion`; в inline-`_t()` всех трёх HTML не закрыта скобка: `matchMedia('(prefers-color-scheme: light')`. Остаточные глифы ⚠▶✓✗○★▸ — BMP text (DejaVu покрывает), замена нужна только для ⚠/▶ (см. также WEBUI-O13). Ревью 2026-08-12 |
 | TEST-O1..O3 | Нет regression/UI/Go тестов |
 | INFRA-O1 | Monorepo без workspaces |
 
@@ -110,6 +122,8 @@
 
 | Дата | Изменение |
 |------|-----------|
+| 2026-08-12 | **Полное ревью фронтенда (viewer/public, ~2.4K строк): 7 новых проблем WEBUI-O16..O22, из них 2 P0.** XSS: эксплуатируемых дыр на user-контенте нет — всё через esc(); XLSX-экспорт безопасен от formula injection (все ячейки inlineStr). Системный дефект: inline onclick с esc() в JS-контексте — HTML-сущности декодируются до JS-парсера (WEBUI-O20). **P0:** (1) search.html:212 — doSearch делает fetch мимо apiUrl(), поиск сломан при настраиваемом API URL (WEBUI-O16); (2) terminal.js — Ctrl+D открывает подтверждение удаления вместо полстраницы вниз: switch ловит 'd' раньше проверки ctrlKey (WEBUI-O17). **P1:** saveSettings — auto-reload мёртв, PUT настроек уходит на новый base (WEBUI-O18); гонки loadDashboard/loadData без abort/seq, висящий scanBar после 240с, двойной POST addToMonitor (WEBUI-O19); terminal рендерит все 10K строк на каждый кейстрок поиска и каждые 30с, markAllRead() мёртв (WEBUI-O21). **P2:** контраст text-dim/btn-primary (провал AA), нет focus-visible/dialog-семантики, незакрытая скобка matchMedia в _t() (WEBUI-O22). Ни в одном fetch нет таймаутов/AbortController. IE/legacy Edge не запустится вообще (optional chaining); WebKitGTK < 2.28 под риском. Промпт ревью — `qwen38-viewer-review.md` (не коммитить, рабочий материал). План фикса — PLANS.md. |
+| 2026-08-12 | **Диагноз регрессии msudrf (MSUDRF-001, анализ кода без live-прогона).** Мировые суды перестали искаться/парситься после правок 2026-08-05. Вероятные причины (по убыванию): (1) `captcha/session.ts` runMsudrfSearch — `locator().fill()` падает на hidden-полях неактивных вкладок формы, ошибка глотается `.catch(() => {})` → запрос уходит пустым; (2) после сабмита капчи нет проверки, что страница — форма поиска (нет re-goto на formUrl при куках уже валидных), `waitForNavigation().catch(()=>{})` маскирует таймаут при WAF-задержке >120с и при AJAX-сабмите → 3 холостые попытки → «Captcha loop»; (3) нет проверки `resp.status()` после goto — WAF 403/429 возвращается как результат (backoff есть только в https-ветке shared.fetchHtml); (4) клик «Искать» `input.button-normal.search` без catch — 90с таймаут бросает исключение при несовпадении разметки; (5) возможна гонка пула браузера (releaseBrowser). **План фикса (приоритеты):** 1 — fill через `page.evaluate` (прямой `.value` + change-event, лог незаполненных полей); 2 — re-goto formUrl после капчи, если на странице нет `sud_delo`; 3 — `resp.status()` + backoff-ретрай 403/429 как в shared.ts; 4 — `Promise.race([waitForNavigation, waitForFunction(!kcaptchaForm)])` вместо чистого waitForNavigation, селектор `[type="submit"]`; 5 — расширение селектора «Искать» + fallback `page.content()` при `#search_results` без `<table>`. **Диагностика на проде:** debugDir-тройка msudrf-form/results/page.html, лог page.url()+HTTP-статус после каждого goto/сабмита, ручной прогон fetchMsudrfSearch на деле 2-800/2026 (case_id=1284505), grep логов после 05.08 по «Captcha loop»/«Target closed»/«Execution context», прогон с одним мониторингом (изоляция гонки пула). **Тесты под регрессию:** фикстуры kcaptcha/form-с-вкладками/results(5 колонок)/empty/waf-403; интеграционный тест runMsudrfSearch с hidden-инпутом (ассерт на реальный input.value). Открытые вопросы: точный симптом (ошибка vs пусто), семантика releaseBrowser в browser.ts, не изменилась ли разметка самого msudrf. Полный разбор — `qwen38-msudrf-fix.md` (не коммитить, рабочий материал). |
 | 2026-08-05 | **Backoff при 403 + фикстуры appeal/cassation + CR12-S10 + проверка RuCaptcha.** fetchHtml ретраит 403/429 с экспоненциальным backoff (5с, 10с, MAX 3) — WAF ГАС банит по rate-limit (тесты с моком https + fake timers). Тесты parse-адаптеров appeal/cassation (inline-фикстуры 5 вкладок, 22 теста) — CR11-006 закрыт. **Попутно найден и исправлен реальный баг:** `parsePublishInfo` не парсил даты (regex `опубликован\w*` — `\w` не матчит кириллицу, в live-данных все publishedAt/modifiedAt были null) — теперь `опубликован[а-яё]*` + опциональное двоеточие. classify.ts: Ё/ё в regex номера дела, латиница в именах (WORD_RE), лимит длины входа 500 — CR12-S10 закрыт. RuCaptcha-ключ проверен через getBalance: валиден, баланс 240.58 ₽ (ERROR_KEY_DOES_NOT_EXIST был временным). Тесты 181→213, tsc/biome (0 errors) чисто, coverage 54/52/50/55. |
 | 2026-08-05 | **Капча-пайплайн: таймауты под WAF-тормоза ГАС.** WAF замедляет ответы до 1-2 минут (видно вручную: капча думает минуту+). Пайплайн падал по дефолтным таймаутам Puppeteer (30-60с): `Execution context was destroyed`, `Captcha image fetch failed: HTTP 502`. Подняты в `captcha/session.ts`: goto/navigation → 120с, waitForFunction/locator → 90с, fetch капчи-картинки → 60с (AbortSignal). Проверено end-to-end: fetchMsudrfSearch (поиск 42-91с) и fetchWithCaptcha (карточка 1.8с) работают, карточка 2-800/2026 спарсилась (uid=судебный номер, case_id=1284505). Дело 2-800 вышло из error→monitoring; все 4 дела в норме (0 error). Таймауты зафиксированы константами NAV_TIMEOUT_MS/WAIT_TIMEOUT_MS. |
 | 2026-08-05 | **Диагностика live-ошибок + фикс runSingle.** Субдомены ГАС живы (DNS ок); утренний ENOTFOUND — временный DNS-сбой. district/appeal перепарсируются (35-46с, WAF замедляет); appeal 33-8030 вышел из error→monitoring. **INFR-001 закрыт:** WAF ГАС банит IP по rate-limit (наш IP 196.61.180.141 после серии тестов получает 403 на sudrf+msudrf; телефон/VPN с другим IP открывают msudrf без проблем); RuCaptcha-ключ невалиден (ERROR_KEY_DOES_NOT_EXIST — проверить ротацию). **NUM-002:** `runSingle` не фиксировал ошибки в деле (lastError оставался устаревшим) — добавлен catch с записью errorCount/lastError/status, ошибка пробрасывается в роут (500 PARSE_ERROR, не 409). Тесты 181, tsc/biome чисто. |
@@ -128,7 +142,6 @@
 | 2026-07-27 | docs/ почищен, API тесты 57→94, docs/ migration. |
 | 2026-07-26 | **v0.5.0** — msudrf AJAX, progress API, settings, sync parse, party matching, eslint, pino. |
 | 2026-07-26 | CR10 — TUI rewrite (blessed → readline+ANSI). |
-| 2026-07-21..25 | CR1–CR9: security, search, parse, hierarchy, UI, store. |
 
 ---
 
